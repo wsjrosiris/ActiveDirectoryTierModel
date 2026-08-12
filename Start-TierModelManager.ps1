@@ -21,24 +21,54 @@ $HtmlPage = @'
     <title>Tier Model Manager</title>
     <style>
         :root {
-            --bg: #0f1117;
-            --surface: #1a1d27;
-            --surface2: #232736;
-            --border: #2d3148;
-            --text: #e4e6f0;
-            --text2: #8b8fa8;
-            --accent: #4f8cff;
-            --accent2: #3a6fd8;
-            --green: #34d399;
-            --red: #f87171;
-            --orange: #fbbf24;
-            --tier0: #f87171;
-            --tier1: #fbbf24;
-            --tier2: #34d399;
-            --tierAdmin: #818cf8;
+            --bg: #0b0d14;
+            --surface: #141821;
+            --surface2: #1c2130;
+            --surface3: #252a3a;
+            --border: #2a3042;
+            --border-focus: #6b9aff;
+            --text: #f0f2f8;
+            --text2: #a0a8c0;
+            --text3: #707890;
+            --accent: #6b9aff;
+            --accent-hover: #8bb4ff;
+            --accent-surface: rgba(107,154,255,0.12);
+            --green: #5dd9a0;
+            --green-surface: rgba(93,217,160,0.12);
+            --red: #ff8a8a;
+            --red-surface: rgba(255,138,138,0.12);
+            --orange: #ffc56b;
+            --orange-surface: rgba(255,197,107,0.12);
+            --tier0: #ff8a8a;
+            --tier1: #ffc56b;
+            --tier2: #5dd9a0;
+            --tierAdmin: #a8b4ff;
+            --radius: 10px;
+            --radius-sm: 6px;
+            --radius-lg: 14px;
+            --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+            --shadow-lg: 0 4px 12px rgba(0,0,0,0.4);
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5; }
+
+        /* Skip Link (WCAG) */
+        .skip-link {
+            position: absolute; left: -999px; top: auto; width: 1px; height: 1px; overflow: hidden;
+            z-index: 9999; padding: 12px 24px; background: var(--accent); color: #000;
+            font-weight: 600; border-radius: var(--radius); text-decoration: none;
+        }
+        .skip-link:focus { left: 16px; top: 16px; width: auto; height: auto; }
+
+        /* Focus visible (WCAG 2.4.7) */
+        :focus-visible {
+            outline: 2px solid var(--border-focus);
+            outline-offset: 2px;
+        }
+        button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+            outline: 2px solid var(--border-focus);
+            outline-offset: 2px;
+        }
 
         /* Sidebar */
         .sidebar {
@@ -46,132 +76,133 @@ $HtmlPage = @'
             background: var(--surface); border-right: 1px solid var(--border);
             display: flex; flex-direction: column; z-index: 100;
         }
-        .sidebar-header {
-            padding: 24px 20px; border-bottom: 1px solid var(--border);
-        }
-        .sidebar-header h1 { font-size: 18px; color: var(--accent); font-weight: 700; }
+        .sidebar-header { padding: 24px 20px; border-bottom: 1px solid var(--border); }
+        .sidebar-header h1 { font-size: 17px; color: var(--text); font-weight: 700; letter-spacing: -0.3px; }
         .sidebar-header p { font-size: 11px; color: var(--text2); margin-top: 4px; }
         .sidebar nav { flex: 1; padding: 12px 8px; overflow-y: auto; }
         .nav-item {
             display: flex; align-items: center; gap: 10px;
-            padding: 10px 12px; border-radius: 8px; cursor: pointer;
-            color: var(--text2); font-size: 13px; transition: all 0.15s;
-            margin-bottom: 2px;
+            padding: 10px 14px; border-radius: var(--radius); cursor: pointer;
+            color: var(--text2); font-size: 13px; font-weight: 500;
+            margin-bottom: 2px; transition: background 0.15s, color 0.15s;
+            border: 1px solid transparent; min-height: 40px;
         }
         .nav-item:hover { background: var(--surface2); color: var(--text); }
-        .nav-item.active { background: var(--accent); color: white; }
-        .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
+        .nav-item.active { background: var(--accent-surface); color: var(--accent); border-color: rgba(107,154,255,0.2); }
+        .nav-item .icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
         .nav-sep { height: 1px; background: var(--border); margin: 8px 12px; }
-        .sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text2); }
+        .sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text3); }
 
         /* Main */
         .main { margin-left: 260px; padding: 32px; min-height: 100vh; }
         .page { display: none; }
         .page.active { display: block; }
+        .page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 24px; }
 
         /* Cards */
         .card {
             background: var(--surface); border: 1px solid var(--border);
-            border-radius: 12px; padding: 24px; margin-bottom: 20px;
+            border-radius: var(--radius-lg); padding: 24px; margin-bottom: 20px;
         }
-        .card h2 { font-size: 16px; margin-bottom: 16px; color: var(--text); }
-        .card h3 { font-size: 14px; margin-bottom: 12px; color: var(--text2); }
+        .card h2 { font-size: 15px; margin-bottom: 16px; color: var(--text); font-weight: 600; }
+        .card h3 { font-size: 13px; margin-bottom: 12px; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 
         /* Stats */
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
         .stat-card {
             background: var(--surface); border: 1px solid var(--border);
-            border-radius: 10px; padding: 20px;
+            border-radius: var(--radius); padding: 18px; transition: border-color 0.15s;
         }
-        .stat-card .label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; }
-        .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+        .stat-card:hover { border-color: var(--accent); }
+        .stat-card .label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
+        .stat-card .value { font-size: 26px; font-weight: 700; margin-top: 4px; letter-spacing: -0.5px; }
         .stat-card .value.t0 { color: var(--tier0); }
         .stat-card .value.t1 { color: var(--tier1); }
         .stat-card .value.t2 { color: var(--tier2); }
         .stat-card .value.admin { color: var(--tierAdmin); }
 
         /* Tables */
-        .table-wrap { overflow-x: auto; }
+        .table-wrap { overflow-x: auto; border-radius: var(--radius); }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th { text-align: left; padding: 10px 12px; color: var(--text2); font-weight: 600; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
-        td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+        th {
+            text-align: left; padding: 10px 14px; color: var(--text2); font-weight: 600;
+            border-bottom: 1px solid var(--border); font-size: 11px;
+            text-transform: uppercase; letter-spacing: 0.5px; background: var(--surface2);
+        }
+        td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); }
         tr:hover td { background: var(--surface2); }
 
         /* Badges */
         .badge {
-            display: inline-block; padding: 3px 10px; border-radius: 20px;
-            font-size: 11px; font-weight: 600;
+            display: inline-block; padding: 3px 10px; border-radius: 100px;
+            font-size: 11px; font-weight: 600; letter-spacing: 0.2px;
         }
-        .badge-t0 { background: rgba(248,113,113,0.15); color: var(--tier0); }
-        .badge-t1 { background: rgba(251,191,36,0.15); color: var(--tier1); }
-        .badge-t2 { background: rgba(52,211,153,0.15); color: var(--tier2); }
-        .badge-admin { background: rgba(129,140,248,0.15); color: var(--tierAdmin); }
-        .badge-green { background: rgba(52,211,153,0.15); color: var(--green); }
-        .badge-red { background: rgba(248,113,113,0.15); color: var(--red); }
-        .badge-enabled { background: rgba(52,211,153,0.15); color: var(--green); }
-        .badge-disabled { background: rgba(248,113,113,0.15); color: var(--red); }
+        .badge-t0 { background: var(--red-surface); color: var(--tier0); }
+        .badge-t1 { background: var(--orange-surface); color: var(--tier1); }
+        .badge-t2 { background: var(--green-surface); color: var(--tier2); }
+        .badge-admin { background: rgba(168,180,255,0.12); color: var(--tierAdmin); }
+        .badge-green { background: var(--green-surface); color: var(--green); }
+        .badge-red { background: var(--red-surface); color: var(--red); }
+        .badge-enabled { background: var(--green-surface); color: var(--green); }
+        .badge-disabled { background: var(--red-surface); color: var(--red); }
 
         /* Buttons */
         .btn {
-            padding: 8px 16px; border-radius: 8px; border: none;
+            padding: 9px 18px; border-radius: var(--radius); border: none;
             font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+            display: inline-flex; align-items: center; gap: 6px; min-height: 38px;
         }
-        .btn-primary { background: var(--accent); color: white; }
-        .btn-primary:hover { background: var(--accent2); }
-        .btn-success { background: var(--green); color: #0f1117; }
-        .btn-success:hover { opacity: 0.85; }
-        .btn-danger { background: var(--red); color: white; }
-        .btn-danger:hover { opacity: 0.85; }
-        .btn-outline {
-            background: transparent; border: 1px solid var(--border); color: var(--text);
-        }
-        .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
-        .btn-sm { padding: 5px 10px; font-size: 11px; }
+        .btn-primary { background: var(--accent); color: #000; }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-success { background: var(--green); color: #000; }
+        .btn-success:hover { filter: brightness(1.1); }
+        .btn-danger { background: var(--red-surface); color: var(--red); border: 1px solid rgba(255,138,138,0.2); }
+        .btn-danger:hover { background: rgba(255,138,138,0.2); }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+        .btn-outline:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-surface); }
+        .btn-sm { padding: 5px 10px; font-size: 11px; min-height: 28px; }
 
         /* Forms */
         .form-group { margin-bottom: 16px; }
         .form-group label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 6px; font-weight: 600; }
         .form-group input, .form-group select, .form-group textarea {
-            width: 100%; padding: 10px 12px; background: var(--surface2);
-            border: 1px solid var(--border); border-radius: 8px;
+            width: 100%; padding: 10px 14px; background: var(--surface2);
+            border: 1px solid var(--border); border-radius: var(--radius);
             color: var(--text); font-size: 13px; font-family: inherit;
+            transition: border-color 0.15s, box-shadow 0.15s;
         }
         .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-            outline: none; border-color: var(--accent);
+            outline: none; border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px rgba(107,154,255,0.15);
         }
+        .form-group input::placeholder { color: var(--text3); }
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
-        .form-check { display: flex; align-items: center; gap: 8px; }
-        .form-check input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+        .form-check { display: flex; align-items: center; gap: 8px; min-height: 38px; }
+        .form-check input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+        .form-check label { font-size: 13px; color: var(--text); cursor: pointer; }
 
         /* OU Tree */
         .ou-tree { font-size: 13px; }
         .ou-tree ul { list-style: none; padding-left: 20px; }
         .ou-tree > ul { padding-left: 0; }
         .ou-tree li { position: relative; padding: 4px 0; }
-        .ou-tree li::before {
-            content: ''; position: absolute; left: -16px; top: 0; bottom: 0;
-            width: 1px; background: var(--border);
-        }
-        .ou-tree li::after {
-            content: ''; position: absolute; left: -16px; top: 14px;
-            width: 12px; height: 1px; background: var(--border);
-        }
+        .ou-tree li::before { content: ''; position: absolute; left: -16px; top: 0; bottom: 0; width: 1px; background: var(--border); }
+        .ou-tree li::after { content: ''; position: absolute; left: -16px; top: 14px; width: 12px; height: 1px; background: var(--border); }
         .ou-node {
             display: inline-flex; align-items: center; gap: 6px;
-            padding: 4px 8px; border-radius: 6px; cursor: pointer;
-            transition: background 0.15s;
+            padding: 4px 10px; border-radius: var(--radius-sm); cursor: default;
         }
-        .ou-node:hover { background: var(--surface2); }
         .ou-node .ou-icon { font-size: 14px; }
         .ou-node .ou-name { font-weight: 500; }
-        .ou-node .ou-tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; }
+        .ou-node .ou-tag { font-size: 10px; padding: 2px 7px; border-radius: 100px; font-weight: 600; }
 
         /* Terminal */
         .terminal {
-            background: #0a0c10; border: 1px solid var(--border);
-            border-radius: 8px; padding: 16px; font-family: 'Cascadia Code', 'Consolas', monospace;
-            font-size: 12px; line-height: 1.6; max-height: 400px; overflow-y: auto;
+            background: var(--bg); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 16px;
+            font-family: 'Cascadia Code', 'Consolas', monospace;
+            font-size: 12px; line-height: 1.7; max-height: 400px; overflow-y: auto;
             color: var(--green);
         }
         .terminal .line-error { color: var(--red); }
@@ -179,264 +210,258 @@ $HtmlPage = @'
         .terminal .line-info { color: var(--accent); }
 
         /* Toolbar */
-        .toolbar {
-            display: flex; align-items: center; justify-content: space-between;
-            margin-bottom: 16px; flex-wrap: wrap; gap: 8px;
-        }
+        .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
         .toolbar-left { display: flex; gap: 8px; align-items: center; }
         .toolbar-right { display: flex; gap: 8px; align-items: center; }
         .search-box {
-            padding: 8px 12px; background: var(--surface2); border: 1px solid var(--border);
-            border-radius: 8px; color: var(--text); font-size: 13px; width: 240px;
+            padding: 9px 14px; background: var(--surface2); border: 1px solid var(--border);
+            border-radius: var(--radius); color: var(--text); font-size: 13px; width: 260px;
+            transition: border-color 0.15s, box-shadow 0.15s;
         }
-        .search-box:focus { outline: none; border-color: var(--accent); }
+        .search-box:focus { outline: none; border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(107,154,255,0.15); }
+        .search-box::placeholder { color: var(--text3); }
 
         /* Modal */
         .modal-overlay {
-            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
             z-index: 1000; align-items: center; justify-content: center;
+            backdrop-filter: blur(4px);
         }
         .modal-overlay.show { display: flex; }
         .modal {
             background: var(--surface); border: 1px solid var(--border);
-            border-radius: 16px; padding: 32px; width: 90%; max-width: 640px;
-            max-height: 80vh; overflow-y: auto;
+            border-radius: var(--radius-lg); padding: 28px; width: 90%; max-width: 600px;
+            max-height: 85vh; overflow-y: auto; box-shadow: var(--shadow-lg);
         }
-        .modal h2 { margin-bottom: 20px; font-size: 18px; }
-        .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+        .modal h2 { margin-bottom: 20px; font-size: 17px; font-weight: 700; }
+        .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
 
         /* Config Tabs */
-        .config-tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+        .config-tabs { display: flex; gap: 2px; margin-bottom: 20px; background: var(--surface2); border-radius: var(--radius); padding: 4px; }
         .config-tab {
-            padding: 8px 16px; border-radius: 8px 8px 0 0; cursor: pointer;
+            padding: 8px 18px; border-radius: var(--radius-sm); cursor: pointer;
             font-size: 12px; font-weight: 600; color: var(--text2); transition: all 0.15s;
-            border: 1px solid transparent; border-bottom: none;
+            border: none; background: transparent; min-height: 36px;
         }
-        .config-tab:hover { color: var(--text); background: var(--surface2); }
-        .config-tab.active { color: var(--accent); background: var(--surface); border-color: var(--border); }
+        .config-tab:hover { color: var(--text); background: var(--surface3); }
+        .config-tab.active { color: var(--text); background: var(--surface); box-shadow: var(--shadow); }
         .config-panel { display: none; }
         .config-panel.active { display: block; }
 
         /* Config Form Grid */
-        .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+        .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
         .config-item {
-            background: var(--surface2); border: 1px solid var(--border);
-            border-radius: 10px; padding: 16px; position: relative;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius-lg); padding: 18px; transition: border-color 0.15s;
         }
         .config-item:hover { border-color: var(--accent); }
-        .config-item .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .config-item .item-title { font-weight: 600; font-size: 13px; }
+        .config-item .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+        .config-item .item-title { font-weight: 600; font-size: 13px; color: var(--text); }
         .config-item .item-actions { display: flex; gap: 4px; }
-        .config-item .item-fields { display: flex; flex-direction: column; gap: 8px; }
+        .config-item .item-fields { display: flex; flex-direction: column; gap: 10px; }
         .config-item .field-row { display: flex; gap: 8px; align-items: center; }
-        .config-item .field-label { font-size: 10px; color: var(--text2); min-width: 80px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .config-item .field-label { font-size: 10px; color: var(--text3); min-width: 80px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
         .config-item .field-value {
-            flex: 1; padding: 6px 8px; background: var(--surface);
-            border: 1px solid var(--border); border-radius: 6px;
+            flex: 1; padding: 7px 10px; background: var(--surface2);
+            border: 1px solid var(--border); border-radius: var(--radius-sm);
             font-size: 12px; color: var(--text); font-family: inherit;
+            transition: border-color 0.15s;
         }
-        .config-item .field-value:focus { outline: none; border-color: var(--accent); }
+        .config-item .field-value:focus { outline: none; border-color: var(--border-focus); box-shadow: 0 0 0 2px rgba(107,154,255,0.15); }
         .config-item select.field-value { cursor: pointer; }
         .config-item .field-check { display: flex; align-items: center; gap: 6px; }
-        .config-item .field-check input { width: 14px; height: 14px; accent-color: var(--accent); }
-        .config-item .field-check label { font-size: 11px; color: var(--text2); }
+        .config-item .field-check input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+        .config-item .field-check label { font-size: 11px; color: var(--text2); cursor: pointer; }
 
         /* Multi-select rights */
-        .rights-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
-        .rights-grid label { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text2); cursor: pointer; }
-        .rights-grid input { width: 12px; height: 12px; accent-color: var(--accent); }
-
-        /* Inline edit */
-        .inline-edit { cursor: pointer; padding: 2px 4px; border-radius: 4px; }
-        .inline-edit:hover { background: var(--surface); }
+        .rights-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+        .rights-grid label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text); cursor: pointer; min-height: 32px; }
+        .rights-grid input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 
         /* Toast */
-        .toast-container { position: fixed; top: 20px; right: 20px; z-index: 2000; }
+        .toast-container { position: fixed; top: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; }
         .toast {
-            padding: 12px 20px; border-radius: 8px; margin-bottom: 8px;
-            font-size: 13px; animation: slideIn 0.3s ease;
+            padding: 12px 20px; border-radius: var(--radius); font-size: 13px; font-weight: 500;
+            animation: slideIn 0.25s ease; box-shadow: var(--shadow-lg);
         }
-        .toast-success { background: rgba(52,211,153,0.9); color: #0f1117; }
-        .toast-error { background: rgba(248,113,113,0.9); color: white; }
+        .toast-success { background: var(--green); color: #000; }
+        .toast-error { background: var(--red); color: #000; }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 
         /* Responsive */
         @media (max-width: 768px) {
             .sidebar { width: 60px; }
-            .sidebar-header h1, .sidebar-header p, .nav-item span, .sidebar-footer { display: none; }
+            .sidebar-header h1, .sidebar-header p, .nav-item span:not(.icon), .sidebar-footer { display: none; }
             .main { margin-left: 60px; padding: 16px; }
             .form-row, .form-row-3 { grid-template-columns: 1fr; }
+            .config-grid { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
 <body>
-    <div class="sidebar">
+    <a href="#main-content" class="skip-link">Zum Inhalt springen</a>
+    <div class="sidebar" role="navigation" aria-label="Hauptnavigation">
         <div class="sidebar-header">
             <h1>Tier Model</h1>
             <p>AD Management Console</p>
         </div>
         <nav>
-            <div class="nav-item active" data-page="dashboard"><span class="icon">&#9632;</span><span>Dashboard</span></div>
-            <div class="nav-sep"></div>
-            <div class="nav-item" data-page="ous"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
-            <div class="nav-item" data-page="groups"><span class="icon">&#128101;</span><span>Gruppen</span></div>
-            <div class="nav-item" data-page="users"><span class="icon">&#128100;</span><span>Benutzer</span></div>
-            <div class="nav-item" data-page="acls"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
-            <div class="nav-sep"></div>
-            <div class="nav-item" data-page="config"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
-            <div class="nav-item" data-page="deploy"><span class="icon">&#9654;</span><span>Deploy</span></div>
-            <div class="nav-item" data-page="audit"><span class="icon">&#128202;</span><span>Audit</span></div>
+            <div class="nav-item active" data-page="dashboard" role="link" tabindex="0" aria-current="page"><span class="icon" aria-hidden="true">&#9632;</span><span>Dashboard</span></div>
+            <div class="nav-sep" role="separator"></div>
+            <div class="nav-item" data-page="ous" role="link" tabindex="0"><span class="icon" aria-hidden="true">&#128193;</span><span>Organizational Units</span></div>
+            <div class="nav-item" data-page="groups" role="link" tabindex="0"><span class="icon" aria-hidden="true">&#128101;</span><span>Gruppen</span></div>
+            <div class="nav-item" data-page="users" role="link" tabindex="0"><span class="icon" aria-hidden="true">&#128100;</span><span>Benutzer</span></div>
+            <div class="nav-item" data-page="acls" role="link" tabindex="0"><span class="icon" aria-hidden="true">&#128274;</span><span>ACL Delegationen</span></div>
+            <div class="nav-sep" role="separator"></div>
+            <div class="nav-item" data-page="config" role="link" tabindex="0"><span class="icon" aria-hidden="true">&#9881;</span><span>Konfiguration</span></div>
+            <div class="nav-item" data-page="deploy" role="link" tabindex="0"><span class="icon" aria-hidden="true">&#9654;</span><span>Deploy</span></div>
+            <div class="nav-item" data-page="audit" role="link" tabindex="0"><span class="icon" aria-hidden="true">&#128202;</span><span>Audit</span></div>
         </nav>
-        <div class="sidebar-footer">v1.0.0 | Port 8080</div>
+        <div class="sidebar-footer">v1.3.0 | Port 8080</div>
     </div>
 
-    <div class="main">
+    <main id="main-content" class="main" role="main">
         <!-- Dashboard -->
-        <div class="page active" id="page-dashboard">
-            <h2 style="font-size:22px; margin-bottom:24px;">Dashboard</h2>
-            <div class="stats-grid" id="stats-grid"></div>
+        <div class="page active" id="page-dashboard" role="region" aria-label="Dashboard">
+            <h2 class="page-title">Dashboard</h2>
+            <div class="stats-grid" id="stats-grid" aria-label="Statistiken"></div>
             <div class="card">
                 <h2>OU Struktur</h2>
-                <div class="ou-tree" id="ou-tree"></div>
+                <div class="ou-tree" id="ou-tree" role="tree" aria-label="OU-Baumstruktur"></div>
             </div>
         </div>
 
         <!-- OUs -->
-        <div class="page" id="page-ous">
+        <div class="page" id="page-ous" role="region" aria-label="Organizational Units verwalten">
             <div class="toolbar">
-                <h2 style="font-size:18px;">Organizational Units</h2>
+                <h2 class="page-title" style="margin-bottom:0;font-size:18px;">Organizational Units</h2>
                 <div class="toolbar-right">
-                    <input class="search-box" placeholder="Suchen..." id="ou-search">
-                    <button class="btn btn-primary" onclick="showModal('ou-modal')">+ OU hinzufuegen</button>
-                    <button class="btn btn-outline" onclick="saveConfig('ous')">Speichern</button>
+                    <label for="ou-search" class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;">OUs suchen</label>
+                    <input class="search-box" placeholder="OUs suchen..." id="ou-search" aria-label="OUs suchen">
+                    <button class="btn btn-primary" onclick="showModal('ou-modal')" aria-label="Neue OU hinzufuegen">+ OU hinzufuegen</button>
+                    <button class="btn btn-outline" onclick="saveConfig('ous')" aria-label="OUs speichern">Speichern</button>
                 </div>
             </div>
-            <div class="card"><div class="table-wrap" id="ou-table"></div></div>
+            <div class="card"><div class="table-wrap" id="ou-table" role="table" aria-label="OU Uebersicht"></div></div>
         </div>
 
         <!-- Groups -->
-        <div class="page" id="page-groups">
+        <div class="page" id="page-groups" role="region" aria-label="Gruppen verwalten">
             <div class="toolbar">
-                <h2 style="font-size:18px;">Sicherheitsgruppen</h2>
+                <h2 class="page-title" style="margin-bottom:0;font-size:18px;">Sicherheitsgruppen</h2>
                 <div class="toolbar-right">
-                    <input class="search-box" placeholder="Suchen..." id="group-search">
-                    <button class="btn btn-primary" onclick="showModal('group-modal')">+ Gruppe hinzufuegen</button>
-                    <button class="btn btn-outline" onclick="saveConfig('groups')">Speichern</button>
+                    <input class="search-box" placeholder="Gruppen suchen..." id="group-search" aria-label="Gruppen suchen">
+                    <button class="btn btn-primary" onclick="showModal('group-modal')" aria-label="Neue Gruppe hinzufuegen">+ Gruppe hinzufuegen</button>
+                    <button class="btn btn-outline" onclick="saveConfig('groups')" aria-label="Gruppen speichern">Speichern</button>
                 </div>
             </div>
-            <div class="card"><div class="table-wrap" id="group-table"></div></div>
+            <div class="card"><div class="table-wrap" id="group-table" role="table" aria-label="Gruppen Uebersicht"></div></div>
         </div>
 
         <!-- Users -->
-        <div class="page" id="page-users">
+        <div class="page" id="page-users" role="region" aria-label="Benutzer verwalten">
             <div class="toolbar">
-                <h2 style="font-size:18px;">Benutzer</h2>
+                <h2 class="page-title" style="margin-bottom:0;font-size:18px;">Benutzer</h2>
                 <div class="toolbar-right">
-                    <input class="search-box" placeholder="Suchen..." id="user-search">
-                    <button class="btn btn-primary" onclick="showModal('user-modal')">+ Benutzer hinzufuegen</button>
-                    <button class="btn btn-outline" onclick="saveConfig('users')">Speichern</button>
+                    <input class="search-box" placeholder="Benutzer suchen..." id="user-search" aria-label="Benutzer suchen">
+                    <button class="btn btn-primary" onclick="showModal('user-modal')" aria-label="Neuen Benutzer hinzufuegen">+ Benutzer hinzufuegen</button>
+                    <button class="btn btn-outline" onclick="saveConfig('users')" aria-label="Benutzer speichern">Speichern</button>
                 </div>
             </div>
-            <div class="card"><div class="table-wrap" id="user-table"></div></div>
+            <div class="card"><div class="table-wrap" id="user-table" role="table" aria-label="Benutzer Uebersicht"></div></div>
         </div>
 
         <!-- ACLs -->
-        <div class="page" id="page-acls">
+        <div class="page" id="page-acls" role="region" aria-label="ACL Delegationen verwalten">
             <div class="toolbar">
-                <h2 style="font-size:18px;">ACL Delegationen</h2>
+                <h2 class="page-title" style="margin-bottom:0;font-size:18px;">ACL Delegationen</h2>
                 <div class="toolbar-right">
-                    <input class="search-box" placeholder="Suchen..." id="acl-search">
-                    <button class="btn btn-outline" onclick="saveConfig('acls')">Speichern</button>
+                    <input class="search-box" placeholder="ACLs suchen..." id="acl-search" aria-label="ACLs suchen">
+                    <button class="btn btn-primary" onclick="showModal('acl-modal')" aria-label="Neue ACL hinzufuegen">+ ACL hinzufuegen</button>
+                    <button class="btn btn-outline" onclick="saveConfig('acls')" aria-label="ACLs speichern">Speichern</button>
                 </div>
             </div>
-            <div class="card"><div class="table-wrap" id="acl-table"></div></div>
+            <div class="card"><div class="table-wrap" id="acl-table" role="table" aria-label="ACL Uebersicht"></div></div>
         </div>
 
         <!-- Config -->
-        <div class="page" id="page-config">
+        <div class="page" id="page-config" role="region" aria-label="Konfiguration verwalten">
             <div class="toolbar">
-                <h2 style="font-size:18px;">Konfiguration</h2>
+                <h2 class="page-title" style="margin-bottom:0;font-size:18px;">Konfiguration</h2>
                 <div class="toolbar-right">
-                    <button class="btn btn-outline" onclick="loadAll()">Neu laden</button>
-                    <button class="btn btn-primary" onclick="saveAllConfigs()">Alle speichern</button>
+                    <button class="btn btn-outline" onclick="loadAll()" aria-label="Konfiguration neu laden">Neu laden</button>
+                    <button class="btn btn-primary" onclick="saveAllConfigs()" aria-label="Alle Konfigurationen speichern">Alle speichern</button>
                 </div>
             </div>
-            <div class="config-tabs">
-                <div class="config-tab active" data-config="cfg-ous">OUs</div>
-                <div class="config-tab" data-config="cfg-groups">Gruppen</div>
-                <div class="config-tab" data-config="cfg-users">Benutzer</div>
-                <div class="config-tab" data-config="cfg-acls">ACLs</div>
-                <div class="config-tab" data-config="cfg-gpos">GPOs</div>
+            <div class="config-tabs" role="tablist" aria-label="Konfigurationsbereiche">
+                <div class="config-tab active" data-config="cfg-ous" role="tab" tabindex="0" aria-selected="true">OUs</div>
+                <div class="config-tab" data-config="cfg-groups" role="tab" tabindex="0" aria-selected="false">Gruppen</div>
+                <div class="config-tab" data-config="cfg-users" role="tab" tabindex="0" aria-selected="false">Benutzer</div>
+                <div class="config-tab" data-config="cfg-acls" role="tab" tabindex="0" aria-selected="false">ACLs</div>
+                <div class="config-tab" data-config="cfg-gpos" role="tab" tabindex="0" aria-selected="false">GPOs</div>
             </div>
 
-            <!-- OUs Config -->
-            <div class="config-panel active" id="cfg-ous">
+            <div class="config-panel active" id="cfg-ous" role="tabpanel" aria-label="OUs konfigurieren">
                 <div class="toolbar"><div class="toolbar-right"><button class="btn btn-primary" onclick="showModal('ou-modal')">+ OU hinzufuegen</button></div></div>
                 <div class="config-grid" id="cfg-ous-grid"></div>
             </div>
-
-            <!-- Groups Config -->
-            <div class="config-panel" id="cfg-groups">
+            <div class="config-panel" id="cfg-groups" role="tabpanel" aria-label="Gruppen konfigurieren">
                 <div class="toolbar"><div class="toolbar-right"><button class="btn btn-primary" onclick="showModal('group-modal')">+ Gruppe hinzufuegen</button></div></div>
                 <div class="config-grid" id="cfg-groups-grid"></div>
             </div>
-
-            <!-- Users Config -->
-            <div class="config-panel" id="cfg-users">
+            <div class="config-panel" id="cfg-users" role="tabpanel" aria-label="Benutzer konfigurieren">
                 <div class="toolbar"><div class="toolbar-right"><button class="btn btn-primary" onclick="showModal('user-modal')">+ Benutzer hinzufuegen</button></div></div>
                 <div class="config-grid" id="cfg-users-grid"></div>
             </div>
-
-            <!-- ACLs Config -->
-            <div class="config-panel" id="cfg-acls">
+            <div class="config-panel" id="cfg-acls" role="tabpanel" aria-label="ACLs konfigurieren">
                 <div class="toolbar"><div class="toolbar-right"><button class="btn btn-primary" onclick="showModal('acl-modal')">+ ACL hinzufuegen</button></div></div>
                 <div class="config-grid" id="cfg-acls-grid"></div>
             </div>
-
-            <!-- GPOs Config -->
-            <div class="config-panel" id="cfg-gpos">
+            <div class="config-panel" id="cfg-gpos" role="tabpanel" aria-label="GPOs konfigurieren">
                 <div class="toolbar"><div class="toolbar-right"><button class="btn btn-primary" onclick="showModal('gpo-modal')">+ GPO hinzufuegen</button></div></div>
                 <div class="config-grid" id="cfg-gpos-grid"></div>
             </div>
         </div>
 
         <!-- Deploy -->
-        <div class="page" id="page-deploy">
-            <h2 style="font-size:18px; margin-bottom:16px;">Tier Model Deployen</h2>
+        <div class="page" id="page-deploy" role="region" aria-label="Tier Model deployen">
+            <h2 class="page-title" style="font-size:18px;">Tier Model Deployen</h2>
             <div class="card">
                 <h3>Optionen</h3>
-                <div class="form-row" style="margin-bottom:16px;">
+                <div class="form-row" style="margin-bottom:12px;">
                     <div class="form-check"><input type="checkbox" id="opt-whatif"><label for="opt-whatif">WhatIf (nur Plan anzeigen)</label></div>
                     <div class="form-check"><input type="checkbox" id="opt-confirm"><label for="opt-confirm">ConfirmApply (Bestaetigung)</label></div>
                 </div>
-                <div class="form-row" style="margin-bottom:16px;">
+                <div class="form-row" style="margin-bottom:12px;">
                     <div class="form-check"><input type="checkbox" id="opt-msa"><label for="opt-msa">IncludeMsa</label></div>
                     <div class="form-check"><input type="checkbox" id="opt-gmsa"><label for="opt-gmsa">IncludeGmsa</label></div>
                 </div>
-                <div class="form-row" style="margin-bottom:16px;">
+                <div class="form-row" style="margin-bottom:12px;">
                     <div class="form-check"><input type="checkbox" id="opt-dmsa"><label for="opt-dmsa">IncludeDmsa</label></div>
                     <div class="form-check"><input type="checkbox" id="opt-winlaps"><label for="opt-winlaps">IncludeWinLaps</label></div>
                 </div>
-                <button class="btn btn-success" onclick="runDeploy()" id="btn-deploy">Deploy starten</button>
+                <button class="btn btn-success" onclick="runDeploy()" id="btn-deploy" style="margin-top:8px;">Deploy starten</button>
             </div>
             <div class="card">
                 <h3>Ausgabe</h3>
-                <div class="terminal" id="deploy-output">Bereit...</div>
+                <div class="terminal" id="deploy-output" role="log" aria-label="Deploy Ausgabe" aria-live="polite">Bereit...</div>
             </div>
         </div>
 
         <!-- Audit -->
-        <div class="page" id="page-audit">
-            <h2 style="font-size:18px; margin-bottom:16px;">Tier Model Auditieren</h2>
+        <div class="page" id="page-audit" role="region" aria-label="Tier Model auditieren">
+            <h2 class="page-title" style="font-size:18px;">Tier Model Auditieren</h2>
             <div class="card">
                 <button class="btn btn-primary" onclick="runAudit()" id="btn-audit">Audit starten</button>
             </div>
             <div class="card">
                 <h3>Ergebnis</h3>
-                <div class="terminal" id="audit-output">Bereit...</div>
+                <div class="terminal" id="audit-output" role="log" aria-label="Audit Ergebnis" aria-live="polite">Bereit...</div>
             </div>
         </div>
-    </div>
+    </main>
 
     <!-- OU Modal -->
     <div class="modal-overlay" id="ou-modal">
@@ -579,24 +604,30 @@ $HtmlPage = @'
 
         // === Navigation ===
         document.querySelectorAll('.nav-item[data-page]').forEach(item => {
-            item.addEventListener('click', () => {
-                document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            const activate = () => {
+                document.querySelectorAll('.nav-item').forEach(n => { n.classList.remove('active'); n.setAttribute('aria-current', ''); });
                 item.classList.add('active');
+                item.setAttribute('aria-current', 'page');
                 document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
                 document.getElementById('page-' + item.dataset.page).classList.add('active');
                 if (item.dataset.page === 'dashboard') loadDashboard();
                 if (item.dataset.page === 'config') renderConfigPanels();
-            });
+            };
+            item.addEventListener('click', activate);
+            item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
         });
 
         // === Config Tabs ===
         document.querySelectorAll('.config-tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                document.querySelectorAll('.config-tab').forEach(t => t.classList.remove('active'));
+            const activate = () => {
+                document.querySelectorAll('.config-tab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
                 tab.classList.add('active');
+                tab.setAttribute('aria-selected', 'true');
                 document.querySelectorAll('.config-panel').forEach(p => p.classList.remove('active'));
                 document.getElementById(tab.dataset.config).classList.add('active');
-            });
+            };
+            tab.addEventListener('click', activate);
+            tab.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
         });
 
         // === Toast ===
