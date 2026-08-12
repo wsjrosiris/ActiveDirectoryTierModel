@@ -205,13 +205,50 @@ $HtmlPage = @'
         .modal h2 { margin-bottom: 20px; font-size: 18px; }
         .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 
-        /* JSON Editor */
-        .json-editor {
-            width: 100%; min-height: 300px; background: #0a0c10;
-            border: 1px solid var(--border); border-radius: 8px;
-            color: var(--green); font-family: 'Cascadia Code', 'Consolas', monospace;
-            font-size: 12px; padding: 16px; resize: vertical;
+        /* Config Tabs */
+        .config-tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+        .config-tab {
+            padding: 8px 16px; border-radius: 8px 8px 0 0; cursor: pointer;
+            font-size: 12px; font-weight: 600; color: var(--text2); transition: all 0.15s;
+            border: 1px solid transparent; border-bottom: none;
         }
+        .config-tab:hover { color: var(--text); background: var(--surface2); }
+        .config-tab.active { color: var(--accent); background: var(--surface); border-color: var(--border); }
+        .config-panel { display: none; }
+        .config-panel.active { display: block; }
+
+        /* Config Form Grid */
+        .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+        .config-item {
+            background: var(--surface2); border: 1px solid var(--border);
+            border-radius: 10px; padding: 16px; position: relative;
+        }
+        .config-item:hover { border-color: var(--accent); }
+        .config-item .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .config-item .item-title { font-weight: 600; font-size: 13px; }
+        .config-item .item-actions { display: flex; gap: 4px; }
+        .config-item .item-fields { display: flex; flex-direction: column; gap: 8px; }
+        .config-item .field-row { display: flex; gap: 8px; align-items: center; }
+        .config-item .field-label { font-size: 10px; color: var(--text2); min-width: 80px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .config-item .field-value {
+            flex: 1; padding: 6px 8px; background: var(--surface);
+            border: 1px solid var(--border); border-radius: 6px;
+            font-size: 12px; color: var(--text); font-family: inherit;
+        }
+        .config-item .field-value:focus { outline: none; border-color: var(--accent); }
+        .config-item select.field-value { cursor: pointer; }
+        .config-item .field-check { display: flex; align-items: center; gap: 6px; }
+        .config-item .field-check input { width: 14px; height: 14px; accent-color: var(--accent); }
+        .config-item .field-check label { font-size: 11px; color: var(--text2); }
+
+        /* Multi-select rights */
+        .rights-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+        .rights-grid label { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text2); cursor: pointer; }
+        .rights-grid input { width: 12px; height: 12px; accent-color: var(--accent); }
+
+        /* Inline edit */
+        .inline-edit { cursor: pointer; padding: 2px 4px; border-radius: 4px; }
+        .inline-edit:hover { background: var(--surface); }
 
         /* Toast */
         .toast-container { position: fixed; top: 20px; right: 20px; z-index: 2000; }
@@ -317,23 +354,49 @@ $HtmlPage = @'
 
         <!-- Config -->
         <div class="page" id="page-config">
-            <h2 style="font-size:18px; margin-bottom:16px;">Konfiguration (JSON)</h2>
-            <div class="card">
-                <div class="toolbar">
-                    <select id="config-file-select" style="padding:8px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:13px;">
-                        <option value="tiermodel.json">tiermodel.json (Hauptkonfiguration)</option>
-                        <option value="tiermodel-ous.json">tiermodel-ous.json (OUs)</option>
-                        <option value="tiermodel-groups.json">tiermodel-groups.json (Gruppen)</option>
-                        <option value="tiermodel-users.json">tiermodel-users.json (Benutzer)</option>
-                        <option value="tiermodel-acls.json">tiermodel-acls.json (ACLs)</option>
-                        <option value="tiermodel-gpos.json">tiermodel-gpos.json (GPOs)</option>
-                    </select>
-                    <div class="toolbar-right">
-                        <button class="btn btn-outline" onclick="loadConfigEditor()">Neu laden</button>
-                        <button class="btn btn-primary" onclick="saveConfigEditor()">Speichern</button>
-                    </div>
+            <div class="toolbar">
+                <h2 style="font-size:18px;">Konfiguration</h2>
+                <div class="toolbar-right">
+                    <button class="btn btn-outline" onclick="loadAll()">Neu laden</button>
+                    <button class="btn btn-primary" onclick="saveAllConfigs()">Alle speichern</button>
                 </div>
-                <textarea class="json-editor" id="json-editor"></textarea>
+            </div>
+            <div class="config-tabs">
+                <div class="config-tab active" data-config="cfg-ous">OUs</div>
+                <div class="config-tab" data-config="cfg-groups">Gruppen</div>
+                <div class="config-tab" data-config="cfg-users">Benutzer</div>
+                <div class="config-tab" data-config="cfg-acls">ACLs</div>
+                <div class="config-tab" data-config="cfg-gpos">GPOs</div>
+            </div>
+
+            <!-- OUs Config -->
+            <div class="config-panel active" id="cfg-ous">
+                <div class="toolbar"><div class="toolbar-right"><button class="btn btn-primary" onclick="showModal('ou-modal')">+ OU hinzufuegen</button></div></div>
+                <div class="config-grid" id="cfg-ous-grid"></div>
+            </div>
+
+            <!-- Groups Config -->
+            <div class="config-panel" id="cfg-groups">
+                <div class="toolbar"><div class="toolbar-right"><button class="btn btn-primary" onclick="showModal('group-modal')">+ Gruppe hinzufuegen</button></div></div>
+                <div class="config-grid" id="cfg-groups-grid"></div>
+            </div>
+
+            <!-- Users Config -->
+            <div class="config-panel" id="cfg-users">
+                <div class="toolbar"><div class="toolbar-right"><button class="btn btn-primary" onclick="showModal('user-modal')">+ Benutzer hinzufuegen</button></div></div>
+                <div class="config-grid" id="cfg-users-grid"></div>
+            </div>
+
+            <!-- ACLs Config -->
+            <div class="config-panel" id="cfg-acls">
+                <div class="toolbar"><div class="toolbar-right"><button class="btn btn-primary" onclick="showModal('acl-modal')">+ ACL hinzufuegen</button></div></div>
+                <div class="config-grid" id="cfg-acls-grid"></div>
+            </div>
+
+            <!-- GPOs Config -->
+            <div class="config-panel" id="cfg-gpos">
+                <div class="toolbar"><div class="toolbar-right"><button class="btn btn-primary" onclick="showModal('gpo-modal')">+ GPO hinzufuegen</button></div></div>
+                <div class="config-grid" id="cfg-gpos-grid"></div>
             </div>
         </div>
 
@@ -434,11 +497,85 @@ $HtmlPage = @'
         </div>
     </div>
 
+    <!-- ACL Modal -->
+    <div class="modal-overlay" id="acl-modal">
+        <div class="modal">
+            <h2>Neue ACL Delegation</h2>
+            <div class="form-group"><label>Target OU-Pfad</label><input id="acl-ou" placeholder="OU=Tier 0 Accounts,{{DOMAIN_DN}}"></div>
+            <div class="form-row">
+                <div class="form-group"><label>Principal (Gruppe)</label>
+                    <select id="acl-principal" class="field-value"></select>
+                </div>
+                <div class="form-group"><label>Access Control Type</label>
+                    <select id="acl-type"><option>Allow</option><option>Deny</option></select>
+                </div>
+            </div>
+            <div class="form-group"><label>Objekttyp</label>
+                <select id="acl-objtype">
+                    <option value="">Alle Objekte</option>
+                    <option value="Computer">Computer</option>
+                    <option value="User">User</option>
+                    <option value="Group">Group</option>
+                    <option value="OrganizationalUnit">OrganizationalUnit</option>
+                    <option value="Contact">Contact</option>
+                    <option value="AllObjectClasses">AllObjectClasses</option>
+                </select>
+            </div>
+            <div class="form-group"><label>Active Directory Rechte</label>
+                <div class="rights-grid" id="acl-rights-grid">
+                    <label><input type="checkbox" value="GenericAll"> GenericAll</label>
+                    <label><input type="checkbox" value="CreateChild"> CreateChild</label>
+                    <label><input type="checkbox" value="DeleteChild"> DeleteChild</label>
+                    <label><input type="checkbox" value="ReadProperty"> ReadProperty</label>
+                    <label><input type="checkbox" value="WriteProperty"> WriteProperty</label>
+                    <label><input type="checkbox" value="ExtendedRight"> ExtendedRight</label>
+                    <label><input type="checkbox" value="Delete"> Delete</label>
+                    <label><input type="checkbox" value="DeleteTree"> DeleteTree</label>
+                    <label><input type="checkbox" value="GenericExecute"> GenericExecute</label>
+                </div>
+            </div>
+            <div class="form-group"><label>Vererbungstyp</label>
+                <select id="acl-inheritance">
+                    <option value="All">All</option>
+                    <option value="Descendents">Descendents</option>
+                    <option value="SelfAndChildren">SelfAndChildren</option>
+                    <option value="Children">Children</option>
+                    <option value="None">None</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="hideModal('acl-modal')">Abbrechen</button>
+                <button class="btn btn-primary" onclick="addACL()">Hinzufuegen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GPO Modal -->
+    <div class="modal-overlay" id="gpo-modal">
+        <div class="modal">
+            <h2>Neue GPO</h2>
+            <div class="form-group"><label>Name</label><input id="gpo-name" placeholder="z.B. Tier 0 Account Restrictions"></div>
+            <div class="form-group"><label>Modus</label>
+                <select id="gpo-mode">
+                    <option value="createAndImport">createAndImport</option>
+                    <option value="createOnly">createOnly</option>
+                    <option value="importOnly">importOnly</option>
+                    <option value="linkOnly">linkOnly</option>
+                </select>
+            </div>
+            <div class="form-group"><label>Link Targets (kommagetrennt)</label><input id="gpo-links" placeholder="OU=Tier 0,OU=Tier Model Administration,{{DOMAIN_DN}}"></div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="hideModal('gpo-modal')">Abbrechen</button>
+                <button class="btn btn-primary" onclick="addGPO()">Hinzufuegen</button>
+            </div>
+        </div>
+    </div>
+
     <div class="toast-container" id="toast-container"></div>
 
     <script>
         // === State ===
-        let config = { ous: [], groups: [], users: [], acls: [] };
+        let config = { ous: [], groups: [], users: [], acls: [], gpos: [] };
 
         // === Navigation ===
         document.querySelectorAll('.nav-item[data-page]').forEach(item => {
@@ -448,6 +585,17 @@ $HtmlPage = @'
                 document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
                 document.getElementById('page-' + item.dataset.page).classList.add('active');
                 if (item.dataset.page === 'dashboard') loadDashboard();
+                if (item.dataset.page === 'config') renderConfigPanels();
+            });
+        });
+
+        // === Config Tabs ===
+        document.querySelectorAll('.config-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.config-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                document.querySelectorAll('.config-panel').forEach(p => p.classList.remove('active'));
+                document.getElementById(tab.dataset.config).classList.add('active');
             });
         });
 
@@ -462,7 +610,10 @@ $HtmlPage = @'
         }
 
         // === Modal ===
-        function showModal(id) { document.getElementById(id).classList.add('show'); }
+        function showModal(id) {
+            document.getElementById(id).classList.add('show');
+            if (id === 'acl-modal') populatePrincipalDropdown();
+        }
         function hideModal(id) { document.getElementById(id).classList.remove('show'); }
 
         // === API Calls ===
@@ -476,20 +627,20 @@ $HtmlPage = @'
         // === Load Data ===
         async function loadAll() {
             try {
-                const [ous, groups, users, acls] = await Promise.all([
+                const [ous, groups, users, acls, gpos] = await Promise.all([
                     api('/api/config/tiermodel-ous.json'),
                     api('/api/config/tiermodel-groups.json'),
                     api('/api/config/tiermodel-users.json'),
-                    api('/api/config/tiermodel-acls.json')
+                    api('/api/config/tiermodel-acls.json'),
+                    api('/api/config/tiermodel-gpos.json')
                 ]);
                 config.ous = ous.organizationUnits || [];
                 config.groups = groups.groups || [];
                 config.users = users.users || [];
                 config.acls = acls.aclDelegations || [];
-                renderOUS();
-                renderGroups();
-                renderUsers();
-                renderACLs();
+                config.gpos = gpos.gpos || [];
+                renderOUS(); renderGroups(); renderUsers(); renderACLs();
+                renderConfigPanels();
                 loadDashboard();
             } catch (e) {
                 showToast('Fehler beim Laden: ' + e.message, 'error');
@@ -525,40 +676,23 @@ $HtmlPage = @'
             const tree = document.getElementById('ou-tree');
             const ous = config.ous;
             const rootOUs = ous.filter(ou => ou.path === '{{DOMAIN_DN}}');
-
-            function buildChildren(parentPath) {
-                const children = ous.filter(ou => ou.path && ou.path.startsWith('OU=') && ou.path.includes(parentPath) && ou.path !== parentPath);
-                return children;
-            }
-
             function getDirectChildren(parentName) {
                 return ous.filter(ou => {
-                    if (!ou.path) return false;
-                    if (ou.path === '{{DOMAIN_DN}}') return false;
+                    if (!ou.path || ou.path === '{{DOMAIN_DN}}') return false;
                     const parentRef = 'OU=' + parentName;
                     return ou.path === parentRef || ou.path.startsWith(parentRef + ',');
                 });
             }
-
-            function buildTree(parentOUs, depth = 0) {
-                if (parentOUs.length === 0) return '';
+            function buildTree(parentOUs) {
+                if (!parentOUs.length) return '';
                 let html = '<ul>';
                 parentOUs.forEach(ou => {
-                    const tierBadge = getTierBadge(ou.name);
+                    const badge = getTierBadge(ou.name);
                     const children = getDirectChildren(ou.name);
-                    html += `<li>
-                        <span class="ou-node">
-                            <span class="ou-icon">&#128193;</span>
-                            <span class="ou-name">${esc(ou.name)}</span>
-                            ${tierBadge}
-                        </span>
-                        ${buildTree(children, depth + 1)}
-                    </li>`;
+                    html += `<li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">${esc(ou.name)}</span>${badge}</span>${buildTree(children)}</li>`;
                 });
-                html += '</ul>';
-                return html;
+                return html + '</ul>';
             }
-
             tree.innerHTML = buildTree(rootOUs);
         }
 
@@ -571,123 +705,214 @@ $HtmlPage = @'
             return '';
         }
 
-        // === Render Tables ===
+        // === Render Tables (sidebar pages) ===
         function renderOUS(filter = '') {
             const f = filter.toLowerCase();
             const data = config.ous.filter(ou => !f || ou.name.toLowerCase().includes(f));
-            document.getElementById('ou-table').innerHTML = `
-                <table>
-                    <thead><tr><th>Name</th><th>Pfad</th><th>Schutz</th><th>GPO-Block</th><th>Kommentar</th><th></th></tr></thead>
-                    <tbody>${data.map((ou, i) => `
-                        <tr>
-                            <td><strong>${esc(ou.name)}</strong></td>
-                            <td style="font-size:11px;color:var(--text2)">${esc(ou.path)}</td>
-                            <td>${ou.protectFromAccidentalDeletion ? '<span class="badge badge-green">Ja</span>' : '<span class="badge badge-red">Nein</span>'}</td>
-                            <td>${ou.blockGpoInheritance ? '<span class="badge badge-green">Ja</span>' : '-'}</td>
-                            <td style="font-size:11px">${esc(ou.comment || '')}</td>
-                            <td><button class="btn btn-danger btn-sm" onclick="removeOU(${i})">X</button></td>
-                        </tr>
-                    `).join('')}</tbody>
-                </table>`;
+            document.getElementById('ou-table').innerHTML = `<table><thead><tr><th>Name</th><th>Pfad</th><th>Schutz</th><th>GPO-Block</th><th>Kommentar</th><th></th></tr></thead><tbody>${data.map((ou, i) => `<tr><td><strong>${esc(ou.name)}</strong></td><td style="font-size:11px;color:var(--text2)">${esc(ou.path)}</td><td>${ou.protectFromAccidentalDeletion ? '<span class="badge badge-green">Ja</span>' : '<span class="badge badge-red">Nein</span>'}</td><td>${ou.blockGpoInheritance ? '<span class="badge badge-green">Ja</span>' : '-'}</td><td style="font-size:11px">${esc(ou.comment || '')}</td><td><button class="btn btn-danger btn-sm" onclick="removeOU(${i})">X</button></td></tr>`).join('')}</tbody></table>`;
         }
 
         function renderGroups(filter = '') {
             const f = filter.toLowerCase();
             const data = config.groups.filter(g => !f || g.name.toLowerCase().includes(f) || g.samaccountname.toLowerCase().includes(f));
-            document.getElementById('group-table').innerHTML = `
-                <table>
-                    <thead><tr><th>Name</th><th>SamAccountName</th><th>Scope</th><th>Kategorie</th><th>Pfad</th><th></th></tr></thead>
-                    <tbody>${data.map((g, i) => `
-                        <tr>
-                            <td><strong>${esc(g.name)}</strong></td>
-                            <td><code style="color:var(--accent)">${esc(g.samaccountname)}</code></td>
-                            <td><span class="badge ${g.groupscope === 'Universal' ? 'badge-admin' : 'badge-t1'}">${g.groupscope}</span></td>
-                            <td>${g.groupcategory}</td>
-                            <td style="font-size:11px;color:var(--text2)">${esc(g.path || '')}</td>
-                            <td><button class="btn btn-danger btn-sm" onclick="removeGroup(${i})">X</button></td>
-                        </tr>
-                    `).join('')}</tbody>
-                </table>`;
+            document.getElementById('group-table').innerHTML = `<table><thead><tr><th>Name</th><th>SamAccountName</th><th>Scope</th><th>Kategorie</th><th>Pfad</th><th></th></tr></thead><tbody>${data.map((g, i) => `<tr><td><strong>${esc(g.name)}</strong></td><td><code style="color:var(--accent)">${esc(g.samaccountname)}</code></td><td><span class="badge ${g.groupscope === 'Universal' ? 'badge-admin' : 'badge-t1'}">${g.groupscope}</span></td><td>${g.groupcategory}</td><td style="font-size:11px;color:var(--text2)">${esc(g.path || '')}</td><td><button class="btn btn-danger btn-sm" onclick="removeGroup(${i})">X</button></td></tr>`).join('')}</tbody></table>`;
         }
 
         function renderUsers(filter = '') {
             const f = filter.toLowerCase();
-            const data = config.users.filter(u => !f || u.samAccountName.toLowerCase().includes(f) || u.displayName.toLowerCase().includes(f));
-            document.getElementById('user-table').innerHTML = `
-                <table>
-                    <thead><tr><th>DisplayName</th><th>SamAccountName</th><th>Status</th><th>Pfad</th><th>Beschreibung</th><th></th></tr></thead>
-                    <tbody>${data.map((u, i) => `
-                        <tr>
-                            <td><strong>${esc(u.displayName || u.name)}</strong></td>
-                            <td><code style="color:var(--accent)">${esc(u.samAccountName)}</code></td>
-                            <td><span class="badge ${u.enabled ? 'badge-enabled' : 'badge-disabled'}">${u.enabled ? 'Aktiv' : 'Inaktiv'}</span></td>
-                            <td style="font-size:11px;color:var(--text2)">${esc(u.ouPath || u.path || '')}</td>
-                            <td style="font-size:11px">${esc(u.description || '')}</td>
-                            <td><button class="btn btn-danger btn-sm" onclick="removeUser(${i})">X</button></td>
-                        </tr>
-                    `).join('')}</tbody>
-                </table>`;
+            const data = config.users.filter(u => !f || u.samAccountName.toLowerCase().includes(f) || (u.displayName || '').toLowerCase().includes(f));
+            document.getElementById('user-table').innerHTML = `<table><thead><tr><th>DisplayName</th><th>SamAccountName</th><th>Status</th><th>Pfad</th><th>Beschreibung</th><th></th></tr></thead><tbody>${data.map((u, i) => `<tr><td><strong>${esc(u.displayName || u.name)}</strong></td><td><code style="color:var(--accent)">${esc(u.samAccountName)}</code></td><td><span class="badge ${u.enabled ? 'badge-enabled' : 'badge-disabled'}">${u.enabled ? 'Aktiv' : 'Inaktiv'}</span></td><td style="font-size:11px;color:var(--text2)">${esc(u.ouPath || u.path || '')}</td><td style="font-size:11px">${esc(u.description || '')}</td><td><button class="btn btn-danger btn-sm" onclick="removeUser(${i})">X</button></td></tr>`).join('')}</tbody></table>`;
         }
 
         function renderACLs(filter = '') {
             const f = filter.toLowerCase();
             const data = config.acls.filter(a => !f || a.targetOUPath.toLowerCase().includes(f) || a.identityreference.toLowerCase().includes(f));
-            document.getElementById('acl-table').innerHTML = `
-                <table>
-                    <thead><tr><th>OU-Pfad</th><th>Principal</th><th>Rechte</th><th>Typ</th><th>Objekttyp</th><th></th></tr></thead>
-                    <tbody>${data.map((a, i) => `
-                        <tr>
-                            <td style="font-size:11px;color:var(--text2)">${esc(a.targetOUPath)}</td>
-                            <td><strong>${esc(a.identityreference)}</strong></td>
-                            <td style="font-size:11px">${(a.activedirectoryrights || []).join(', ')}</td>
-                            <td><span class="badge ${a.accesscontroltype === 'Allow' ? 'badge-green' : 'badge-red'}">${a.accesscontroltype}</span></td>
-                            <td style="font-size:11px">${esc(a.objecttype || '-')}</td>
-                            <td><button class="btn btn-danger btn-sm" onclick="removeACL(${i})">X</button></td>
-                        </tr>
-                    `).join('')}</tbody>
-                </table>`;
+            document.getElementById('acl-table').innerHTML = `<table><thead><tr><th>OU-Pfad</th><th>Principal</th><th>Rechte</th><th>Typ</th><th>Objekttyp</th><th></th></tr></thead><tbody>${data.map((a, i) => `<tr><td style="font-size:11px;color:var(--text2)">${esc(a.targetOUPath)}</td><td><strong>${esc(a.identityreference)}</strong></td><td style="font-size:11px">${(a.activedirectoryrights || []).join(', ')}</td><td><span class="badge ${a.accesscontroltype === 'Allow' ? 'badge-green' : 'badge-red'}">${a.accesscontroltype}</span></td><td style="font-size:11px">${esc(a.objecttype || '-')}</td><td><button class="btn btn-danger btn-sm" onclick="removeACL(${i})">X</button></td></tr>`).join('')}</tbody></table>`;
+        }
+
+        // === Config Panels (form-based) ===
+        function renderConfigPanels() {
+            renderOUsConfig();
+            renderGroupsConfig();
+            renderUsersConfig();
+            renderACLsConfig();
+            renderGPOsConfig();
+        }
+
+        function renderOUsConfig() {
+            const grid = document.getElementById('cfg-ous-grid');
+            grid.innerHTML = config.ous.map((ou, i) => `
+                <div class="config-item">
+                    <div class="item-header">
+                        <span class="item-title">${esc(ou.name)}</span>
+                        <div class="item-actions">
+                            <button class="btn btn-danger btn-sm" onclick="removeOU(${i});renderConfigPanels();">X</button>
+                        </div>
+                    </div>
+                    <div class="item-fields">
+                        <div class="field-row"><span class="field-label">Name</span><input class="field-value" value="${esc(ou.name)}" onchange="config.ous[${i}].name=this.value;renderOUS();loadDashboard();"></div>
+                        <div class="field-row"><span class="field-label">Pfad</span><input class="field-value" value="${esc(ou.path)}" onchange="config.ous[${i}].path=this.value"></div>
+                        <div class="field-row"><span class="field-label">Kommentar</span><input class="field-value" value="${esc(ou.comment || '')}" onchange="config.ous[${i}].comment=this.value"></div>
+                        <div class="field-row">
+                            <div class="field-check"><input type="checkbox" ${ou.protectFromAccidentalDeletion ? 'checked' : ''} onchange="config.ous[${i}].protectFromAccidentalDeletion=this.checked"><label>Schutz</label></div>
+                            <div class="field-check"><input type="checkbox" ${ou.blockGpoInheritance ? 'checked' : ''} onchange="config.ous[${i}].blockGpoInheritance=this.checked"><label>GPO-Block</label></div>
+                            <div class="field-check"><input type="checkbox" ${ou.disableInheritance ? 'checked' : ''} onchange="config.ous[${i}].disableInheritance=this.checked"><label>Vererbung aus</label></div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderGroupsConfig() {
+            const grid = document.getElementById('cfg-groups-grid');
+            grid.innerHTML = config.groups.map((g, i) => `
+                <div class="config-item">
+                    <div class="item-header">
+                        <span class="item-title">${esc(g.name)}</span>
+                        <div class="item-actions"><button class="btn btn-danger btn-sm" onclick="removeGroup(${i});renderConfigPanels();">X</button></div>
+                    </div>
+                    <div class="item-fields">
+                        <div class="field-row"><span class="field-label">Name</span><input class="field-value" value="${esc(g.name)}" onchange="config.groups[${i}].name=this.value;renderGroups();loadDashboard();"></div>
+                        <div class="field-row"><span class="field-label">SAM</span><input class="field-value" value="${esc(g.samaccountname)}" onchange="config.groups[${i}].samaccountname=this.value"></div>
+                        <div class="field-row"><span class="field-label">Beschreibung</span><input class="field-value" value="${esc(g.description || '')}" onchange="config.groups[${i}].description=this.value"></div>
+                        <div class="field-row">
+                            <span class="field-label">Scope</span>
+                            <select class="field-value" onchange="config.groups[${i}].groupscope=this.value">
+                                <option ${g.groupscope === 'Global' ? 'selected' : ''}>Global</option>
+                                <option ${g.groupscope === 'Universal' ? 'selected' : ''}>Universal</option>
+                                <option ${g.groupscope === 'DomainLocal' ? 'selected' : ''}>DomainLocal</option>
+                            </select>
+                        </div>
+                        <div class="field-row">
+                            <span class="field-label">Kategorie</span>
+                            <select class="field-value" onchange="config.groups[${i}].groupcategory=this.value">
+                                <option ${g.groupcategory === 'Security' ? 'selected' : ''}>Security</option>
+                                <option ${g.groupcategory === 'Distribution' ? 'selected' : ''}>Distribution</option>
+                            </select>
+                        </div>
+                        <div class="field-row"><span class="field-label">Pfad</span><input class="field-value" value="${esc(g.path || '')}" onchange="config.groups[${i}].path=this.value"></div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderUsersConfig() {
+            const grid = document.getElementById('cfg-users-grid');
+            grid.innerHTML = config.users.map((u, i) => `
+                <div class="config-item">
+                    <div class="item-header">
+                        <span class="item-title">${esc(u.displayName || u.samAccountName)}</span>
+                        <div class="item-actions"><button class="btn btn-danger btn-sm" onclick="removeUser(${i});renderConfigPanels();">X</button></div>
+                    </div>
+                    <div class="item-fields">
+                        <div class="field-row"><span class="field-label">SAM</span><input class="field-value" value="${esc(u.samAccountName)}" onchange="config.users[${i}].samAccountName=this.value"></div>
+                        <div class="field-row"><span class="field-label">Display</span><input class="field-value" value="${esc(u.displayName || '')}" onchange="config.users[${i}].displayName=this.value;renderUsers();loadDashboard();"></div>
+                        <div class="field-row"><span class="field-label">Beschreibung</span><input class="field-value" value="${esc(u.description || '')}" onchange="config.users[${i}].description=this.value"></div>
+                        <div class="field-row"><span class="field-label">Pfad</span><input class="field-value" value="${esc(u.ouPath || u.path || '')}" onchange="config.users[${i}].ouPath=this.value"></div>
+                        <div class="field-row">
+                            <div class="field-check"><input type="checkbox" ${u.enabled ? 'checked' : ''} onchange="config.users[${i}].enabled=this.checked;renderUsers();"><label>Aktiviert</label></div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderACLsConfig() {
+            const grid = document.getElementById('cfg-acls-grid');
+            grid.innerHTML = config.acls.map((a, i) => `
+                <div class="config-item">
+                    <div class="item-header">
+                        <span class="item-title">${esc(a.identityreference)}</span>
+                        <div class="item-actions"><button class="btn btn-danger btn-sm" onclick="removeACL(${i});renderConfigPanels();">X</button></div>
+                    </div>
+                    <div class="item-fields">
+                        <div class="field-row"><span class="field-label">OU-Pfad</span><input class="field-value" value="${esc(a.targetOUPath)}" onchange="config.acls[${i}].targetOUPath=this.value"></div>
+                        <div class="field-row">
+                            <span class="field-label">Principal</span>
+                            <select class="field-value" onchange="config.acls[${i}].identityreference=this.value">
+                                ${config.groups.map(g => `<option ${a.identityreference === g.samaccountname ? 'selected' : ''}>${esc(g.samaccountname)}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="field-row">
+                            <span class="field-label">Typ</span>
+                            <select class="field-value" onchange="config.acls[${i}].accesscontroltype=this.value">
+                                <option ${a.accesscontroltype === 'Allow' ? 'selected' : ''}>Allow</option>
+                                <option ${a.accesscontroltype === 'Deny' ? 'selected' : ''}>Deny</option>
+                            </select>
+                        </div>
+                        <div class="field-row">
+                            <span class="field-label">Objekttyp</span>
+                            <select class="field-value" onchange="config.acls[${i}].objecttype=this.value">
+                                <option value="" ${!a.objecttype ? 'selected' : ''}>Alle</option>
+                                <option ${a.objecttype === 'Computer' ? 'selected' : ''}>Computer</option>
+                                <option ${a.objecttype === 'User' ? 'selected' : ''}>User</option>
+                                <option ${a.objecttype === 'Group' ? 'selected' : ''}>Group</option>
+                                <option ${a.objecttype === 'OrganizationalUnit' ? 'selected' : ''}>OrganizationalUnit</option>
+                                <option ${a.objecttype === 'AllObjectClasses' ? 'selected' : ''}>AllObjectClasses</option>
+                            </select>
+                        </div>
+                        <div class="field-row">
+                            <span class="field-label">Vererbung</span>
+                            <select class="field-value" onchange="config.acls[${i}].activeDirectorysecurityinheritance=this.value">
+                                ${['All','Descendents','SelfAndChildren','Children','None'].map(v => `<option ${a.activeDirectorysecurityinheritance === v ? 'selected' : ''}>${v}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="field-row"><span class="field-label">Rechte</span><input class="field-value" value="${esc((a.activedirectoryrights || []).join(', '))}" onchange="config.acls[${i}].activedirectoryrights=this.value.split(',').map(s=>s.trim()).filter(Boolean)"></div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderGPOsConfig() {
+            const grid = document.getElementById('cfg-gpos-grid');
+            grid.innerHTML = config.gpos.map((g, i) => `
+                <div class="config-item">
+                    <div class="item-header">
+                        <span class="item-title">${esc(g.name)}</span>
+                        <div class="item-actions"><button class="btn btn-danger btn-sm" onclick="config.gpos.splice(${i},1);renderConfigPanels();">X</button></div>
+                    </div>
+                    <div class="item-fields">
+                        <div class="field-row"><span class="field-label">Name</span><input class="field-value" value="${esc(g.name)}" onchange="config.gpos[${i}].name=this.value"></div>
+                        <div class="field-row">
+                            <span class="field-label">Modus</span>
+                            <select class="field-value" onchange="config.gpos[${i}].mode=this.value">
+                                ${['createAndImport','createOnly','importOnly','linkOnly'].map(m => `<option ${g.mode === m ? 'selected' : ''}>${m}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="field-row"><span class="field-label">Links</span><input class="field-value" value="${esc((g.linkTargets || []).join(', '))}" onchange="config.gpos[${i}].linkTargets=this.value.split(',').map(s=>s.trim()).filter(Boolean)"></div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // === Principal Dropdown ===
+        function populatePrincipalDropdown() {
+            const sel = document.getElementById('acl-principal');
+            sel.innerHTML = config.groups.map(g => `<option value="${esc(g.samaccountname)}">${esc(g.name)} (${esc(g.samaccountname)})</option>`).join('');
         }
 
         // === Add/Remove ===
         function addOU() {
-            config.ous.push({
-                name: document.getElementById('ou-name').value,
-                path: document.getElementById('ou-path').value || '{{DOMAIN_DN}}',
-                protectFromAccidentalDeletion: document.getElementById('ou-protect').checked,
-                disableInheritance: false,
-                blockGpoInheritance: document.getElementById('ou-blockgpo').checked,
-                comment: document.getElementById('ou-comment').value
-            });
-            hideModal('ou-modal');
-            renderOUS(); loadDashboard();
-            showToast('OU hinzugefuegt');
+            config.ous.push({ name: document.getElementById('ou-name').value, path: document.getElementById('ou-path').value || '{{DOMAIN_DN}}', protectFromAccidentalDeletion: document.getElementById('ou-protect').checked, disableInheritance: false, blockGpoInheritance: document.getElementById('ou-blockgpo').checked, comment: document.getElementById('ou-comment').value });
+            hideModal('ou-modal'); renderOUS(); renderConfigPanels(); loadDashboard(); showToast('OU hinzugefuegt');
         }
-
         function addGroup() {
-            config.groups.push({
-                name: document.getElementById('grp-name').value,
-                samaccountname: document.getElementById('grp-sam').value,
-                description: document.getElementById('grp-desc').value,
-                groupscope: document.getElementById('grp-scope').value,
-                groupcategory: document.getElementById('grp-cat').value,
-                path: document.getElementById('grp-path').value
-            });
-            hideModal('group-modal');
-            renderGroups(); loadDashboard();
-            showToast('Gruppe hinzugefuegt');
+            config.groups.push({ name: document.getElementById('grp-name').value, samaccountname: document.getElementById('grp-sam').value, description: document.getElementById('grp-desc').value, groupscope: document.getElementById('grp-scope').value, groupcategory: document.getElementById('grp-cat').value, path: document.getElementById('grp-path').value });
+            hideModal('group-modal'); renderGroups(); renderConfigPanels(); loadDashboard(); showToast('Gruppe hinzugefuegt');
         }
-
         function addUser() {
-            config.users.push({
-                samAccountName: document.getElementById('usr-sam').value,
-                displayName: document.getElementById('usr-display').value,
-                description: document.getElementById('usr-desc').value,
-                ouPath: document.getElementById('usr-path').value,
-                enabled: document.getElementById('usr-enabled').checked
-            });
-            hideModal('user-modal');
-            renderUsers(); loadDashboard();
-            showToast('Benutzer hinzugefuegt');
+            config.users.push({ samAccountName: document.getElementById('usr-sam').value, displayName: document.getElementById('usr-display').value, description: document.getElementById('usr-desc').value, ouPath: document.getElementById('usr-path').value, enabled: document.getElementById('usr-enabled').checked });
+            hideModal('user-modal'); renderUsers(); renderConfigPanels(); loadDashboard(); showToast('Benutzer hinzugefuegt');
+        }
+        function addACL() {
+            const rights = [];
+            document.querySelectorAll('#acl-rights-grid input:checked').forEach(cb => rights.push(cb.value));
+            config.acls.push({ targetOUPath: document.getElementById('acl-ou').value, identityreference: document.getElementById('acl-principal').value, activedirectoryrights: rights, accesscontroltype: document.getElementById('acl-type').value, objecttype: document.getElementById('acl-objtype').value, activeDirectorysecurityinheritance: document.getElementById('acl-inheritance').value, resolveguid: false });
+            hideModal('acl-modal'); renderACLs(); renderConfigPanels(); showToast('ACL hinzugefuegt');
+        }
+        function addGPO() {
+            config.gpos.push({ name: document.getElementById('gpo-name').value, mode: document.getElementById('gpo-mode').value, linkTargets: document.getElementById('gpo-links').value.split(',').map(s => s.trim()).filter(Boolean) });
+            hideModal('gpo-modal'); renderConfigPanels(); showToast('GPO hinzugefuegt');
         }
 
         function removeOU(i) { config.ous.splice(i, 1); renderOUS(); loadDashboard(); }
@@ -695,38 +920,36 @@ $HtmlPage = @'
         function removeUser(i) { config.users.splice(i, 1); renderUsers(); loadDashboard(); }
         function removeACL(i) { config.acls.splice(i, 1); renderACLs(); }
 
-        // === Save ===
-        async function saveConfig(type) {
-            let payload;
-            switch(type) {
-                case 'ous': payload = { version: '1.0.0', organizationUnits: config.ous }; break;
-                case 'groups': payload = { version: '1.0.0', groups: config.groups }; break;
-                case 'users': payload = { version: '1.0.0', users: config.users }; break;
-                case 'acls': payload = { version: '1.0.0', aclDelegations: config.acls }; break;
+        // === Save All ===
+        async function saveAllConfigs() {
+            const files = [
+                { file: 'tiermodel-ous.json', data: { version: '1.0.0', organizationUnits: config.ous } },
+                { file: 'tiermodel-groups.json', data: { version: '1.0.0', groups: config.groups } },
+                { file: 'tiermodel-users.json', data: { version: '1.0.0', users: config.users } },
+                { file: 'tiermodel-acls.json', data: { version: '1.0.0', aclDelegations: config.acls } },
+                { file: 'tiermodel-gpos.json', data: { version: '1.0.0', gpos: config.gpos } }
+            ];
+            let ok = 0;
+            for (const f of files) {
+                try {
+                    const r = await api('/api/config/' + f.file, 'POST', f.data);
+                    if (r.success) ok++;
+                } catch(e) {}
             }
-            const file = 'tiermodel-' + (type === 'acls' ? 'acls' : type) + '.json';
+            showToast(`${ok}/${files.length} Dateien gespeichert`);
+        }
+
+        async function saveConfig(type) {
+            let payload, file;
+            switch(type) {
+                case 'ous': payload = { version: '1.0.0', organizationUnits: config.ous }; file = 'tiermodel-ous.json'; break;
+                case 'groups': payload = { version: '1.0.0', groups: config.groups }; file = 'tiermodel-groups.json'; break;
+                case 'users': payload = { version: '1.0.0', users: config.users }; file = 'tiermodel-users.json'; break;
+                case 'acls': payload = { version: '1.0.0', aclDelegations: config.acls }; file = 'tiermodel-acls.json'; break;
+            }
             try {
                 const r = await api('/api/config/' + file, 'POST', payload);
                 if (r.success) showToast('Gespeichert: ' + file);
-                else showToast('Fehler: ' + r.message, 'error');
-            } catch(e) { showToast('Fehler: ' + e.message, 'error'); }
-        }
-
-        // === JSON Editor ===
-        async function loadConfigEditor() {
-            const file = document.getElementById('config-file-select').value;
-            try {
-                const r = await api('/api/config/' + file);
-                document.getElementById('json-editor').value = JSON.stringify(r, null, 2);
-            } catch(e) { showToast('Fehler: ' + e.message, 'error'); }
-        }
-
-        async function saveConfigEditor() {
-            const file = document.getElementById('config-file-select').value;
-            try {
-                const data = JSON.parse(document.getElementById('json-editor').value);
-                const r = await api('/api/config/' + file, 'POST', data);
-                if (r.success) { showToast('Gespeichert: ' + file); loadAll(); }
                 else showToast('Fehler: ' + r.message, 'error');
             } catch(e) { showToast('Fehler: ' + e.message, 'error'); }
         }
@@ -746,10 +969,7 @@ $HtmlPage = @'
                     dmsa: document.getElementById('opt-dmsa').checked,
                     winlaps: document.getElementById('opt-winlaps').checked
                 });
-                out.innerHTML += (r.output || []).map(l => {
-                    const cls = l.type === 'error' ? 'line-error' : l.type === 'warn' ? 'line-warn' : '';
-                    return `<span class="${cls}">${esc(l.text)}</span>`;
-                }).join('\n');
+                out.innerHTML += (r.output || []).map(l => `<span class="${l.type === 'error' ? 'line-error' : l.type === 'warn' ? 'line-warn' : ''}">${esc(l.text)}</span>`).join('\n');
                 if (r.success) showToast('Deploy abgeschlossen');
                 else showToast('Deploy fehlgeschlagen', 'error');
             } catch(e) { out.innerHTML += `<span class="line-error">Fehler: ${esc(e.message)}</span>`; }
@@ -763,10 +983,7 @@ $HtmlPage = @'
             out.innerHTML = '<span class="line-info">Starte Audit...</span>\n';
             try {
                 const r = await api('/api/audit', 'POST');
-                out.innerHTML += (r.output || []).map(l => {
-                    const cls = l.type === 'error' ? 'line-error' : l.type === 'warn' ? 'line-warn' : '';
-                    return `<span class="${cls}">${esc(l.text)}</span>`;
-                }).join('\n');
+                out.innerHTML += (r.output || []).map(l => `<span class="${l.type === 'error' ? 'line-error' : l.type === 'warn' ? 'line-warn' : ''}">${esc(l.text)}</span>`).join('\n');
                 if (r.success) showToast('Audit abgeschlossen');
                 else showToast('Audit fehlgeschlagen', 'error');
             } catch(e) { out.innerHTML += `<span class="line-error">Fehler: ${esc(e.message)}</span>`; }
@@ -784,7 +1001,6 @@ $HtmlPage = @'
 
         // === Init ===
         loadAll();
-        loadConfigEditor();
     </script>
 </body>
 </html>
