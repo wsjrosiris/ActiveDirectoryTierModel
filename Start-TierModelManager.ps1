@@ -552,28 +552,29 @@ $HtmlPage = @'
         }
 
         // === Render Tables (sidebar pages) ===
+        // BUG-003 FIX: Use original config index via findIndex, not filtered index
         function renderOUS(filter = '') {
             const f = filter.toLowerCase();
             const data = config.ous.filter(ou => !f || ou.name.toLowerCase().includes(f));
-            document.getElementById('ou-table').innerHTML = `<table><thead><tr><th>Name</th><th>Pfad</th><th>Schutz</th><th>GPO-Block</th><th>Kommentar</th><th></th></tr></thead><tbody>${data.map((ou, i) => `<tr><td><strong>${esc(ou.name)}</strong></td><td style="font-size:11px;color:var(--text2)">${esc(ou.path)}</td><td>${ou.protectFromAccidentalDeletion ? '<span class="badge badge-green">Ja</span>' : '<span class="badge badge-red">Nein</span>'}</td><td>${ou.blockGpoInheritance ? '<span class="badge badge-green">Ja</span>' : '-'}</td><td style="font-size:11px">${esc(ou.comment || '')}</td><td><button class="btn btn-danger btn-sm" onclick="removeOU(${i})">X</button></td></tr>`).join('')}</tbody></table>`;
+            document.getElementById('ou-table').innerHTML = `<table><thead><tr><th>Name</th><th>Pfad</th><th>Schutz</th><th>GPO-Block</th><th>Kommentar</th><th></th></tr></thead><tbody>${data.map(ou => { const idx = config.ous.indexOf(ou); return `<tr><td><strong>${esc(ou.name)}</strong></td><td style="font-size:11px;color:var(--text2)">${esc(ou.path)}</td><td>${ou.protectFromAccidentalDeletion ? '<span class="badge badge-green">Ja</span>' : '<span class="badge badge-red">Nein</span>'}</td><td>${ou.blockGpoInheritance ? '<span class="badge badge-green">Ja</span>' : '-'}</td><td style="font-size:11px">${esc(ou.comment || '')}</td><td><button class="btn btn-danger btn-sm" onclick="removeOU(${idx})">X</button></td></tr>`; }).join('')}</tbody></table>`;
         }
 
         function renderGroups(filter = '') {
             const f = filter.toLowerCase();
             const data = config.groups.filter(g => !f || g.name.toLowerCase().includes(f) || g.samaccountname.toLowerCase().includes(f));
-            document.getElementById('group-table').innerHTML = `<table><thead><tr><th>Name</th><th>SamAccountName</th><th>Scope</th><th>Kategorie</th><th>Pfad</th><th></th></tr></thead><tbody>${data.map((g, i) => `<tr><td><strong>${esc(g.name)}</strong></td><td><code style="color:var(--accent)">${esc(g.samaccountname)}</code></td><td><span class="badge ${g.groupscope === 'Universal' ? 'badge-admin' : 'badge-t1'}">${g.groupscope}</span></td><td>${g.groupcategory}</td><td style="font-size:11px;color:var(--text2)">${esc(g.path || '')}</td><td><button class="btn btn-danger btn-sm" onclick="removeGroup(${i})">X</button></td></tr>`).join('')}</tbody></table>`;
+            document.getElementById('group-table').innerHTML = `<table><thead><tr><th>Name</th><th>SamAccountName</th><th>Scope</th><th>Kategorie</th><th>Pfad</th><th></th></tr></thead><tbody>${data.map(g => { const idx = config.groups.indexOf(g); return `<tr><td><strong>${esc(g.name)}</strong></td><td><code style="color:var(--accent)">${esc(g.samaccountname)}</code></td><td><span class="badge ${g.groupscope === 'Universal' ? 'badge-admin' : 'badge-t1'}">${g.groupscope}</span></td><td>${g.groupcategory}</td><td style="font-size:11px;color:var(--text2)">${esc(g.path || '')}</td><td><button class="btn btn-danger btn-sm" onclick="removeGroup(${idx})">X</button></td></tr>`; }).join('')}</tbody></table>`;
         }
 
         function renderUsers(filter = '') {
             const f = filter.toLowerCase();
             const data = config.users.filter(u => !f || u.samAccountName.toLowerCase().includes(f) || (u.displayName || '').toLowerCase().includes(f));
-            document.getElementById('user-table').innerHTML = `<table><thead><tr><th>DisplayName</th><th>SamAccountName</th><th>Status</th><th>Pfad</th><th>Beschreibung</th><th></th></tr></thead><tbody>${data.map((u, i) => `<tr><td><strong>${esc(u.displayName || u.name)}</strong></td><td><code style="color:var(--accent)">${esc(u.samAccountName)}</code></td><td><span class="badge ${u.enabled ? 'badge-enabled' : 'badge-disabled'}">${u.enabled ? 'Aktiv' : 'Inaktiv'}</span></td><td style="font-size:11px;color:var(--text2)">${esc(u.ouPath || u.path || '')}</td><td style="font-size:11px">${esc(u.description || '')}</td><td><button class="btn btn-danger btn-sm" onclick="removeUser(${i})">X</button></td></tr>`).join('')}</tbody></table>`;
+            document.getElementById('user-table').innerHTML = `<table><thead><tr><th>DisplayName</th><th>SamAccountName</th><th>Status</th><th>Pfad</th><th>Beschreibung</th><th></th></tr></thead><tbody>${data.map(u => { const idx = config.users.indexOf(u); return `<tr><td><strong>${esc(u.displayName || u.name)}</strong></td><td><code style="color:var(--accent)">${esc(u.samAccountName)}</code></td><td><span class="badge ${u.enabled ? 'badge-enabled' : 'badge-disabled'}">${u.enabled ? 'Aktiv' : 'Inaktiv'}</span></td><td style="font-size:11px;color:var(--text2)">${esc(u.ouPath || u.path || '')}</td><td style="font-size:11px">${esc(u.description || '')}</td><td><button class="btn btn-danger btn-sm" onclick="removeUser(${idx})">X</button></td></tr>`; }).join('')}</tbody></table>`;
         }
 
         function renderACLs(filter = '') {
             const f = filter.toLowerCase();
             const data = config.acls.filter(a => !f || a.targetOUPath.toLowerCase().includes(f) || a.identityreference.toLowerCase().includes(f));
-            document.getElementById('acl-table').innerHTML = `<table><thead><tr><th>OU-Pfad</th><th>Principal</th><th>Rechte</th><th>Typ</th><th>Objekttyp</th><th></th></tr></thead><tbody>${data.map((a, i) => `<tr><td style="font-size:11px;color:var(--text2)">${esc(a.targetOUPath)}</td><td><strong>${esc(a.identityreference)}</strong></td><td style="font-size:11px">${(a.activedirectoryrights || []).join(', ')}</td><td><span class="badge ${a.accesscontroltype === 'Allow' ? 'badge-green' : 'badge-red'}">${a.accesscontroltype}</span></td><td style="font-size:11px">${esc(a.objecttype || '-')}</td><td><button class="btn btn-danger btn-sm" onclick="removeACL(${i})">X</button></td></tr>`).join('')}</tbody></table>`;
+            document.getElementById('acl-table').innerHTML = `<table><thead><tr><th>OU-Pfad</th><th>Principal</th><th>Rechte</th><th>Typ</th><th>Objekttyp</th><th></th></tr></thead><tbody>${data.map(a => { const idx = config.acls.indexOf(a); return `<tr><td style="font-size:11px;color:var(--text2)">${esc(a.targetOUPath)}</td><td><strong>${esc(a.identityreference)}</strong></td><td style="font-size:11px">${(a.activedirectoryrights || []).join(', ')}</td><td><span class="badge ${a.accesscontroltype === 'Allow' ? 'badge-green' : 'badge-red'}">${a.accesscontroltype}</span></td><td style="font-size:11px">${esc(a.objecttype || '-')}</td><td><button class="btn btn-danger btn-sm" onclick="removeACL(${idx})">X</button></td></tr>`; }).join('')}</tbody></table>`;
         }
 
         // === Config Panels (form-based) ===
@@ -738,26 +739,41 @@ $HtmlPage = @'
         }
 
         // === Add/Remove ===
+        // BUG-002 FIX: Input validation before adding
+        // BUG-011 FIX: OU tree updates on add
         function addOU() {
-            config.ous.push({ name: document.getElementById('ou-name').value, path: document.getElementById('ou-path').value || '{{DOMAIN_DN}}', protectFromAccidentalDeletion: document.getElementById('ou-protect').checked, disableInheritance: false, blockGpoInheritance: document.getElementById('ou-blockgpo').checked, comment: document.getElementById('ou-comment').value });
-            hideModal('ou-modal'); renderOUS(); renderConfigPanels(); loadDashboard(); showToast('OU hinzugefuegt');
+            const name = document.getElementById('ou-name').value.trim();
+            if (!name) { showToast('Name darf nicht leer sein', 'error'); return; }
+            config.ous.push({ name, path: document.getElementById('ou-path').value.trim() || '{{DOMAIN_DN}}', protectFromAccidentalDeletion: document.getElementById('ou-protect').checked, disableInheritance: false, blockGpoInheritance: document.getElementById('ou-blockgpo').checked, comment: document.getElementById('ou-comment').value.trim() });
+            hideModal('ou-modal'); document.getElementById('ou-name').value = ''; document.getElementById('ou-path').value = ''; document.getElementById('ou-comment').value = '';
+            renderOUS(); renderConfigPanels(); loadDashboard(); showToast('OU hinzugefuegt');
         }
         function addGroup() {
-            config.groups.push({ name: document.getElementById('grp-name').value, samaccountname: document.getElementById('grp-sam').value, description: document.getElementById('grp-desc').value, groupscope: document.getElementById('grp-scope').value, groupcategory: document.getElementById('grp-cat').value, path: document.getElementById('grp-path').value });
+            const name = document.getElementById('grp-name').value.trim();
+            const sam = document.getElementById('grp-sam').value.trim();
+            if (!name || !sam) { showToast('Name und SAM duerfen nicht leer sein', 'error'); return; }
+            config.groups.push({ name, samaccountname: sam, description: document.getElementById('grp-desc').value.trim(), groupscope: document.getElementById('grp-scope').value, groupcategory: document.getElementById('grp-cat').value, path: document.getElementById('grp-path').value.trim() });
             hideModal('group-modal'); renderGroups(); renderConfigPanels(); loadDashboard(); showToast('Gruppe hinzugefuegt');
         }
         function addUser() {
-            config.users.push({ samAccountName: document.getElementById('usr-sam').value, displayName: document.getElementById('usr-display').value, description: document.getElementById('usr-desc').value, ouPath: document.getElementById('usr-path').value, enabled: document.getElementById('usr-enabled').checked });
+            const sam = document.getElementById('usr-sam').value.trim();
+            if (!sam) { showToast('SamAccountName darf nicht leer sein', 'error'); return; }
+            config.users.push({ samAccountName: sam, displayName: document.getElementById('usr-display').value.trim() || sam, description: document.getElementById('usr-desc').value.trim(), ouPath: document.getElementById('usr-path').value.trim(), enabled: document.getElementById('usr-enabled').checked });
             hideModal('user-modal'); renderUsers(); renderConfigPanels(); loadDashboard(); showToast('Benutzer hinzugefuegt');
         }
         function addACL() {
+            const ou = document.getElementById('acl-ou').value.trim();
+            if (!ou) { showToast('OU-Pfad darf nicht leer sein', 'error'); return; }
             const rights = [];
-            document.querySelectorAll('#acl-rights-grid input:checked').forEach(cb => rights.push(cb.value));
-            config.acls.push({ targetOUPath: document.getElementById('acl-ou').value, identityreference: document.getElementById('acl-principal').value, activedirectoryrights: rights, accesscontroltype: document.getElementById('acl-type').value, objecttype: document.getElementById('acl-objtype').value, activeDirectorysecurityinheritance: document.getElementById('acl-inheritance').value, resolveguid: false });
+            document.querySelectorAll('#acl-modal .rights-grid input:checked').forEach(cb => rights.push(cb.value));
+            if (rights.length === 0) { showToast('Mindestens ein Recht muss ausgewaehlt sein', 'error'); return; }
+            config.acls.push({ targetOUPath: ou, identityreference: document.getElementById('acl-principal').value, activedirectoryrights: rights, accesscontroltype: document.getElementById('acl-type').value, objecttype: document.getElementById('acl-objtype').value, activeDirectorysecurityinheritance: document.getElementById('acl-inheritance').value, resolveguid: false });
             hideModal('acl-modal'); renderACLs(); renderConfigPanels(); showToast('ACL hinzugefuegt');
         }
         function addGPO() {
-            config.gpos.push({ name: document.getElementById('gpo-name').value, mode: document.getElementById('gpo-mode').value, linkTargets: document.getElementById('gpo-links').value.split(',').map(s => s.trim()).filter(Boolean) });
+            const name = document.getElementById('gpo-name').value.trim();
+            if (!name) { showToast('Name darf nicht leer sein', 'error'); return; }
+            config.gpos.push({ name, mode: document.getElementById('gpo-mode').value, linkTargets: document.getElementById('gpo-links').value.split(',').map(s => s.trim()).filter(Boolean) });
             hideModal('gpo-modal'); renderConfigPanels(); showToast('GPO hinzugefuegt');
         }
 
@@ -792,6 +808,7 @@ $HtmlPage = @'
                 case 'groups': payload = { version: '1.0.0', groups: config.groups }; file = 'tiermodel-groups.json'; break;
                 case 'users': payload = { version: '1.0.0', users: config.users }; file = 'tiermodel-users.json'; break;
                 case 'acls': payload = { version: '1.0.0', aclDelegations: config.acls }; file = 'tiermodel-acls.json'; break;
+                case 'gpos': payload = { version: '1.0.0', gpos: config.gpos }; file = 'tiermodel-gpos.json'; break;
             }
             try {
                 const r = await api('/api/config/' + file, 'POST', payload);
@@ -809,7 +826,7 @@ $HtmlPage = @'
             try {
                 const r = await api('/api/deploy', 'POST', {
                     whatif: document.getElementById('opt-whatif').checked,
-                    confirm: document.getElementById('opt-confirm').checked,
+                    confirmApply: document.getElementById('opt-confirm').checked,
                     msa: document.getElementById('opt-msa').checked,
                     gmsa: document.getElementById('opt-gmsa').checked,
                     dmsa: document.getElementById('opt-dmsa').checked,
@@ -844,6 +861,14 @@ $HtmlPage = @'
 
         // === Helper ===
         function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+        function escAttr(s) { return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+
+        // === Modal Escape Key (BUG-004) ===
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.modal-overlay.show').forEach(m => m.classList.remove('show'));
+            }
+        });
 
         // === Init ===
         loadAll();
@@ -886,9 +911,15 @@ function Write-ConfigFile {
 }
 
 # === HTTP Listener ===
+# BUG-007 FIX: Handle port already in use
 $Listener = [System.Net.HttpListener]::new()
 $Listener.Prefixes.Add("http://localhost:${Port}/")
-$Listener.Start()
+try {
+    $Listener.Start()
+} catch {
+    Write-Error "Port $Port ist bereits belegt. Bitte anderen Port verwenden oder laufenden Prozess beenden."
+    exit 1
+}
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
@@ -959,7 +990,7 @@ try {
                 if (Test-Path $deployScript) {
                     $params = @{}
                     if ($body.whatif) { $params['WhatIf'] = $true }
-                    if ($body.confirm) { $params['ConfirmApply'] = $true }
+                    if ($body.confirmApply) { $params['ConfirmApply'] = $true }
                     if ($body.msa) { $params['IncludeMsa'] = $true }
                     if ($body.gmsa) { $params['IncludeGmsa'] = $true }
                     if ($body.dmsa) { $params['IncludeDmsa'] = $true }
