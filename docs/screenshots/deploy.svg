@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500" font-family="Segoe UI, system-ui, sans-serif">
+  <rect width="900" height="500" fill="#0b0d14"/>
+  <rect width="200" height="500" fill="#141821"/>
+  <text x="20" y="35" fill="#f0f2f8" font-size="15" font-weight="700">Tier Model</text>
+  <text x="20" y="50" fill="#a0a8c0" font-size="9">AD Management Console</text>
+  <text x="36" y="93" fill="#a0a8c0" font-size="12">Dashboard</text>
+  <text x="36" y="126" fill="#a0a8c0" font-size="12">Organizational Units</text>
+  <text x="36" y="153" fill="#a0a8c0" font-size="12">Gruppen</text>
+  <text x="36" y="181" fill="#a0a8c0" font-size="12">Benutzer</text>
+  <text x="36" y="209" fill="#a0a8c0" font-size="12">ACL Delegationen</text>
+  <text x="36" y="245" fill="#a0a8c0" font-size="12">Konfiguration</text>
+  <rect x="8" y="254" width="184" height="32" rx="8" fill="rgba(107,154,255,0.12)" stroke="rgba(107,154,255,0.2)" stroke-width="1"/>
+  <text x="36" y="275" fill="#6b9aff" font-size="12" font-weight="500">Deploy</text>
+  <text x="36" y="301" fill="#a0a8c0" font-size="12">Audit</text>
+  <!-- Main -->
+  <text x="225" y="40" fill="#f0f2f8" font-size="18" font-weight="700">Tier Model Deployen</text>
+  <!-- Options Card -->
+  <rect x="225" y="55" width="650" height="180" rx="14" fill="#141821" stroke="#2a3042" stroke-width="1"/>
+  <text x="245" y="80" fill="#a0a8c0" font-size="11" font-weight="600" text-transform="uppercase" letter-spacing="0.5">OPTIONEN</text>
+  <rect x="245" y="92" width="14" height="14" rx="2" fill="#6b9aff"/>
+  <text x="265" y="104" fill="#f0f2f8" font-size="12">WhatIf (nur Plan anzeigen)</text>
+  <rect x="440" y="92" width="14" height="14" rx="2" stroke="#2a3042" stroke-width="1" fill="transparent"/>
+  <text x="460" y="104" fill="#f0f2f8" font-size="12">ConfirmApply</text>
+  <rect x="245" y="118" width="14" height="14" rx="2" stroke="#2a3042" stroke-width="1" fill="transparent"/>
+  <text x="265" y="130" fill="#f0f2f8" font-size="12">IncludeMsa</text>
+  <rect x="440" y="118" width="14" height="14" rx="2" stroke="#2a3042" stroke-width="1" fill="transparent"/>
+  <text x="460" y="130" fill="#f0f2f8" font-size="12">IncludeGmsa</text>
+  <rect x="245" y="144" width="14" height="14" rx="2" stroke="#2a3042" stroke-width="1" fill="transparent"/>
+  <text x="265" y="156" fill="#f0f2f8" font-size="12">IncludeDmsa</text>
+  <rect x="440" y="144" width="14" height="14" rx="2" stroke="#2a3042" stroke-width="1" fill="transparent"/>
+  <text x="460" y="156" fill="#f0f2f8" font-size="12">IncludeWinLaps</text>
+  <rect x="245" y="175" width="130" height="32" rx="8" fill="#5dd9a0"/>
+  <text x="265" y="196" fill="#000" font-size="12" font-weight="600">Deploy starten</text>
+  <!-- Terminal Card -->
+  <rect x="225" y="250" width="650" height="230" rx="14" fill="#141821" stroke="#2a3042" stroke-width="1"/>
+  <text x="245" y="275" fill="#a0a8c0" font-size="11" font-weight="600">AUSGABE</text>
+  <rect x="245" y="285" width="610" height="180" rx="8" fill="#0b0d14" stroke="#2a3042" stroke-width="1"/>
+  <text x="255" y="305" fill="#6b9aff" font-size="10" font-family="Cascadia Code, Consolas, monospace">[14:32:01] Starte Deploy...</text>
+  <text x="255" y="320" fill="#6b9aff" font-size="10" font-family="Cascadia Code, Consolas, monospace">[14:32:02] Lade Konfiguration: tiermodel-ous.json</text>
+  <text x="255" y="335" fill="#6b9aff" font-size="10" font-family="Cascadia Code, Consolas, monospace">[14:32:02] Lade Konfiguration: tiermodel-groups.json</text>
+  <text x="255" y="350" fill="#5dd9a0" font-size="10" font-family="Cascadia Code, Consolas, monospace">[14:32:03] Prerequisites: OK</text>
+  <text x="255" y="365" fill="#5dd9a0" font-size="10" font-family="Cascadia Code, Consolas, monospace">[14:32:03] Plan: 29 OUs, 24 Gruppen, 2 Users, 62 ACLs</text>
+  <text x="255" y="380" fill="#5dd9a0" font-size="10" font-family="Cascadia Code, Consolas, monospace">[14:32:04] OU: Tier 0 Member Servers ... wird erstellt</text>
+  <text x="255" y="395" fill="#ffc56b" font-size="10" font-family="Cascadia Code, Consolas, monospace">[14:32:06] WhatIf-Modus: Keine Aenderungen vorgenommen</text>
+  <text x="255" y="410" fill="#6b9aff" font-size="10" font-family="Cascadia Code, Consolas, monospace">[14:32:06] Deploy abgeschlossen (WhatIf)</text>
+</svg>

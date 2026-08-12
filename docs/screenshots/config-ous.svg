@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500" font-family="Segoe UI, system-ui, sans-serif">
+  <rect width="900" height="500" fill="#0b0d14"/>
+  <rect width="200" height="500" fill="#141821"/>
+  <rect width="200" height="1" fill="#2a3042" y="60"/>
+  <text x="20" y="35" fill="#f0f2f8" font-size="15" font-weight="700">Tier Model</text>
+  <text x="20" y="50" fill="#a0a8c0" font-size="9">AD Management Console</text>
+  <text x="36" y="93" fill="#a0a8c0" font-size="12">Dashboard</text>
+  <rect x="8" y="105" width="184" height="32" rx="8" fill="rgba(107,154,255,0.12)" stroke="rgba(107,154,255,0.2)" stroke-width="1"/>
+  <text x="36" y="126" fill="#6b9aff" font-size="12" font-weight="500">Organizational Units</text>
+  <text x="36" y="153" fill="#a0a8c0" font-size="12">Gruppen</text>
+  <text x="36" y="181" fill="#a0a8c0" font-size="12">Benutzer</text>
+  <text x="36" y="209" fill="#a0a8c0" font-size="12">ACL Delegationen</text>
+  <text x="36" y="245" fill="#a0a8c0" font-size="12">Konfiguration</text>
+  <!-- Main -->
+  <text x="225" y="40" fill="#f0f2f8" font-size="18" font-weight="700">Konfiguration</text>
+  <!-- Buttons -->
+  <rect x="620" y="22" width="100" height="30" rx="8" fill="transparent" stroke="#2a3042" stroke-width="1"/>
+  <text x="640" y="42" fill="#f0f2f8" font-size="11" font-weight="600">Neu laden</text>
+  <rect x="730" y="22" width="120" height="30" rx="8" fill="#6b9aff"/>
+  <text x="745" y="42" fill="#000" font-size="11" font-weight="600">Alle speichern</text>
+  <!-- Config Tabs -->
+  <rect x="225" y="55" width="650" height="36" rx="10" fill="#1c2130"/>
+  <rect x="229" y="59" width="60" height="28" rx="6" fill="#141821"/>
+  <text x="245" y="78" fill="#f0f2f8" font-size="11" font-weight="600">OUs</text>
+  <text x="310" y="78" fill="#a0a8c0" font-size="11">Gruppen</text>
+  <text x="385" y="78" fill="#a0a8c0" font-size="11">Benutzer</text>
+  <text x="455" y="78" fill="#a0a8c0" font-size="11">ACLs</text>
+  <text x="500" y="78" fill="#a0a8c0" font-size="11">GPOs</text>
+  <!-- Add button -->
+  <rect x="740" y="100" width="130" height="28" rx="8" fill="#6b9aff"/>
+  <text x="755" y="119" fill="#000" font-size="11" font-weight="600">+ OU hinzufuegen</text>
+  <!-- Config Cards -->
+  <!-- Card 1 -->
+  <rect x="225" y="140" width="310" height="160" rx="14" fill="#141821" stroke="#2a3042" stroke-width="1"/>
+  <line x1="225" y1="175" x2="535" y2="175" stroke="#2a3042" stroke-width="1"/>
+  <text x="245" y="163" fill="#f0f2f8" font-size="12" font-weight="600">Tier 0 Member Servers</text>
+  <rect x="505" y="148" width="20" height="18" rx="4" fill="rgba(255,138,138,0.12)"/>
+  <text x="510" y="162" fill="#ff8a8a" font-size="10" font-weight="600">X</text>
+  <text x="245" y="195" fill="#707890" font-size="8" letter-spacing="0.5">NAME</text>
+  <rect x="245" y="200" width="270" height="22" rx="5" fill="#1c2130" stroke="#2a3042" stroke-width="1"/>
+  <text x="253" y="215" fill="#f0f2f8" font-size="10">Tier 0 Member Servers</text>
+  <text x="245" y="235" fill="#707890" font-size="8">PFAD</text>
+  <rect x="245" y="240" width="270" height="22" rx="5" fill="#1c2130" stroke="#2a3042" stroke-width="1"/>
+  <text x="253" y="255" fill="#f0f2f8" font-size="10">{{DOMAIN_DN}}</text>
+  <text x="245" y="278" fill="#707890" font-size="8">KOMMENTAR</text>
+  <rect x="245" y="283" width="270" height="22" rx="5" fill="#1c2130" stroke="#2a3042" stroke-width="1"/>
+  <text x="253" y="298" fill="#f0f2f8" font-size="10">Tier 0: Member server objects</text>
+  <!-- Card 2 -->
+  <rect x="555" y="140" width="310" height="160" rx="14" fill="#141821" stroke="#2a3042" stroke-width="1"/>
+  <line x1="555" y1="175" x2="865" y2="175" stroke="#2a3042" stroke-width="1"/>
+  <text x="575" y="163" fill="#f0f2f8" font-size="12" font-weight="600">Tier 0 Server Staging</text>
+  <rect x="835" y="148" width="20" height="18" rx="4" fill="rgba(255,138,138,0.12)"/>
+  <text x="840" y="162" fill="#ff8a8a" font-size="10" font-weight="600">X</text>
+  <text x="575" y="195" fill="#707890" font-size="8">NAME</text>
+  <rect x="575" y="200" width="270" height="22" rx="5" fill="#1c2130" stroke="#2a3042" stroke-width="1"/>
+  <text x="583" y="215" fill="#f0f2f8" font-size="10">Tier 0 Server Staging</text>
+  <text x="575" y="235" fill="#707890" font-size="8">PFAD</text>
+  <rect x="575" y="240" width="270" height="22" rx="5" fill="#1c2130" stroke="#2a3042" stroke-width="1"/>
+  <text x="583" y="255" fill="#f0f2f8" font-size="10">OU=Tier 0 Member Servers</text>
+  <!-- Checkboxes -->
+  <rect x="245" y="310" width="12" height="12" rx="2" fill="#6b9aff"/>
+  <text x="262" y="321" fill="#a0a8c0" font-size="10">Schutz</text>
+  <rect x="320" y="310" width="12" height="12" rx="2" fill="#6b9aff"/>
+  <text x="337" y="321" fill="#a0a8c0" font-size="10">GPO-Block</text>
+  <rect x="420" y="310" width="12" height="12" rx="2" stroke="#2a3042" stroke-width="1" fill="transparent"/>
+  <text x="437" y="321" fill="#a0a8c0" font-size="10">Vererbung aus</text>
+  <!-- Card 3 -->
+  <rect x="225" y="320" width="310" height="160" rx="14" fill="#141821" stroke="#2a3042" stroke-width="1"/>
+  <line x1="225" y1="355" x2="535" y2="355" stroke="#2a3042" stroke-width="1"/>
+  <text x="245" y="343" fill="#f0f2f8" font-size="12" font-weight="600">Tier 0 Accounts</text>
+  <text x="245" y="375" fill="#707890" font-size="8">NAME</text>
+  <rect x="245" y="380" width="270" height="22" rx="5" fill="#1c2130" stroke="#2a3042" stroke-width="1"/>
+  <text x="253" y="395" fill="#f0f2f8" font-size="10">Tier 0 Accounts</text>
+  <text x="245" y="415" fill="#707890" font-size="8">PFAD</text>
+  <rect x="245" y="420" width="270" height="22" rx="5" fill="#1c2130" stroke="#2a3042" stroke-width="1"/>
+  <text x="253" y="435" fill="#f0f2f8" font-size="10">OU=Tier 0,OU=Tier Model Administration</text>
+</svg>

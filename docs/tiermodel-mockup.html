@@ -3,734 +3,575 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mockup - Tier Model Manager</title>
+    <title>Tier Model Manager - Interaktives Mockup</title>
     <style>
         :root {
-            --bg: #0f1117;
-            --surface: #1a1d27;
-            --surface2: #232736;
-            --border: #2d3148;
-            --text: #e4e6f0;
-            --text2: #8b8fa8;
-            --accent: #4f8cff;
-            --accent2: #3a6fd8;
-            --green: #34d399;
-            --red: #f87171;
-            --orange: #fbbf24;
-            --tier0: #f87171;
-            --tier1: #fbbf24;
-            --tier2: #34d399;
-            --tierAdmin: #818cf8;
+            --bg: #0b0d14; --surface: #141821; --surface2: #1c2130; --surface3: #252a3a;
+            --border: #2a3042; --border-focus: #6b9aff;
+            --text: #f0f2f8; --text2: #a0a8c0; --text3: #707890;
+            --accent: #6b9aff; --accent-hover: #8bb4ff; --accent-surface: rgba(107,154,255,0.12);
+            --green: #5dd9a0; --green-surface: rgba(93,217,160,0.12);
+            --red: #ff8a8a; --red-surface: rgba(255,138,138,0.12);
+            --orange: #ffc56b; --orange-surface: rgba(255,197,107,0.12);
+            --tier0: #ff8a8a; --tier1: #ffc56b; --tier2: #5dd9a0; --tierAdmin: #a8b4ff;
+            --radius: 10px; --radius-sm: 6px; --radius-lg: 14px;
+            --shadow: 0 1px 3px rgba(0,0,0,0.3); --shadow-lg: 0 4px 12px rgba(0,0,0,0.4);
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #080a0e; color: var(--text); }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5; }
+        .skip-link { position: absolute; left: -999px; top: auto; width: 1px; height: 1px; overflow: hidden; z-index: 9999; padding: 12px 24px; background: var(--accent); color: #000; font-weight: 600; border-radius: var(--radius); text-decoration: none; }
+        .skip-link:focus { left: 16px; top: 16px; width: auto; height: auto; }
+        :focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
 
-        .mockup-page {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 40px 20px;
-        }
-        .mockup-title {
-            text-align: center; margin-bottom: 40px;
-        }
-        .mockup-title h1 { font-size: 28px; color: white; }
-        .mockup-title p { color: var(--text2); font-size: 13px; margin-top: 8px; }
-        .mockup-title .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; background: rgba(79,140,255,0.15); color: var(--accent); margin-top: 8px; }
+        .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 260px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 100; }
+        .sidebar-header { padding: 24px 20px; border-bottom: 1px solid var(--border); }
+        .sidebar-header h1 { font-size: 17px; color: var(--text); font-weight: 700; letter-spacing: -0.3px; }
+        .sidebar-header p { font-size: 11px; color: var(--text2); margin-top: 4px; }
+        .sidebar nav { flex: 1; padding: 12px 8px; overflow-y: auto; }
+        .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: var(--radius); cursor: pointer; color: var(--text2); font-size: 13px; font-weight: 500; margin-bottom: 2px; transition: background 0.15s, color 0.15s; border: 1px solid transparent; min-height: 40px; }
+        .nav-item:hover { background: var(--surface2); color: var(--text); }
+        .nav-item.active { background: var(--accent-surface); color: var(--accent); border-color: rgba(107,154,255,0.2); }
+        .nav-item .icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+        .nav-sep { height: 1px; background: var(--border); margin: 8px 12px; }
+        .sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text3); }
 
-        .page-label {
-            display: flex; align-items: center; gap: 12px;
-            margin: 48px 0 16px;
-        }
-        .page-label h2 { font-size: 18px; color: white; }
-        .page-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+        .main { margin-left: 260px; padding: 32px; min-height: 100vh; }
+        .page { display: none; }
+        .page.active { display: block; }
+        .page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 24px; }
 
-        /* App Frame */
-        .app-frame {
-            display: flex; border: 1px solid var(--border); border-radius: 16px;
-            overflow: hidden; background: var(--bg); min-height: 600px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-        }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; margin-bottom: 20px; }
+        .card h2 { font-size: 15px; margin-bottom: 16px; color: var(--text); font-weight: 600; }
+        .card h3 { font-size: 13px; margin-bottom: 12px; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 
-        /* Sidebar */
-        .sidebar {
-            width: 240px; background: var(--surface); border-right: 1px solid var(--border);
-            display: flex; flex-direction: column; flex-shrink: 0;
-        }
-        .sidebar-header { padding: 20px; border-bottom: 1px solid var(--border); }
-        .sidebar-header h1 { font-size: 16px; color: var(--accent); font-weight: 700; }
-        .sidebar-header p { font-size: 10px; color: var(--text2); margin-top: 2px; }
-        .sidebar nav { flex: 1; padding: 10px 8px; }
-        .nav-item {
-            display: flex; align-items: center; gap: 10px;
-            padding: 9px 12px; border-radius: 8px;
-            color: var(--text2); font-size: 12px; margin-bottom: 2px;
-        }
-        .nav-item.active { background: var(--accent); color: white; }
-        .nav-item .icon { font-size: 14px; width: 18px; text-align: center; }
-        .nav-sep { height: 1px; background: var(--border); margin: 6px 12px; }
-
-        /* Main Content */
-        .main-content { flex: 1; padding: 24px; overflow: hidden; }
-
-        /* Stats */
-        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
-        .stat-card {
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 10px; padding: 16px;
-        }
-        .stat-card .label { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; }
-        .stat-card .value { font-size: 24px; font-weight: 700; margin-top: 2px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+        .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; transition: border-color 0.15s; }
+        .stat-card:hover { border-color: var(--accent); }
+        .stat-card .label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
+        .stat-card .value { font-size: 26px; font-weight: 700; margin-top: 4px; letter-spacing: -0.5px; }
         .stat-card .value.t0 { color: var(--tier0); }
         .stat-card .value.t1 { color: var(--tier1); }
         .stat-card .value.t2 { color: var(--tier2); }
         .stat-card .value.admin { color: var(--tierAdmin); }
 
-        /* Card */
-        .card {
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 12px; padding: 20px; margin-bottom: 16px;
-        }
-        .card h2 { font-size: 14px; margin-bottom: 12px; color: var(--text); }
+        .table-wrap { overflow-x: auto; border-radius: var(--radius); }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { text-align: left; padding: 10px 14px; color: var(--text2); font-weight: 600; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; background: var(--surface2); }
+        td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); }
+        tr:hover td { background: var(--surface2); }
 
-        /* Table */
-        table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        th { text-align: left; padding: 8px 10px; color: var(--text2); font-weight: 600; border-bottom: 1px solid var(--border); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-        td { padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--text); }
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 100px; font-size: 11px; font-weight: 600; }
+        .badge-t0 { background: var(--red-surface); color: var(--tier0); }
+        .badge-t1 { background: var(--orange-surface); color: var(--tier1); }
+        .badge-t2 { background: var(--green-surface); color: var(--tier2); }
+        .badge-admin { background: rgba(168,180,255,0.12); color: var(--tierAdmin); }
+        .badge-green { background: var(--green-surface); color: var(--green); }
+        .badge-red { background: var(--red-surface); color: var(--red); }
 
-        /* Badge */
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; }
-        .badge-t0 { background: rgba(248,113,113,0.15); color: var(--tier0); }
-        .badge-t1 { background: rgba(251,191,36,0.15); color: var(--tier1); }
-        .badge-t2 { background: rgba(52,211,153,0.15); color: var(--tier2); }
-        .badge-admin { background: rgba(129,140,248,0.15); color: var(--tierAdmin); }
-        .badge-green { background: rgba(52,211,153,0.15); color: var(--green); }
-        .badge-red { background: rgba(248,113,113,0.15); color: var(--red); }
-
-        /* Buttons */
-        .btn { padding: 7px 14px; border-radius: 8px; border: none; font-size: 12px; font-weight: 600; }
-        .btn-primary { background: var(--accent); color: white; }
+        .btn { padding: 9px 18px; border-radius: var(--radius); border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; min-height: 38px; }
+        .btn-primary { background: var(--accent); color: #000; }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-success { background: var(--green); color: #000; }
+        .btn-success:hover { filter: brightness(1.1); }
+        .btn-danger { background: var(--red-surface); color: var(--red); border: 1px solid rgba(255,138,138,0.2); }
+        .btn-danger:hover { background: rgba(255,138,138,0.2); }
         .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
-        .btn-success { background: var(--green); color: #0f1117; }
-        .btn-danger { background: var(--red); color: white; padding: 4px 8px; font-size: 10px; }
-        .btn-sm { padding: 4px 8px; font-size: 10px; }
+        .btn-outline:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-surface); }
+        .btn-sm { padding: 5px 10px; font-size: 11px; min-height: 28px; }
 
-        /* Toolbar */
-        .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
-        .toolbar-right { display: flex; gap: 8px; align-items: center; }
-        .search-box { padding: 7px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 12px; width: 200px; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 6px; font-weight: 600; }
+        .form-group input, .form-group select { width: 100%; padding: 10px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 13px; font-family: inherit; transition: border-color 0.15s, box-shadow 0.15s; }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(107,154,255,0.15); }
+        .form-group input::placeholder { color: var(--text3); }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .form-check { display: flex; align-items: center; gap: 8px; min-height: 38px; }
+        .form-check input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+        .form-check label { font-size: 13px; color: var(--text); cursor: pointer; }
 
-        /* OU Tree */
-        .ou-tree { font-size: 12px; }
-        .ou-tree ul { list-style: none; padding-left: 18px; }
+        .ou-tree { font-size: 13px; }
+        .ou-tree ul { list-style: none; padding-left: 20px; }
         .ou-tree > ul { padding-left: 0; }
-        .ou-tree li { position: relative; padding: 3px 0; }
-        .ou-tree li::before { content: ''; position: absolute; left: -14px; top: 0; bottom: 0; width: 1px; background: var(--border); }
-        .ou-tree li::after { content: ''; position: absolute; left: -14px; top: 12px; width: 10px; height: 1px; background: var(--border); }
-        .ou-node { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 5px; }
-        .ou-node .ou-icon { font-size: 12px; }
+        .ou-tree li { position: relative; padding: 4px 0; }
+        .ou-tree li::before { content: ''; position: absolute; left: -16px; top: 0; bottom: 0; width: 1px; background: var(--border); }
+        .ou-tree li::after { content: ''; position: absolute; left: -16px; top: 14px; width: 12px; height: 1px; background: var(--border); }
+        .ou-node { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--radius-sm); }
+        .ou-node .ou-icon { font-size: 14px; }
         .ou-node .ou-name { font-weight: 500; }
-        .ou-node .ou-tag { font-size: 9px; padding: 1px 5px; border-radius: 4px; }
+        .ou-node .ou-tag { font-size: 10px; padding: 2px 7px; border-radius: 100px; font-weight: 600; }
 
-        /* Terminal */
-        .terminal {
-            background: #0a0c10; border: 1px solid var(--border);
-            border-radius: 8px; padding: 14px; font-family: 'Cascadia Code', 'Consolas', monospace;
-            font-size: 11px; line-height: 1.6; color: var(--green);
-        }
+        .terminal { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 12px; line-height: 1.7; max-height: 400px; overflow-y: auto; color: var(--green); }
         .terminal .line-error { color: var(--red); }
         .terminal .line-warn { color: var(--orange); }
         .terminal .line-info { color: var(--accent); }
 
-        /* Form */
-        .form-group { margin-bottom: 12px; }
-        .form-group label { display: block; font-size: 11px; color: var(--text2); margin-bottom: 4px; font-weight: 600; }
-        .form-group input, .form-group select {
-            width: 100%; padding: 8px 10px; background: var(--surface2);
-            border: 1px solid var(--border); border-radius: 8px;
-            color: var(--text); font-size: 12px;
-        }
-        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .form-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
-        .form-check input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--accent); }
+        .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+        .toolbar-right { display: flex; gap: 8px; align-items: center; }
+        .search-box { padding: 9px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 13px; width: 260px; transition: border-color 0.15s, box-shadow 0.15s; }
+        .search-box:focus { outline: none; border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(107,154,255,0.15); }
+        .search-box::placeholder { color: var(--text3); }
 
-        /* Config Tabs */
-        .config-tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-        .config-tab {
-            padding: 7px 14px; border-radius: 8px 8px 0 0;
-            font-size: 11px; font-weight: 600; color: var(--text2);
-            border: 1px solid transparent; border-bottom: none;
-        }
-        .config-tab.active { color: var(--accent); background: var(--surface); border-color: var(--border); }
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+        .modal-overlay.show { display: flex; }
+        .modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 28px; width: 90%; max-width: 600px; max-height: 85vh; overflow-y: auto; box-shadow: var(--shadow-lg); }
+        .modal h2 { margin-bottom: 20px; font-size: 17px; font-weight: 700; }
+        .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
 
-        /* Config Cards */
-        .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-        .config-item {
-            background: var(--surface2); border: 1px solid var(--border);
-            border-radius: 10px; padding: 14px;
-        }
+        .config-tabs { display: flex; gap: 2px; margin-bottom: 20px; background: var(--surface2); border-radius: var(--radius); padding: 4px; }
+        .config-tab { padding: 8px 18px; border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text2); transition: all 0.15s; border: none; background: transparent; min-height: 36px; }
+        .config-tab:hover { color: var(--text); background: var(--surface3); }
+        .config-tab.active { color: var(--text); background: var(--surface); box-shadow: var(--shadow); }
+        .config-panel { display: none; }
+        .config-panel.active { display: block; }
+
+        .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+        .config-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; transition: border-color 0.15s; }
         .config-item:hover { border-color: var(--accent); }
-        .config-item .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .config-item .item-title { font-weight: 600; font-size: 12px; }
-        .config-item .item-fields { display: flex; flex-direction: column; gap: 6px; }
-        .config-item .field-row { display: flex; gap: 6px; align-items: center; }
-        .config-item .field-label { font-size: 9px; color: var(--text2); min-width: 70px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .config-item .field-value {
-            flex: 1; padding: 5px 7px; background: var(--surface);
-            border: 1px solid var(--border); border-radius: 5px;
-            font-size: 11px; color: var(--text);
+        .config-item .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+        .config-item .item-title { font-weight: 600; font-size: 13px; color: var(--text); }
+        .config-item .item-fields { display: flex; flex-direction: column; gap: 10px; }
+        .config-item .field-row { display: flex; gap: 8px; align-items: center; }
+        .config-item .field-label { font-size: 10px; color: var(--text3); min-width: 80px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+        .config-item .field-value { flex: 1; padding: 7px 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; color: var(--text); font-family: inherit; transition: border-color 0.15s; }
+        .config-item .field-value:focus { outline: none; border-color: var(--border-focus); box-shadow: 0 0 0 2px rgba(107,154,255,0.15); }
+        .config-item select.field-value { cursor: pointer; }
+        .config-item .field-check { display: flex; align-items: center; gap: 6px; }
+        .config-item .field-check input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+        .config-item .field-check label { font-size: 11px; color: var(--text2); cursor: pointer; }
+
+        .rights-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+        .rights-grid label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text); cursor: pointer; min-height: 32px; }
+        .rights-grid input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+
+        .toast-container { position: fixed; top: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; }
+        .toast { padding: 12px 20px; border-radius: var(--radius); font-size: 13px; font-weight: 500; animation: slideIn 0.25s ease; box-shadow: var(--shadow-lg); }
+        .toast-success { background: var(--green); color: #000; }
+        .toast-error { background: var(--red); color: #000; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+        @media (max-width: 768px) {
+            .sidebar { width: 60px; }
+            .sidebar-header h1, .sidebar-header p, .nav-item span:not(.icon), .sidebar-footer { display: none; }
+            .main { margin-left: 60px; padding: 16px; }
+            .form-row { grid-template-columns: 1fr; }
+            .config-grid { grid-template-columns: 1fr; }
         }
-        .config-item .field-check { display: flex; align-items: center; gap: 4px; }
-        .config-item .field-check input { width: 12px; height: 12px; accent-color: var(--accent); }
-        .config-item .field-check label { font-size: 10px; color: var(--text2); }
-
-        .rights-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
-        .rights-grid label { display: flex; align-items: center; gap: 3px; font-size: 10px; color: var(--text2); }
-        .rights-grid input { width: 11px; height: 11px; accent-color: var(--accent); }
-
-        /* Modal */
-        .modal-demo {
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 12px; padding: 24px; max-width: 500px; margin: 16px auto;
-        }
-        .modal-demo h3 { font-size: 16px; margin-bottom: 16px; }
-        .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
-
-        .code-inline { background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-family: Consolas, monospace; font-size: 11px; color: var(--accent); }
     </style>
 </head>
 <body>
-    <div class="mockup-page">
-        <div class="mockup-title">
-            <h1>Tier Model Manager</h1>
-            <p>Visual Mockup der Webanwendung</p>
-            <div class="badge">PowerShell Webserver | Port 8080</div>
-        </div>
+    <a href="#main-content" class="skip-link">Zum Inhalt springen</a>
 
-        <!-- ===== DASHBOARD ===== -->
-        <div class="page-label"><h2>1. Dashboard</h2></div>
-        <div class="app-frame">
-            <div class="sidebar">
-                <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
-                <nav>
-                    <div class="nav-item active"><span class="icon">&#9632;</span><span>Dashboard</span></div>
-                    <div class="nav-sep"></div>
-                    <div class="nav-item"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
-                    <div class="nav-item"><span class="icon">&#128101;</span><span>Gruppen</span></div>
-                    <div class="nav-item"><span class="icon">&#128100;</span><span>Benutzer</span></div>
-                    <div class="nav-item"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
-                    <div class="nav-sep"></div>
-                    <div class="nav-item"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
-                    <div class="nav-item"><span class="icon">&#9654;</span><span>Deploy</span></div>
-                    <div class="nav-item"><span class="icon">&#128202;</span><span>Audit</span></div>
-                </nav>
-            </div>
-            <div class="main-content">
-                <h2 style="font-size:20px; margin-bottom:16px;">Dashboard</h2>
-                <div class="stats-grid">
-                    <div class="stat-card"><div class="label">OUs gesamt</div><div class="value">29</div></div>
-                    <div class="stat-card"><div class="label">Gruppen</div><div class="value">24</div></div>
-                    <div class="stat-card"><div class="label">Benutzer</div><div class="value">2</div></div>
-                    <div class="stat-card"><div class="label">ACLs</div><div class="value">62</div></div>
-                    <div class="stat-card"><div class="label">Tier 0 OUs</div><div class="value t0">5</div></div>
-                    <div class="stat-card"><div class="label">Tier 1 OUs</div><div class="value t1">5</div></div>
-                    <div class="stat-card"><div class="label">Tier 2 OUs</div><div class="value t2">9</div></div>
-                    <div class="stat-card"><div class="label">Admin OUs</div><div class="value admin">10</div></div>
-                </div>
-                <div class="card">
-                    <h2>OU Struktur</h2>
-                    <div class="ou-tree">
-                        <ul>
-                            <li>
-                                <span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 0 Member Servers</span><span class="ou-tag badge-t0">T0</span></span>
-                                <ul>
-                                    <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 0 Server Staging</span><span class="ou-tag badge-t0">T0</span></span></li>
-                                </ul>
-                            </li>
-                            <li>
-                                <span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 1 Member Servers</span><span class="ou-tag badge-t1">T1</span></span>
-                                <ul>
-                                    <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 1 Server Staging</span><span class="ou-tag badge-t1">T1</span></span></li>
-                                </ul>
-                            </li>
-                            <li>
-                                <span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 2 End-User Accounts</span><span class="ou-tag badge-t2">T2</span></span>
-                                <ul>
-                                    <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Disabled End-Users Accounts</span><span class="ou-tag badge-t2">T2</span></span></li>
-                                </ul>
-                            </li>
-                            <li>
-                                <span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier Model Administration</span><span class="ou-tag badge-admin">Admin</span></span>
-                                <ul>
-                                    <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">PAW Staging</span><span class="ou-tag badge-admin">Admin</span></span></li>
-                                    <li>
-                                        <span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 0</span><span class="ou-tag badge-t0">T0</span></span>
-                                        <ul>
-                                            <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 0 Accounts</span><span class="ou-tag badge-t0">T0</span></span></li>
-                                            <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 0 Groups</span><span class="ou-tag badge-t0">T0</span></span></li>
-                                            <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 0 Service Accounts</span><span class="ou-tag badge-t0">T0</span></span></li>
-                                        </ul>
-                                    </li>
-                                    <li>
-                                        <span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 1</span><span class="ou-tag badge-t1">T1</span></span>
-                                        <ul>
-                                            <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 1 Accounts</span><span class="ou-tag badge-t1">T1</span></span></li>
-                                            <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 1 Groups</span><span class="ou-tag badge-t1">T1</span></span></li>
-                                        </ul>
-                                    </li>
-                                </ul>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ===== ORGANIZATIONAL UNITS ===== -->
-        <div class="page-label"><h2>2. Organizational Units</h2></div>
-        <div class="app-frame">
-            <div class="sidebar">
-                <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
-                <nav>
-                    <div class="nav-item"><span class="icon">&#9632;</span><span>Dashboard</span></div>
-                    <div class="nav-sep"></div>
-                    <div class="nav-item active"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
-                    <div class="nav-item"><span class="icon">&#128101;</span><span>Gruppen</span></div>
-                    <div class="nav-item"><span class="icon">&#128100;</span><span>Benutzer</span></div>
-                    <div class="nav-item"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
-                    <div class="nav-sep"></div>
-                    <div class="nav-item"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
-                    <div class="nav-item"><span class="icon">&#9654;</span><span>Deploy</span></div>
-                    <div class="nav-item"><span class="icon">&#128202;</span><span>Audit</span></div>
-                </nav>
-            </div>
-            <div class="main-content">
-                <div class="toolbar">
-                    <h2 style="font-size:16px;">Organizational Units</h2>
-                    <div class="toolbar-right">
-                        <input class="search-box" value="Tier 0" readonly>
-                        <button class="btn btn-primary">+ OU hinzufuegen</button>
-                        <button class="btn btn-outline">Speichern</button>
-                    </div>
-                </div>
-                <div class="card">
-                    <table>
-                        <thead><tr><th>Name</th><th>Pfad</th><th>Schutz</th><th>GPO-Block</th><th>Kommentar</th><th></th></tr></thead>
-                        <tbody>
-                            <tr><td><strong>Tier 0 Member Servers</strong></td><td style="font-size:10px;color:var(--text2)">{{DOMAIN_DN}}</td><td><span class="badge badge-green">Ja</span></td><td><span class="badge badge-green">Ja</span></td><td style="font-size:10px">Tier 0: Member server objects</td><td><button class="btn btn-danger">X</button></td></tr>
-                            <tr><td><strong>Tier 0 Server Staging</strong></td><td style="font-size:10px;color:var(--text2)">OU=Tier 0 Member Servers</td><td><span class="badge badge-green">Ja</span></td><td><span class="badge badge-green">Ja</span></td><td style="font-size:10px">Tier 0: Staging server objects</td><td><button class="btn btn-danger">X</button></td></tr>
-                            <tr><td><strong>Tier 0 Accounts</strong></td><td style="font-size:10px;color:var(--text2)">OU=Tier 0,OU=Tier Model Administration</td><td><span class="badge badge-green">Ja</span></td><td>-</td><td style="font-size:10px">Tier 0: Accounts</td><td><button class="btn btn-danger">X</button></td></tr>
-                            <tr><td><strong>Tier 0 Groups</strong></td><td style="font-size:10px;color:var(--text2)">OU=Tier 0,OU=Tier Model Administration</td><td><span class="badge badge-green">Ja</span></td><td>-</td><td style="font-size:10px">Tier 0: Groups</td><td><button class="btn btn-danger">X</button></td></tr>
-                            <tr><td><strong>Tier 0 Service Accounts</strong></td><td style="font-size:10px;color:var(--text2)">OU=Tier 0,OU=Tier Model Administration</td><td><span class="badge badge-green">Ja</span></td><td>-</td><td style="font-size:10px">Tier 0: Service Accounts</td><td><button class="btn btn-danger">X</button></td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- ===== GRUPPEN ===== -->
-        <div class="page-label"><h2>3. Gruppen</h2></div>
-        <div class="app-frame">
-            <div class="sidebar">
-                <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
-                <nav>
-                    <div class="nav-item"><span class="icon">&#9632;</span><span>Dashboard</span></div>
-                    <div class="nav-sep"></div>
-                    <div class="nav-item"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
-                    <div class="nav-item active"><span class="icon">&#128101;</span><span>Gruppen</span></div>
-                    <div class="nav-item"><span class="icon">&#128100;</span><span>Benutzer</span></div>
-                    <div class="nav-item"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
-                    <div class="nav-sep"></div>
-                    <div class="nav-item"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
-                    <div class="nav-item"><span class="icon">&#9654;</span><span>Deploy</span></div>
-                    <div class="nav-item"><span class="icon">&#128202;</span><span>Audit</span></div>
-                </nav>
-            </div>
-            <div class="main-content">
-                <div class="toolbar">
-                    <h2 style="font-size:16px;">Sicherheitsgruppen</h2>
-                    <div class="toolbar-right">
-                        <input class="search-box" placeholder="Suchen...">
-                        <button class="btn btn-primary">+ Gruppe hinzufuegen</button>
-                        <button class="btn btn-outline">Speichern</button>
-                    </div>
-                </div>
-                <div class="card">
-                    <table>
-                        <thead><tr><th>Name</th><th>SamAccountName</th><th>Scope</th><th>Kategorie</th><th></th></tr></thead>
-                        <tbody>
-                            <tr><td><strong>Tier 0 Admins</strong></td><td><code class="code-inline">Tier0Admins</code></td><td><span class="badge badge-t0">Global</span></td><td>Security</td><td><button class="btn btn-danger">X</button></td></tr>
-                            <tr><td><strong>Tier 0 Operators</strong></td><td><code class="code-inline">Tier0Operators</code></td><td><span class="badge badge-t0">Global</span></td><td>Security</td><td><button class="btn btn-danger">X</button></td></tr>
-                            <tr><td><strong>Tier 0 Server Operators</strong></td><td><code class="code-inline">Tier0ServerOperators</code></td><td><span class="badge badge-t0">Global</span></td><td>Security</td><td><button class="btn btn-danger">X</button></td></tr>
-                            <tr><td><strong>Tier 0 Member Servers</strong></td><td><code class="code-inline">Tier0MemberServers</code></td><td><span class="badge badge-admin">Universal</span></td><td>Security</td><td><button class="btn btn-danger">X</button></td></tr>
-                            <tr><td><strong>Tier 1 Admins</strong></td><td><code class="code-inline">Tier1Admins</code></td><td><span class="badge badge-t1">Global</span></td><td>Security</td><td><button class="btn btn-danger">X</button></td></tr>
-                            <tr><td><strong>Tier 2 Admins</strong></td><td><code class="code-inline">Tier2Admins</code></td><td><span class="badge badge-t2">Global</span></td><td>Security</td><td><button class="btn btn-danger">X</button></td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- ===== DEPLOY ===== -->
-        <div class="page-label"><h2>4. Deploy</h2></div>
-        <div class="app-frame">
-            <div class="sidebar">
-                <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
-                <nav>
-                    <div class="nav-item"><span class="icon">&#9632;</span><span>Dashboard</span></div>
-                    <div class="nav-sep"></div>
-                    <div class="nav-item"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
-                    <div class="nav-item"><span class="icon">&#128101;</span><span>Gruppen</span></div>
-                    <div class="nav-item"><span class="icon">&#128100;</span><span>Benutzer</span></div>
-                    <div class="nav-item"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
-                    <div class="nav-sep"></div>
-                    <div class="nav-item"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
-                    <div class="nav-item active"><span class="icon">&#9654;</span><span>Deploy</span></div>
-                    <div class="nav-item"><span class="icon">&#128202;</span><span>Audit</span></div>
-                </nav>
-            </div>
-            <div class="main-content">
-                <h2 style="font-size:16px; margin-bottom:12px;">Tier Model Deployen</h2>
-                <div class="card">
-                    <h3 style="font-size:13px; color:var(--text2); margin-bottom:10px;">Optionen</h3>
-                    <div class="form-row" style="margin-bottom:10px;">
-                        <div class="form-check"><input type="checkbox" checked><label>WhatIf (nur Plan anzeigen)</label></div>
-                        <div class="form-check"><input type="checkbox"><label>ConfirmApply (Bestaetigung)</label></div>
-                    </div>
-                    <div class="form-row" style="margin-bottom:10px;">
-                        <div class="form-check"><input type="checkbox"><label>IncludeMsa</label></div>
-                        <div class="form-check"><input type="checkbox"><label>IncludeGmsa</label></div>
-                    </div>
-                    <div class="form-row" style="margin-bottom:10px;">
-                        <div class="form-check"><input type="checkbox"><label>IncludeDmsa</label></div>
-                        <div class="form-check"><input type="checkbox"><label>IncludeWinLaps</label></div>
-                    </div>
-                    <button class="btn btn-success" style="margin-top:8px;">Deploy starten</button>
-                </div>
-                <div class="card">
-                    <h3 style="font-size:13px; color:var(--text2); margin-bottom:10px;">Ausgabe</h3>
-                    <div class="terminal">
-<span class="line-info">[14:32:01] Starte Deploy...</span>
-<span class="line-info">[14:32:02] Lade Konfiguration: tiermodel-ous.json</span>
-<span class="line-info">[14:32:02] Lade Konfiguration: tiermodel-groups.json</span>
-<span class="line-info">[14:32:03] Lade Konfiguration: tiermodel-users.json</span>
-<span class="line-info">[14:32:03] Prerequisites: OK</span>
-[14:32:04] Plan generiert: 29 OUs, 24 Gruppen, 2 Users, 62 ACLs
-<span class="line-info">[14:32:04] WhatIf-Modus: Keine Aenderungen werden vorgenommen</span>
-[14:32:05] OU: Tier 0 Member Servers ... wird erstellt
-[14:32:05] OU: Tier 0 Server Staging ... wird erstellt
-[14:32:06] OU: Tier 1 Member Servers ... wird erstellt
-<span class="line-warn">[14:32:06] WARNUNG: OU 'Tier 2 End-User Accounts' existiert bereits</span>
-[14:32:07] Gruppe: PAWDomainJoin ... wird erstellt
-[14:32:07] Gruppe: Tier0Admins ... wird erstellt
-<span class="line-info">[14:32:08] Deploy abgeschlossen (WhatIf)</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ===== AUDIT ===== -->
-        <div class="page-label"><h2>5. Audit (Drift Detection)</h2></div>
-        <div class="app-frame">
-            <div class="sidebar">
-                <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
-                <nav>
-                    <div class="nav-item"><span class="icon">&#9632;</span><span>Dashboard</span></div>
-                    <div class="nav-sep"></div>
-                    <div class="nav-item"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
-                    <div class="nav-item"><span class="icon">&#128101;</span><span>Gruppen</span></div>
-                    <div class="nav-item"><span class="icon">&#128100;</span><span>Benutzer</span></div>
-                    <div class="nav-item"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
-                    <div class="nav-sep"></div>
-                    <div class="nav-item"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
-                    <div class="nav-item"><span class="icon">&#9654;</span><span>Deploy</span></div>
-                    <div class="nav-item active"><span class="icon">&#128202;</span><span>Audit</span></div>
-                </nav>
-            </div>
-            <div class="main-content">
-                <h2 style="font-size:16px; margin-bottom:12px;">Tier Model Auditieren</h2>
-                <div class="card"><button class="btn btn-primary">Audit starten</button></div>
-                <div class="card">
-                    <h3 style="font-size:13px; color:var(--text2); margin-bottom:10px;">Ergebnis</h3>
-                    <div class="terminal">
-<span class="line-info">[14:35:10] Starte Audit...</span>
-<span class="line-info">[14:35:11] Lade Soll-Konfiguration...</span>
-<span class="line-info">[14:35:12] Lade Ist-Zustand aus AD...</span>
-[14:35:13] OU-Check: 29/29 OUs vorhanden
-[14:35:14] Gruppen-Check: 24/24 Gruppen vorhanden
-<span class="line-warn">[14:35:15] DRIFT: Gruppe 'Tier0Admins' - Member fehlt: jdoe</span>
-<span class="line-warn">[14:35:15] DRIFT: ACL auf 'OU=Tier 0 Accounts' - Berechtigung fehlt: GenericAll</span>
-[14:35:16] User-Check: 2/2 Benutzer vorhanden
-<span class="line-error">[14:35:17] DRIFT: OU 'Tier 2 End-User Devices' - GPO-Vererbung nicht blockiert (erwartet: true)</span>
-[14:35:18] ACL-Check: 60/62 ACLs korrekt
-<span class="line-info">[14:35:19] Audit abgeschlossen: 3 Abweichungen gefunden</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ===== KONFIGURATION OUs ===== -->
-        <div class="page-label"><h2>6. Konfiguration - OUs (Formular)</h2></div>
-        <div class="app-frame">
-            <div class="sidebar">
-                <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
-                <nav>
-                    <div class="nav-item"><span class="icon">&#9632;</span><span>Dashboard</span></div>
-                    <div class="nav-sep"></div>
-                    <div class="nav-item"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
-                    <div class="nav-item"><span class="icon">&#128101;</span><span>Gruppen</span></div>
-                    <div class="nav-item"><span class="icon">&#128100;</span><span>Benutzer</span></div>
-                    <div class="nav-item"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
-                    <div class="nav-sep"></div>
-                    <div class="nav-item active"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
-                    <div class="nav-item"><span class="icon">&#9654;</span><span>Deploy</span></div>
-                    <div class="nav-item"><span class="icon">&#128202;</span><span>Audit</span></div>
-                </nav>
-            </div>
-            <div class="main-content">
-                <div class="toolbar">
-                    <h2 style="font-size:16px;">Konfiguration</h2>
-                    <div class="toolbar-right">
-                        <button class="btn btn-outline">Neu laden</button>
-                        <button class="btn btn-primary">Alle speichern</button>
-                    </div>
-                </div>
-                <div class="config-tabs">
-                    <div class="config-tab active">OUs</div>
-                    <div class="config-tab">Gruppen</div>
-                    <div class="config-tab">Benutzer</div>
-                    <div class="config-tab">ACLs</div>
-                    <div class="config-tab">GPOs</div>
-                </div>
-                <div class="config-grid">
-                    <div class="config-item">
-                        <div class="item-header"><span class="item-title">Tier 0 Member Servers</span></div>
-                        <div class="item-fields">
-                            <div class="field-row"><span class="field-label">Name</span><div class="field-value">Tier 0 Member Servers</div></div>
-                            <div class="field-row"><span class="field-label">Pfad</span><div class="field-value">{{DOMAIN_DN}}</div></div>
-                            <div class="field-row"><span class="field-label">Kommentar</span><div class="field-value">Tier 0: Member server objects</div></div>
-                            <div class="field-row"><div class="field-check"><input type="checkbox" checked><label>Schutz</label></div><div class="field-check"><input type="checkbox" checked><label>GPO-Block</label></div><div class="field-check"><input type="checkbox" checked><label>Vererbung aus</label></div></div>
-                        </div>
-                    </div>
-                    <div class="config-item">
-                        <div class="item-header"><span class="item-title">Tier 0 Server Staging</span></div>
-                        <div class="item-fields">
-                            <div class="field-row"><span class="field-label">Name</span><div class="field-value">Tier 0 Server Staging</div></div>
-                            <div class="field-row"><span class="field-label">Pfad</span><div class="field-value">OU=Tier 0 Member Servers</div></div>
-                            <div class="field-row"><span class="field-label">Kommentar</span><div class="field-value">Tier 0: Staging server objects</div></div>
-                            <div class="field-row"><div class="field-check"><input type="checkbox" checked><label>Schutz</label></div><div class="field-check"><input type="checkbox" checked><label>GPO-Block</label></div><div class="field-check"><input type="checkbox"><label>Vererbung aus</label></div></div>
-                        </div>
-                    </div>
-                    <div class="config-item">
-                        <div class="item-header"><span class="item-title">Tier 0 Accounts</span></div>
-                        <div class="item-fields">
-                            <div class="field-row"><span class="field-label">Name</span><div class="field-value">Tier 0 Accounts</div></div>
-                            <div class="field-row"><span class="field-label">Pfad</span><div class="field-value">OU=Tier 0,OU=Tier Model Administration</div></div>
-                            <div class="field-row"><span class="field-label">Kommentar</span><div class="field-value">Tier 0: Accounts</div></div>
-                            <div class="field-row"><div class="field-check"><input type="checkbox" checked><label>Schutz</label></div><div class="field-check"><input type="checkbox"><label>GPO-Block</label></div><div class="field-check"><input type="checkbox"><label>Vererbung aus</label></div></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ===== KONFIGURATION GRUPPEN ===== -->
-        <div class="page-label"><h2>7. Konfiguration - Gruppen (Formular)</h2></div>
-        <div class="app-frame">
-            <div class="sidebar">
-                <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
-                <nav>
-                    <div class="nav-item"><span class="icon">&#9632;</span><span>Dashboard</span></div>
-                    <div class="nav-sep"></div>
-                    <div class="nav-item"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
-                    <div class="nav-item"><span class="icon">&#128101;</span><span>Gruppen</span></div>
-                    <div class="nav-item"><span class="icon">&#128100;</span><span>Benutzer</span></div>
-                    <div class="nav-item"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
-                    <div class="nav-sep"></div>
-                    <div class="nav-item active"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
-                    <div class="nav-item"><span class="icon">&#9654;</span><span>Deploy</span></div>
-                    <div class="nav-item"><span class="icon">&#128202;</span><span>Audit</span></div>
-                </nav>
-            </div>
-            <div class="main-content">
-                <div class="config-tabs">
-                    <div class="config-tab">OUs</div>
-                    <div class="config-tab active">Gruppen</div>
-                    <div class="config-tab">Benutzer</div>
-                    <div class="config-tab">ACLs</div>
-                    <div class="config-tab">GPOs</div>
-                </div>
-                <div class="config-grid">
-                    <div class="config-item">
-                        <div class="item-header"><span class="item-title">Tier 0 Admins</span></div>
-                        <div class="item-fields">
-                            <div class="field-row"><span class="field-label">Name</span><div class="field-value">Tier 0 Admins</div></div>
-                            <div class="field-row"><span class="field-label">SAM</span><div class="field-value">Tier0Admins</div></div>
-                            <div class="field-row"><span class="field-label">Beschreibung</span><div class="field-value">Members administer Tier 0, 1, and 2</div></div>
-                            <div class="field-row"><span class="field-label">Scope</span><select class="field-value"><option selected>Global</option><option>Universal</option><option>DomainLocal</option></select></div>
-                            <div class="field-row"><span class="field-label">Kategorie</span><select class="field-value"><option selected>Security</option><option>Distribution</option></select></div>
-                            <div class="field-row"><span class="field-label">Pfad</span><div class="field-value">OU=Tier 0 Groups,OU=Tier 0,OU=Tier Model Administration</div></div>
-                        </div>
-                    </div>
-                    <div class="config-item">
-                        <div class="item-header"><span class="item-title">Tier 0 Operators</span></div>
-                        <div class="item-fields">
-                            <div class="field-row"><span class="field-label">Name</span><div class="field-value">Tier 0 Operators</div></div>
-                            <div class="field-row"><span class="field-label">SAM</span><div class="field-value">Tier0Operators</div></div>
-                            <div class="field-row"><span class="field-label">Beschreibung</span><div class="field-value">Delegated rights to log on to Tier 0 PAWs</div></div>
-                            <div class="field-row"><span class="field-label">Scope</span><select class="field-value"><option selected>Global</option><option>Universal</option><option>DomainLocal</option></select></div>
-                            <div class="field-row"><span class="field-label">Kategorie</span><select class="field-value"><option selected>Security</option><option>Distribution</option></select></div>
-                            <div class="field-row"><span class="field-label">Pfad</span><div class="field-value">OU=Tier 0 Groups,OU=Tier 0,OU=Tier Model Administration</div></div>
-                        </div>
-                    </div>
-                    <div class="config-item">
-                        <div class="item-header"><span class="item-title">Tier 0 Member Servers</span></div>
-                        <div class="item-fields">
-                            <div class="field-row"><span class="field-label">Name</span><div class="field-value">Tier 0 Member Servers</div></div>
-                            <div class="field-row"><span class="field-label">SAM</span><div class="field-value">Tier0MemberServers</div></div>
-                            <div class="field-row"><span class="field-label">Scope</span><select class="field-value"><option>Global</option><option selected>Universal</option><option>DomainLocal</option></select></div>
-                            <div class="field-row"><span class="field-label">Kategorie</span><select class="field-value"><option selected>Security</option><option>Distribution</option></select></div>
-                            <div class="field-row"><span class="field-label">Pfad</span><div class="field-value">OU=Tier 0 Groups,OU=Tier 0,OU=Tier Model Administration</div></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ===== KONFIGURATION ACLs ===== -->
-        <div class="page-label"><h2>8. Konfiguration - ACLs (Formular)</h2></div>
-        <div class="app-frame">
-            <div class="sidebar">
-                <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
-                <nav>
-                    <div class="nav-item"><span class="icon">&#9632;</span><span>Dashboard</span></div>
-                    <div class="nav-sep"></div>
-                    <div class="nav-item"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
-                    <div class="nav-item"><span class="icon">&#128101;</span><span>Gruppen</span></div>
-                    <div class="nav-item"><span class="icon">&#128100;</span><span>Benutzer</span></div>
-                    <div class="nav-item"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
-                    <div class="nav-sep"></div>
-                    <div class="nav-item active"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
-                    <div class="nav-item"><span class="icon">&#9654;</span><span>Deploy</span></div>
-                    <div class="nav-item"><span class="icon">&#128202;</span><span>Audit</span></div>
-                </nav>
-            </div>
-            <div class="main-content">
-                <div class="config-tabs">
-                    <div class="config-tab">OUs</div>
-                    <div class="config-tab">Gruppen</div>
-                    <div class="config-tab">Benutzer</div>
-                    <div class="config-tab active">ACLs</div>
-                    <div class="config-tab">GPOs</div>
-                </div>
-                <div class="config-grid">
-                    <div class="config-item">
-                        <div class="item-header"><span class="item-title">Tier0Admins</span></div>
-                        <div class="item-fields">
-                            <div class="field-row"><span class="field-label">OU-Pfad</span><div class="field-value">OU=Tier 0 Member Servers,{{DOMAIN_DN}}</div></div>
-                            <div class="field-row"><span class="field-label">Principal</span><select class="field-value"><option selected>Tier0Admins</option><option>Tier0Operators</option><option>Tier0ServerOperators</option></select></div>
-                            <div class="field-row"><span class="field-label">Typ</span><select class="field-value"><option selected>Allow</option><option>Deny</option></select></div>
-                            <div class="field-row"><span class="field-label">Objekttyp</span><select class="field-value"><option selected>Computer</option><option>User</option><option>Group</option><option>Alle</option></select></div>
-                            <div class="field-row"><span class="field-label">Vererbung</span><select class="field-value"><option>All</option><option selected>Descendents</option><option>SelfAndChildren</option></select></div>
-                            <div class="field-row"><span class="field-label">Rechte</span><div class="field-value">GenericAll, CreateChild, DeleteChild</div></div>
-                        </div>
-                    </div>
-                    <div class="config-item">
-                        <div class="item-header"><span class="item-title">Tier0ServerOperators</span></div>
-                        <div class="item-fields">
-                            <div class="field-row"><span class="field-label">OU-Pfad</span><div class="field-value">OU=Tier 0 Server Staging,OU=Tier 0 Member Servers</div></div>
-                            <div class="field-row"><span class="field-label">Principal</span><select class="field-value"><option>Tier0Admins</option><option>Tier0Operators</option><option selected>Tier0ServerOperators</option></select></div>
-                            <div class="field-row"><span class="field-label">Typ</span><select class="field-value"><option selected>Allow</option><option>Deny</option></select></div>
-                            <div class="field-row"><span class="field-label">Objekttyp</span><select class="field-value"><option selected>Computer</option><option>User</option><option>Group</option></select></div>
-                            <div class="field-row"><span class="field-label">Vererbung</span><select class="field-value"><option>All</option><option selected>Descendents</option><option>SelfAndChildren</option></select></div>
-                            <div class="field-row"><span class="field-label">Rechte</span><div class="field-value">CreateChild, WriteProperty, ReadProperty</div></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ===== ACL MODAL ===== -->
-        <div class="page-label"><h2>9. Modal - Neue ACL Delegation</h2></div>
-        <div style="max-width: 580px; margin: 0 auto;">
-            <div class="modal-demo">
-                <h3>Neue ACL Delegation</h3>
-                <div class="form-group"><label>Target OU-Pfad</label><input value="OU=Tier 0 Accounts,{{DOMAIN_DN}}" readonly></div>
-                <div class="form-row">
-                    <div class="form-group"><label>Principal (Gruppe)</label><select><option>Tier0Admins</option><option selected>Tier1Admins</option><option>Tier2Admins</option></select></div>
-                    <div class="form-group"><label>Access Control Type</label><select><option selected>Allow</option><option>Deny</option></select></div>
-                </div>
-                <div class="form-group"><label>Objekttyp</label><select><option>Alle Objekte</option><option selected>User</option><option>Computer</option><option>Group</option></select></div>
-                <div class="form-group"><label>Active Directory Rechte</label>
-                    <div class="rights-grid">
-                        <label><input type="checkbox" checked> GenericAll</label>
-                        <label><input type="checkbox" checked> CreateChild</label>
-                        <label><input type="checkbox" checked> DeleteChild</label>
-                        <label><input type="checkbox"> ReadProperty</label>
-                        <label><input type="checkbox"> WriteProperty</label>
-                        <label><input type="checkbox"> ExtendedRight</label>
-                        <label><input type="checkbox"> Delete</label>
-                        <label><input type="checkbox"> DeleteTree</label>
-                        <label><input type="checkbox"> GenericExecute</label>
-                    </div>
-                </div>
-                <div class="form-group"><label>Vererbungstyp</label><select><option selected>All</option><option>Descendents</option><option>SelfAndChildren</option><option>Children</option></select></div>
-                <div class="modal-actions">
-                    <button class="btn btn-outline">Abbrechen</button>
-                    <button class="btn btn-primary">Hinzufuegen</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- ===== MODAL OU ===== -->
-        <div class="page-label"><h2>10. Modal - Neue OU hinzufuegen</h2></div>
-        <div style="max-width: 540px; margin: 0 auto;">
-            <div class="modal-demo">
-                <h3>Neue OU</h3>
-                <div class="form-group"><label>Name</label><input value="Tier 0 PAW Devices" readonly></div>
-                <div class="form-group"><label>Pfad (parent)</label><input value="OU=Tier 0,OU=Tier Model Administration,{{DOMAIN_DN}}" readonly></div>
-                <div class="form-group"><label>Kommentar</label><input value="Tier 0: PAW Devices" readonly></div>
-                <div class="form-row">
-                    <div class="form-check"><input type="checkbox" checked><label>Vor Loeschung schuetzen</label></div>
-                    <div class="form-check"><input type="checkbox"><label>GPO-Vererbung blockieren</label></div>
-                </div>
-                <div class="modal-actions">
-                    <button class="btn btn-outline">Abbrechen</button>
-                    <button class="btn btn-primary">Hinzufuegen</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- ===== ARCHITEKTUR ===== -->
-        <div class="page-label"><h2>11. Architektur</h2></div>
-        <div style="max-width: 800px; margin: 0 auto;">
-            <div class="card" style="font-size:13px; line-height:1.8;">
-                <h2 style="margin-bottom:16px;">Technische Details</h2>
-                <table>
-                    <tr><td style="color:var(--text2); width:180px;">Startbefehl</td><td><code class="code-inline">.\Start-TierModelManager.ps1</code></td></tr>
-                    <tr><td style="color:var(--text2);">Server</td><td><code class="code-inline">http://localhost:8080</code></td></tr>
-                    <tr><td style="color:var(--text2);">Config-Pfad</td><td><code class="code-inline">ActiveDirectoryTierModel-main\config\</code></td></tr>
-                    <tr><td style="color:var(--text2);">Voraussetzung</td><td>PowerShell 7+, AD-Modul, Domain Admin</td></tr>
-                    <tr><td style="color:var(--text2);">Sprache</td><td>Mehrsprachig (DE, EN, FR, ...)</td></tr>
-                </table>
-                <h3 style="margin: 20px 0 12px; font-size: 13px;">API Endpunkte</h3>
-                <table>
-                    <tr><td><code class="code-inline">GET /</code></td><td>HTML Oberflaeche</td></tr>
-                    <tr><td><code class="code-inline">GET /api/config/{file}</code></td><td>JSON-Konfiguration lesen</td></tr>
-                    <tr><td><code class="code-inline">POST /api/config/{file}</code></td><td>JSON-Konfiguration speichern</td></tr>
-                    <tr><td><code class="code-inline">POST /api/deploy</code></td><td>Deploy-TierModel.ps1 ausfuehren</td></tr>
-                    <tr><td><code class="code-inline">POST /api/audit</code></td><td>Audit-TierModel.ps1 ausfuehren</td></tr>
-                </table>
-                <h3 style="margin: 20px 0 12px; font-size: 13px;">Konfigurationsdateien</h3>
-                <table>
-                    <tr><td><code class="code-inline">tiermodel-ous.json</code></td><td>29 Organizational Units</td></tr>
-                    <tr><td><code class="code-inline">tiermodel-groups.json</code></td><td>24 Sicherheitsgruppen</td></tr>
-                    <tr><td><code class="code-inline">tiermodel-users.json</code></td><td>2 Service-Accounts</td></tr>
-                    <tr><td><code class="code-inline">tiermodel-acls.json</code></td><td>62 ACL-Delegationen</td></tr>
-                    <tr><td><code class="code-inline">tiermodel-gpos.json</code></td><td>Group Policy Objects</td></tr>
-                </table>
-            </div>
-        </div>
-
+    <div class="sidebar" role="navigation" aria-label="Hauptnavigation">
+        <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
+        <nav>
+            <div class="nav-item active" data-page="dashboard" role="link" tabindex="0" aria-current="page"><span class="icon" aria-hidden="true">&#9632;</span><span>Dashboard</span></div>
+            <div class="nav-sep" role="separator"></div>
+            <div class="nav-item" data-page="ous" role="link" tabindex="0"><span class="icon" aria-hidden="true">&#128193;</span><span>Organizational Units</span></div>
+            <div class="nav-item" data-page="groups" role="link" tabindex="0"><span class="icon" aria-hidden="true">&#128101;</span><span>Gruppen</span></div>
+            <div class="nav-item" data-page="users" role="link" tabindex="0"><span class="icon" aria-hidden="true">&#128100;</span><span>Benutzer</span></div>
+            <div class="nav-item" data-page="acls" role="link" tabindex="0"><span class="icon" aria-hidden="true">&#128274;</span><span>ACL Delegationen</span></div>
+            <div class="nav-sep" role="separator"></div>
+            <div class="nav-item" data-page="config" role="link" tabindex="0"><span class="icon" aria-hidden="true">&#9881;</span><span>Konfiguration</span></div>
+            <div class="nav-item" data-page="deploy" role="link" tabindex="0"><span class="icon" aria-hidden="true">&#9654;</span><span>Deploy</span></div>
+            <div class="nav-item" data-page="audit" role="link" tabindex="0"><span class="icon" aria-hidden="true">&#128202;</span><span>Audit</span></div>
+        </nav>
+        <div class="sidebar-footer">v1.3.0 | Mockup | Port 8080</div>
     </div>
+
+    <main id="main-content" class="main" role="main">
+        <!-- Dashboard -->
+        <div class="page active" id="page-dashboard" role="region" aria-label="Dashboard">
+            <h2 class="page-title">Dashboard</h2>
+            <div class="stats-grid" id="stats-grid"></div>
+            <div class="card"><h2>OU Struktur</h2><div class="ou-tree" id="ou-tree" role="tree" aria-label="OU-Baumstruktur"></div></div>
+        </div>
+
+        <!-- OUs -->
+        <div class="page" id="page-ous" role="region" aria-label="Organizational Units">
+            <div class="toolbar">
+                <h2 class="page-title" style="margin-bottom:0;font-size:18px;">Organizational Units</h2>
+                <div class="toolbar-right">
+                    <input class="search-box" placeholder="OUs suchen..." id="ou-search" aria-label="OUs suchen">
+                    <button class="btn btn-primary" onclick="showModal('ou-modal')">+ OU hinzufuegen</button>
+                </div>
+            </div>
+            <div class="card"><div class="table-wrap" id="ou-table"></div></div>
+        </div>
+
+        <!-- Groups -->
+        <div class="page" id="page-groups" role="region" aria-label="Gruppen">
+            <div class="toolbar">
+                <h2 class="page-title" style="margin-bottom:0;font-size:18px;">Sicherheitsgruppen</h2>
+                <div class="toolbar-right">
+                    <input class="search-box" placeholder="Gruppen suchen..." id="group-search" aria-label="Gruppen suchen">
+                    <button class="btn btn-primary" onclick="showModal('group-modal')">+ Gruppe hinzufuegen</button>
+                </div>
+            </div>
+            <div class="card"><div class="table-wrap" id="group-table"></div></div>
+        </div>
+
+        <!-- Users -->
+        <div class="page" id="page-users" role="region" aria-label="Benutzer">
+            <div class="toolbar">
+                <h2 class="page-title" style="margin-bottom:0;font-size:18px;">Benutzer</h2>
+                <div class="toolbar-right">
+                    <input class="search-box" placeholder="Benutzer suchen..." id="user-search" aria-label="Benutzer suchen">
+                    <button class="btn btn-primary" onclick="showModal('user-modal')">+ Benutzer hinzufuegen</button>
+                </div>
+            </div>
+            <div class="card"><div class="table-wrap" id="user-table"></div></div>
+        </div>
+
+        <!-- ACLs -->
+        <div class="page" id="page-acls" role="region" aria-label="ACL Delegationen">
+            <div class="toolbar">
+                <h2 class="page-title" style="margin-bottom:0;font-size:18px;">ACL Delegationen</h2>
+                <div class="toolbar-right">
+                    <input class="search-box" placeholder="ACLs suchen..." id="acl-search" aria-label="ACLs suchen">
+                    <button class="btn btn-primary" onclick="showModal('acl-modal')">+ ACL hinzufuegen</button>
+                </div>
+            </div>
+            <div class="card"><div class="table-wrap" id="acl-table"></div></div>
+        </div>
+
+        <!-- Config -->
+        <div class="page" id="page-config" role="region" aria-label="Konfiguration">
+            <div class="toolbar">
+                <h2 class="page-title" style="margin-bottom:0;font-size:18px;">Konfiguration</h2>
+                <div class="toolbar-right">
+                    <button class="btn btn-outline" onclick="renderConfigPanels()">Neu laden</button>
+                    <button class="btn btn-primary" onclick="showToast('Alle Konfigurationen gespeichert')">Alle speichern</button>
+                </div>
+            </div>
+            <div class="config-tabs" role="tablist" aria-label="Konfigurationsbereiche">
+                <button class="config-tab active" data-config="cfg-ous" role="tab" aria-selected="true">OUs</button>
+                <button class="config-tab" data-config="cfg-groups" role="tab" aria-selected="false">Gruppen</button>
+                <button class="config-tab" data-config="cfg-users" role="tab" aria-selected="false">Benutzer</button>
+                <button class="config-tab" data-config="cfg-acls" role="tab" aria-selected="false">ACLs</button>
+                <button class="config-tab" data-config="cfg-gpos" role="tab" aria-selected="false">GPOs</button>
+            </div>
+            <div class="config-panel active" id="cfg-ous" role="tabpanel"><div class="toolbar"><div class="toolbar-right"><button class="btn btn-primary" onclick="showModal('ou-modal')">+ OU hinzufuegen</button></div></div><div class="config-grid" id="cfg-ous-grid"></div></div>
+            <div class="config-panel" id="cfg-groups" role="tabpanel"><div class="toolbar"><div class="toolbar-right"><button class="btn btn-primary" onclick="showModal('group-modal')">+ Gruppe hinzufuegen</button></div></div><div class="config-grid" id="cfg-groups-grid"></div></div>
+            <div class="config-panel" id="cfg-users" role="tabpanel"><div class="toolbar"><div class="toolbar-right"><button class="btn btn-primary" onclick="showModal('user-modal')">+ Benutzer hinzufuegen</button></div></div><div class="config-grid" id="cfg-users-grid"></div></div>
+            <div class="config-panel" id="cfg-acls" role="tabpanel"><div class="toolbar"><div class="toolbar-right"><button class="btn btn-primary" onclick="showModal('acl-modal')">+ ACL hinzufuegen</button></div></div><div class="config-grid" id="cfg-acls-grid"></div></div>
+            <div class="config-panel" id="cfg-gpos" role="tabpanel"><div class="toolbar"><div class="toolbar-right"><button class="btn btn-primary" onclick="showModal('gpo-modal')">+ GPO hinzufuegen</button></div></div><div class="config-grid" id="cfg-gpos-grid"></div></div>
+        </div>
+
+        <!-- Deploy -->
+        <div class="page" id="page-deploy" role="region" aria-label="Deploy">
+            <h2 class="page-title" style="font-size:18px;">Tier Model Deployen</h2>
+            <div class="card">
+                <h3>Optionen</h3>
+                <div class="form-row" style="margin-bottom:12px;">
+                    <div class="form-check"><input type="checkbox" id="opt-whatif" checked><label for="opt-whatif">WhatIf (nur Plan anzeigen)</label></div>
+                    <div class="form-check"><input type="checkbox" id="opt-confirm"><label for="opt-confirm">ConfirmApply</label></div>
+                </div>
+                <div class="form-row" style="margin-bottom:12px;">
+                    <div class="form-check"><input type="checkbox" id="opt-msa"><label for="opt-msa">IncludeMsa</label></div>
+                    <div class="form-check"><input type="checkbox" id="opt-gmsa"><label for="opt-gmsa">IncludeGmsa</label></div>
+                </div>
+                <button class="btn btn-success" onclick="runDeploy()" id="btn-deploy" style="margin-top:8px;">Deploy starten</button>
+            </div>
+            <div class="card"><h3>Ausgabe</h3><div class="terminal" id="deploy-output" role="log" aria-live="polite">Bereit...</div></div>
+        </div>
+
+        <!-- Audit -->
+        <div class="page" id="page-audit" role="region" aria-label="Audit">
+            <h2 class="page-title" style="font-size:18px;">Tier Model Auditieren</h2>
+            <div class="card"><button class="btn btn-primary" onclick="runAudit()" id="btn-audit">Audit starten</button></div>
+            <div class="card"><h3>Ergebnis</h3><div class="terminal" id="audit-output" role="log" aria-live="polite">Bereit...</div></div>
+        </div>
+    </main>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="ou-modal"><div class="modal"><h2>Neue OU</h2>
+        <div class="form-group"><label for="ou-name">Name</label><input id="ou-name" placeholder="z.B. Tier 0 Accounts"></div>
+        <div class="form-group"><label for="ou-path">Pfad (parent)</label><input id="ou-path" placeholder="{{DOMAIN_DN}}"></div>
+        <div class="form-group"><label for="ou-comment">Kommentar</label><input id="ou-comment"></div>
+        <div class="form-row"><div class="form-check"><input type="checkbox" id="ou-protect" checked><label for="ou-protect">Vor Loeschung schuetzen</label></div><div class="form-check"><input type="checkbox" id="ou-blockgpo"><label for="ou-blockgpo">GPO-Vererbung blockieren</label></div></div>
+        <div class="modal-actions"><button class="btn btn-outline" onclick="hideModal('ou-modal')">Abbrechen</button><button class="btn btn-primary" onclick="addOU()">Hinzufuegen</button></div>
+    </div></div>
+
+    <div class="modal-overlay" id="group-modal"><div class="modal"><h2>Neue Gruppe</h2>
+        <div class="form-row"><div class="form-group"><label for="grp-name">Name</label><input id="grp-name" placeholder="z.B. Tier 0 Admins"></div><div class="form-group"><label for="grp-sam">SamAccountName</label><input id="grp-sam" placeholder="z.B. Tier0Admins"></div></div>
+        <div class="form-group"><label for="grp-desc">Beschreibung</label><input id="grp-desc"></div>
+        <div class="form-row"><div class="form-group"><label for="grp-scope">Scope</label><select id="grp-scope"><option>Global</option><option>Universal</option><option>DomainLocal</option></select></div><div class="form-group"><label for="grp-cat">Kategorie</label><select id="grp-cat"><option>Security</option><option>Distribution</option></select></div></div>
+        <div class="form-group"><label for="grp-path">Pfad</label><input id="grp-path" placeholder="OU=...,{{DOMAIN_DN}}"></div>
+        <div class="modal-actions"><button class="btn btn-outline" onclick="hideModal('group-modal')">Abbrechen</button><button class="btn btn-primary" onclick="addGroup()">Hinzufuegen</button></div>
+    </div></div>
+
+    <div class="modal-overlay" id="user-modal"><div class="modal"><h2>Neuer Benutzer</h2>
+        <div class="form-row"><div class="form-group"><label for="usr-sam">SamAccountName</label><input id="usr-sam" placeholder="z.B. svc-myapp"></div><div class="form-group"><label for="usr-display">DisplayName</label><input id="usr-display"></div></div>
+        <div class="form-group"><label for="usr-desc">Beschreibung</label><input id="usr-desc"></div>
+        <div class="form-group"><label for="usr-path">Pfad</label><input id="usr-path" placeholder="OU=...,{{DOMAIN_DN}}"></div>
+        <div class="form-check"><input type="checkbox" id="usr-enabled"><label for="usr-enabled">Aktiviert</label></div>
+        <div class="modal-actions"><button class="btn btn-outline" onclick="hideModal('user-modal')">Abbrechen</button><button class="btn btn-primary" onclick="addUser()">Hinzufuegen</button></div>
+    </div></div>
+
+    <div class="modal-overlay" id="acl-modal"><div class="modal"><h2>Neue ACL Delegation</h2>
+        <div class="form-group"><label for="acl-ou">Target OU-Pfad</label><input id="acl-ou" placeholder="OU=Tier 0 Accounts,{{DOMAIN_DN}}"></div>
+        <div class="form-row"><div class="form-group"><label for="acl-principal">Principal</label><select id="acl-principal"></select></div><div class="form-group"><label for="acl-type">Access Control Type</label><select id="acl-type"><option>Allow</option><option>Deny</option></select></div></div>
+        <div class="form-group"><label for="acl-objtype">Objekttyp</label><select id="acl-objtype"><option value="">Alle</option><option>Computer</option><option>User</option><option>Group</option><option>OrganizationalUnit</option></select></div>
+        <div class="form-group"><label>Rechte</label><div class="rights-grid"><label><input type="checkbox" value="GenericAll"> GenericAll</label><label><input type="checkbox" value="CreateChild"> CreateChild</label><label><input type="checkbox" value="DeleteChild"> DeleteChild</label><label><input type="checkbox" value="ReadProperty"> ReadProperty</label><label><input type="checkbox" value="WriteProperty"> WriteProperty</label><label><input type="checkbox" value="ExtendedRight"> ExtendedRight</label></div></div>
+        <div class="form-group"><label for="acl-inheritance">Vererbung</label><select id="acl-inheritance"><option>All</option><option>Descendents</option><option>SelfAndChildren</option><option>Children</option></select></div>
+        <div class="modal-actions"><button class="btn btn-outline" onclick="hideModal('acl-modal')">Abbrechen</button><button class="btn btn-primary" onclick="addACL()">Hinzufuegen</button></div>
+    </div></div>
+
+    <div class="modal-overlay" id="gpo-modal"><div class="modal"><h2>Neue GPO</h2>
+        <div class="form-group"><label for="gpo-name">Name</label><input id="gpo-name" placeholder="z.B. Tier 0 Account Restrictions"></div>
+        <div class="form-group"><label for="gpo-mode">Modus</label><select id="gpo-mode"><option>createAndImport</option><option>createOnly</option><option>importOnly</option><option>linkOnly</option></select></div>
+        <div class="form-group"><label for="gpo-links">Link Targets (kommagetrennt)</label><input id="gpo-links" placeholder="OU=Tier 0,..."></div>
+        <div class="modal-actions"><button class="btn btn-outline" onclick="hideModal('gpo-modal')">Abbrechen</button><button class="btn btn-primary" onclick="addGPO()">Hinzufuegen</button></div>
+    </div></div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script>
+        // === Mock Data ===
+        const config = {
+            ous: [
+                { name: 'Tier 0 Member Servers', path: '{{DOMAIN_DN}}', protectFromAccidentalDeletion: true, disableInheritance: true, blockGpoInheritance: true, comment: 'Tier 0: Member server objects' },
+                { name: 'Tier 0 Server Staging', path: 'OU=Tier 0 Member Servers', protectFromAccidentalDeletion: true, disableInheritance: false, blockGpoInheritance: true, comment: 'Tier 0: Staging server objects' },
+                { name: 'Tier 1 Member Servers', path: '{{DOMAIN_DN}}', protectFromAccidentalDeletion: true, disableInheritance: true, blockGpoInheritance: true, comment: 'Tier 1: Member server objects' },
+                { name: 'Tier 2 End-User Accounts', path: '{{DOMAIN_DN}}', protectFromAccidentalDeletion: true, disableInheritance: true, blockGpoInheritance: true, comment: 'Tier 2: End-User Accounts' },
+                { name: 'Tier Model Administration', path: '{{DOMAIN_DN}}', protectFromAccidentalDeletion: true, disableInheritance: true, blockGpoInheritance: true, comment: 'Tier Model Objects' },
+                { name: 'Tier 0', path: 'OU=Tier Model Administration', protectFromAccidentalDeletion: true, disableInheritance: false, blockGpoInheritance: false, comment: 'Tier 0: Accounts, Groups, Devices' },
+                { name: 'Tier 0 Accounts', path: 'OU=Tier 0,OU=Tier Model Administration', protectFromAccidentalDeletion: true, disableInheritance: false, blockGpoInheritance: false, comment: 'Tier 0: Accounts' },
+                { name: 'Tier 0 Groups', path: 'OU=Tier 0,OU=Tier Model Administration', protectFromAccidentalDeletion: true, disableInheritance: false, blockGpoInheritance: false, comment: 'Tier 0: Groups' },
+                { name: 'Tier 0 Service Accounts', path: 'OU=Tier 0,OU=Tier Model Administration', protectFromAccidentalDeletion: true, disableInheritance: false, blockGpoInheritance: false, comment: 'Tier 0: Service Accounts' },
+                { name: 'Tier 1', path: 'OU=Tier Model Administration', protectFromAccidentalDeletion: true, disableInheritance: false, blockGpoInheritance: false, comment: 'Tier 1: Accounts, Groups, Devices' },
+                { name: 'Tier 1 Accounts', path: 'OU=Tier 1,OU=Tier Model Administration', protectFromAccidentalDeletion: true, disableInheritance: false, blockGpoInheritance: false, comment: 'Tier 1: Accounts' },
+                { name: 'PAW Staging', path: 'OU=Tier Model Administration', protectFromAccidentalDeletion: true, disableInheritance: false, blockGpoInheritance: true, comment: 'PAW Staging Objects' }
+            ],
+            groups: [
+                { name: 'PAW Domain Join', samaccountname: 'PAWDomainJoin', description: 'Domain Join rights for PAWs', groupscope: 'Global', groupcategory: 'Security', path: 'OU=Tier 0 Groups,...' },
+                { name: 'Tier 0 Admins', samaccountname: 'Tier0Admins', description: 'Administer Tier 0, 1, and 2', groupscope: 'Global', groupcategory: 'Security', path: 'OU=Tier 0 Groups,...' },
+                { name: 'Tier 0 Operators', samaccountname: 'Tier0Operators', description: 'Log on to Tier 0 PAWs', groupscope: 'Global', groupcategory: 'Security', path: 'OU=Tier 0 Groups,...' },
+                { name: 'Tier 0 Server Operators', samaccountname: 'Tier0ServerOperators', description: 'Local Admin on Tier 0 Servers', groupscope: 'Global', groupcategory: 'Security', path: 'OU=Tier 0 Groups,...' },
+                { name: 'Tier 0 Member Servers', samaccountname: 'Tier0MemberServers', description: 'AuthSilo/IPSec for T0', groupscope: 'Universal', groupcategory: 'Security', path: 'OU=Tier 0 Groups,...' },
+                { name: 'Tier 1 Admins', samaccountname: 'Tier1Admins', description: 'Administer Tier 1', groupscope: 'Global', groupcategory: 'Security', path: 'OU=Tier 1 Groups,...' },
+                { name: 'Tier 1 Server Operators', samaccountname: 'Tier1ServerOperators', description: 'Admins of Tier 1 Servers', groupscope: 'Global', groupcategory: 'Security', path: 'OU=Tier 1 Groups,...' },
+                { name: 'Tier 2 Admins', samaccountname: 'Tier2Admins', description: 'Administer Tier 2', groupscope: 'Global', groupcategory: 'Security', path: 'OU=Tier 2 Groups,...' },
+                { name: 'Tier 2 Helpdesk', samaccountname: 'Tier2HelpdeskOperators', description: 'Password resets T2', groupscope: 'Global', groupcategory: 'Security', path: 'OU=Tier 2 Groups,...' }
+            ],
+            users: [
+                { samAccountName: 'svc-pawdomainjoin', displayName: 'svc-pawdomainjoin', description: 'PAW Domain Join', ouPath: 'OU=Tier 0 Service Accounts,...', enabled: false },
+                { samAccountName: 'svc-t1srvdomainjoin', displayName: 'svc-t1srvdomainjoin', description: 'Tier 1 Server Domain Join', ouPath: 'OU=Tier 1 Service Accounts,...', enabled: false }
+            ],
+            acls: [
+                { targetOUPath: 'OU=Tier 0 Member Servers,...', identityreference: 'Tier0Admins', activedirectoryrights: ['GenericAll','CreateChild','DeleteChild'], accesscontroltype: 'Allow', objecttype: 'Computer', activeDirectorysecurityinheritance: 'Descendents' },
+                { targetOUPath: 'OU=Tier 0 Server Staging,...', identityreference: 'Tier0ServerOperators', activedirectoryrights: ['CreateChild','WriteProperty','ReadProperty'], accesscontroltype: 'Allow', objecttype: 'Computer', activeDirectorysecurityinheritance: 'Descendents' },
+                { targetOUPath: 'OU=Tier 1 Member Servers,...', identityreference: 'Tier1Admins', activedirectoryrights: ['GenericAll'], accesscontroltype: 'Allow', objecttype: 'Computer', activeDirectorysecurityinheritance: 'Descendents' },
+                { targetOUPath: 'OU=Tier Model Administration,...', identityreference: 'Tier0Admins', activedirectoryrights: ['GenericAll','CreateChild','DeleteChild'], accesscontroltype: 'Allow', objecttype: 'AllObjectClasses', activeDirectorysecurityinheritance: 'All' },
+                { targetOUPath: 'OU=PAW Staging,...', identityreference: 'PAWDomainJoin', activedirectoryrights: ['GenericAll'], accesscontroltype: 'Allow', objecttype: 'Computer', activeDirectorysecurityinheritance: 'SelfAndChildren' }
+            ],
+            gpos: [
+                { name: 'PAW Account Restrictions', mode: 'createAndImport', linkTargets: ['OU=Tier 0,OU=Tier Model Administration,...'] },
+                { name: 'Tier Model Account Restrictions', mode: 'createAndImport', linkTargets: ['OU=Tier 0,OU=Tier Model Administration,...'] },
+                { name: 'Windows LAPS', mode: 'createAndImport', linkTargets: ['OU=Tier 0 Member Servers,...'] }
+            ]
+        };
+
+        // === Navigation ===
+        document.querySelectorAll('.nav-item[data-page]').forEach(item => {
+            const activate = () => {
+                document.querySelectorAll('.nav-item').forEach(n => { n.classList.remove('active'); n.setAttribute('aria-current', ''); });
+                item.classList.add('active'); item.setAttribute('aria-current', 'page');
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                document.getElementById('page-' + item.dataset.page).classList.add('active');
+                if (item.dataset.page === 'dashboard') renderDashboard();
+                if (item.dataset.page === 'config') renderConfigPanels();
+            };
+            item.addEventListener('click', activate);
+            item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
+        });
+
+        // === Config Tabs ===
+        document.querySelectorAll('.config-tab').forEach(tab => {
+            const activate = () => {
+                document.querySelectorAll('.config-tab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
+                tab.classList.add('active'); tab.setAttribute('aria-selected', 'true');
+                document.querySelectorAll('.config-panel').forEach(p => p.classList.remove('active'));
+                document.getElementById(tab.dataset.config).classList.add('active');
+            };
+            tab.addEventListener('click', activate);
+            tab.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
+        });
+
+        // === Toast ===
+        function showToast(msg, type = 'success') {
+            const c = document.getElementById('toast-container');
+            const t = document.createElement('div');
+            t.className = 'toast toast-' + type;
+            t.textContent = msg;
+            c.appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+
+        // === Modal ===
+        function showModal(id) {
+            document.getElementById(id).classList.add('show');
+            if (id === 'acl-modal') {
+                const sel = document.getElementById('acl-principal');
+                sel.innerHTML = config.groups.map(g => `<option value="${esc(g.samaccountname)}">${esc(g.name)}</option>`).join('');
+            }
+            document.getElementById(id).querySelector('input,select')?.focus();
+        }
+        function hideModal(id) { document.getElementById(id).classList.remove('show'); }
+
+        // === Helpers ===
+        function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+        function getTierBadge(n) {
+            n = n.toLowerCase();
+            if (n.includes('tier 0')) return '<span class="ou-tag badge-t0">T0</span>';
+            if (n.includes('tier 1')) return '<span class="ou-tag badge-t1">T1</span>';
+            if (n.includes('tier 2')) return '<span class="ou-tag badge-t2">T2</span>';
+            if (n.includes('tier model') || n.includes('paw')) return '<span class="ou-tag badge-admin">Admin</span>';
+            return '';
+        }
+
+        // === Dashboard ===
+        function renderDashboard() {
+            const tiers = { t0: 0, t1: 0, t2: 0, admin: 0 };
+            config.ous.forEach(ou => {
+                const n = ou.name.toLowerCase();
+                if (n.includes('tier 0')) tiers.t0++; else if (n.includes('tier 1')) tiers.t1++; else if (n.includes('tier 2')) tiers.t2++; else tiers.admin++;
+            });
+            document.getElementById('stats-grid').innerHTML = `
+                <div class="stat-card"><div class="label">OUs gesamt</div><div class="value">${config.ous.length}</div></div>
+                <div class="stat-card"><div class="label">Gruppen</div><div class="value">${config.groups.length}</div></div>
+                <div class="stat-card"><div class="label">Benutzer</div><div class="value">${config.users.length}</div></div>
+                <div class="stat-card"><div class="label">ACLs</div><div class="value">${config.acls.length}</div></div>
+                <div class="stat-card"><div class="label">Tier 0</div><div class="value t0">${tiers.t0}</div></div>
+                <div class="stat-card"><div class="label">Tier 1</div><div class="value t1">${tiers.t1}</div></div>
+                <div class="stat-card"><div class="label">Tier 2</div><div class="value t2">${tiers.t2}</div></div>
+                <div class="stat-card"><div class="label">Admin</div><div class="value admin">${tiers.admin}</div></div>`;
+            renderOUTree();
+        }
+
+        function renderOUTree() {
+            const rootOUs = config.ous.filter(ou => ou.path === '{{DOMAIN_DN}}');
+            function getChildren(name) { return config.ous.filter(ou => ou.path && (ou.path === 'OU=' + name || ou.path.startsWith('OU=' + name + ','))); }
+            function build(list) {
+                if (!list.length) return '';
+                return '<ul>' + list.map(ou => `<li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">${esc(ou.name)}</span>${getTierBadge(ou.name)}</span>${build(getChildren(ou.name))}</li>`).join('') + '</ul>';
+            }
+            document.getElementById('ou-tree').innerHTML = build(rootOUs);
+        }
+
+        // === Tables ===
+        function renderOUS(f='') {
+            const d = config.ous.filter(ou => !f || ou.name.toLowerCase().includes(f));
+            document.getElementById('ou-table').innerHTML = `<table><thead><tr><th>Name</th><th>Pfad</th><th>Schutz</th><th>GPO</th><th></th></tr></thead><tbody>${d.map((ou,i) => `<tr><td><strong>${esc(ou.name)}</strong></td><td style="font-size:11px;color:var(--text2)">${esc(ou.path)}</td><td>${ou.protectFromAccidentalDeletion ? '<span class="badge badge-green">Ja</span>' : '<span class="badge badge-red">Nein</span>'}</td><td>${ou.blockGpoInheritance ? '<span class="badge badge-green">Ja</span>' : '-'}</td><td><button class="btn btn-danger btn-sm" onclick="config.ous.splice(${i},1);renderOUS();renderDashboard();showToast('OU entfernt')">X</button></td></tr>`).join('')}</tbody></table>`;
+        }
+        function renderGroups(f='') {
+            const d = config.groups.filter(g => !f || g.name.toLowerCase().includes(f) || g.samaccountname.toLowerCase().includes(f));
+            document.getElementById('group-table').innerHTML = `<table><thead><tr><th>Name</th><th>SAM</th><th>Scope</th><th>Kategorie</th><th></th></tr></thead><tbody>${d.map((g,i) => `<tr><td><strong>${esc(g.name)}</strong></td><td><code style="color:var(--accent)">${esc(g.samaccountname)}</code></td><td><span class="badge ${g.groupscope==='Universal'?'badge-admin':'badge-t1'}">${g.groupscope}</span></td><td>${g.groupcategory}</td><td><button class="btn btn-danger btn-sm" onclick="config.groups.splice(${i},1);renderGroups();renderDashboard();showToast('Gruppe entfernt')">X</button></td></tr>`).join('')}</tbody></table>`;
+        }
+        function renderUsers(f='') {
+            const d = config.users.filter(u => !f || u.samAccountName.toLowerCase().includes(f));
+            document.getElementById('user-table').innerHTML = `<table><thead><tr><th>DisplayName</th><th>SAM</th><th>Status</th><th></th></tr></thead><tbody>${d.map((u,i) => `<tr><td><strong>${esc(u.displayName)}</strong></td><td><code style="color:var(--accent)">${esc(u.samAccountName)}</code></td><td><span class="badge ${u.enabled?'badge-green':'badge-red'}">${u.enabled?'Aktiv':'Inaktiv'}</span></td><td><button class="btn btn-danger btn-sm" onclick="config.users.splice(${i},1);renderUsers();renderDashboard();showToast('Benutzer entfernt')">X</button></td></tr>`).join('')}</tbody></table>`;
+        }
+        function renderACLs(f='') {
+            const d = config.acls.filter(a => !f || a.identityreference.toLowerCase().includes(f));
+            document.getElementById('acl-table').innerHTML = `<table><thead><tr><th>OU</th><th>Principal</th><th>Rechte</th><th>Typ</th><th></th></tr></thead><tbody>${d.map((a,i) => `<tr><td style="font-size:11px;color:var(--text2)">${esc(a.targetOUPath)}</td><td><strong>${esc(a.identityreference)}</strong></td><td style="font-size:11px">${(a.activedirectoryrights||[]).join(', ')}</td><td><span class="badge ${a.accesscontroltype==='Allow'?'badge-green':'badge-red'}">${a.accesscontroltype}</span></td><td><button class="btn btn-danger btn-sm" onclick="config.acls.splice(${i},1);renderACLs();showToast('ACL entfernt')">X</button></td></tr>`).join('')}</tbody></table>`;
+        }
+
+        // === Config Panels ===
+        function renderConfigPanels() {
+            // OUs
+            document.getElementById('cfg-ous-grid').innerHTML = config.ous.map((ou,i) => `<div class="config-item"><div class="item-header"><span class="item-title">${esc(ou.name)}</span><button class="btn btn-danger btn-sm" onclick="config.ous.splice(${i},1);renderConfigPanels();renderOUS();renderDashboard()">X</button></div><div class="item-fields"><div class="field-row"><span class="field-label">Name</span><input class="field-value" value="${esc(ou.name)}" onchange="config.ous[${i}].name=this.value;renderOUS();renderDashboard()"></div><div class="field-row"><span class="field-label">Pfad</span><input class="field-value" value="${esc(ou.path)}" onchange="config.ous[${i}].path=this.value"></div><div class="field-row"><span class="field-label">Kommentar</span><input class="field-value" value="${esc(ou.comment||'')}" onchange="config.ous[${i}].comment=this.value"></div><div class="field-row"><div class="field-check"><input type="checkbox" ${ou.protectFromAccidentalDeletion?'checked':''} onchange="config.ous[${i}].protectFromAccidentalDeletion=this.checked"><label>Schutz</label></div><div class="field-check"><input type="checkbox" ${ou.blockGpoInheritance?'checked':''} onchange="config.ous[${i}].blockGpoInheritance=this.checked"><label>GPO-Block</label></div></div></div></div>`).join('');
+            // Groups
+            document.getElementById('cfg-groups-grid').innerHTML = config.groups.map((g,i) => `<div class="config-item"><div class="item-header"><span class="item-title">${esc(g.name)}</span><button class="btn btn-danger btn-sm" onclick="config.groups.splice(${i},1);renderConfigPanels();renderGroups();renderDashboard()">X</button></div><div class="item-fields"><div class="field-row"><span class="field-label">Name</span><input class="field-value" value="${esc(g.name)}" onchange="config.groups[${i}].name=this.value;renderGroups()"></div><div class="field-row"><span class="field-label">SAM</span><input class="field-value" value="${esc(g.samaccountname)}" onchange="config.groups[${i}].samaccountname=this.value"></div><div class="field-row"><span class="field-label">Scope</span><select class="field-value" onchange="config.groups[${i}].groupscope=this.value">${['Global','Universal','DomainLocal'].map(s=>`<option ${g.groupscope===s?'selected':''}>${s}</option>`).join('')}</select></div><div class="field-row"><span class="field-label">Kategorie</span><select class="field-value" onchange="config.groups[${i}].groupcategory=this.value">${['Security','Distribution'].map(s=>`<option ${g.groupcategory===s?'selected':''}>${s}</option>`).join('')}</select></div></div></div>`).join('');
+            // Users
+            document.getElementById('cfg-users-grid').innerHTML = config.users.map((u,i) => `<div class="config-item"><div class="item-header"><span class="item-title">${esc(u.displayName)}</span><button class="btn btn-danger btn-sm" onclick="config.users.splice(${i},1);renderConfigPanels();renderUsers();renderDashboard()">X</button></div><div class="item-fields"><div class="field-row"><span class="field-label">SAM</span><input class="field-value" value="${esc(u.samAccountName)}" onchange="config.users[${i}].samAccountName=this.value"></div><div class="field-row"><span class="field-label">Display</span><input class="field-value" value="${esc(u.displayName)}" onchange="config.users[${i}].displayName=this.value;renderUsers()"></div><div class="field-row"><div class="field-check"><input type="checkbox" ${u.enabled?'checked':''} onchange="config.users[${i}].enabled=this.checked;renderUsers()"><label>Aktiviert</label></div></div></div></div>`).join('');
+            // ACLs
+            document.getElementById('cfg-acls-grid').innerHTML = config.acls.map((a,i) => `<div class="config-item"><div class="item-header"><span class="item-title">${esc(a.identityreference)}</span><button class="btn btn-danger btn-sm" onclick="config.acls.splice(${i},1);renderConfigPanels();renderACLs()">X</button></div><div class="item-fields"><div class="field-row"><span class="field-label">OU</span><input class="field-value" value="${esc(a.targetOUPath)}" onchange="config.acls[${i}].targetOUPath=this.value"></div><div class="field-row"><span class="field-label">Principal</span><select class="field-value" onchange="config.acls[${i}].identityreference=this.value">${config.groups.map(g=>`<option ${a.identityreference===g.samaccountname?'selected':''}>${esc(g.samaccountname)}</option>`).join('')}</select></div><div class="field-row"><span class="field-label">Typ</span><select class="field-value" onchange="config.acls[${i}].accesscontroltype=this.value"><option ${a.accesscontroltype==='Allow'?'selected':''}>Allow</option><option ${a.accesscontroltype==='Deny'?'selected':''}>Deny</option></select></div><div class="field-row"><span class="field-label">Objekt</span><select class="field-value" onchange="config.acls[${i}].objecttype=this.value">${['','Computer','User','Group','OrganizationalUnit','AllObjectClasses'].map(o=>`<option ${a.objecttype===o?'selected':''}>${o||'Alle'}</option>`).join('')}</select></div></div></div>`).join('');
+            // GPOs
+            document.getElementById('cfg-gpos-grid').innerHTML = config.gpos.map((g,i) => `<div class="config-item"><div class="item-header"><span class="item-title">${esc(g.name)}</span><button class="btn btn-danger btn-sm" onclick="config.gpos.splice(${i},1);renderConfigPanels()">X</button></div><div class="item-fields"><div class="field-row"><span class="field-label">Name</span><input class="field-value" value="${esc(g.name)}" onchange="config.gpos[${i}].name=this.value"></div><div class="field-row"><span class="field-label">Modus</span><select class="field-value" onchange="config.gpos[${i}].mode=this.value">${['createAndImport','createOnly','importOnly','linkOnly'].map(m=>`<option ${g.mode===m?'selected':''}>${m}</option>`).join('')}</select></div><div class="field-row"><span class="field-label">Links</span><input class="field-value" value="${esc((g.linkTargets||[]).join(', '))}"></div></div></div>`).join('');
+        }
+
+        // === Add functions ===
+        function addOU() {
+            config.ous.push({ name: document.getElementById('ou-name').value, path: document.getElementById('ou-path').value || '{{DOMAIN_DN}}', protectFromAccidentalDeletion: document.getElementById('ou-protect').checked, disableInheritance: false, blockGpoInheritance: document.getElementById('ou-blockgpo').checked, comment: document.getElementById('ou-comment').value });
+            hideModal('ou-modal'); renderOUS(); renderConfigPanels(); renderDashboard(); showToast('OU hinzugefuegt');
+            document.getElementById('ou-name').value = ''; document.getElementById('ou-path').value = ''; document.getElementById('ou-comment').value = '';
+        }
+        function addGroup() {
+            config.groups.push({ name: document.getElementById('grp-name').value, samaccountname: document.getElementById('grp-sam').value, description: document.getElementById('grp-desc').value, groupscope: document.getElementById('grp-scope').value, groupcategory: document.getElementById('grp-cat').value, path: document.getElementById('grp-path').value });
+            hideModal('group-modal'); renderGroups(); renderConfigPanels(); renderDashboard(); showToast('Gruppe hinzugefuegt');
+        }
+        function addUser() {
+            config.users.push({ samAccountName: document.getElementById('usr-sam').value, displayName: document.getElementById('usr-display').value, description: document.getElementById('usr-desc').value, ouPath: document.getElementById('usr-path').value, enabled: document.getElementById('usr-enabled').checked });
+            hideModal('user-modal'); renderUsers(); renderConfigPanels(); renderDashboard(); showToast('Benutzer hinzugefuegt');
+        }
+        function addACL() {
+            const rights = []; document.querySelectorAll('#acl-modal .rights-grid input:checked').forEach(cb => rights.push(cb.value));
+            config.acls.push({ targetOUPath: document.getElementById('acl-ou').value, identityreference: document.getElementById('acl-principal').value, activedirectoryrights: rights, accesscontroltype: document.getElementById('acl-type').value, objecttype: document.getElementById('acl-objtype').value, activeDirectorysecurityinheritance: document.getElementById('acl-inheritance').value });
+            hideModal('acl-modal'); renderACLs(); renderConfigPanels(); showToast('ACL hinzugefuegt');
+        }
+        function addGPO() {
+            config.gpos.push({ name: document.getElementById('gpo-name').value, mode: document.getElementById('gpo-mode').value, linkTargets: document.getElementById('gpo-links').value.split(',').map(s=>s.trim()).filter(Boolean) });
+            hideModal('gpo-modal'); renderConfigPanels(); showToast('GPO hinzugefuegt');
+        }
+
+        // === Deploy/Audit (simulated) ===
+        function runDeploy() {
+            const btn = document.getElementById('btn-deploy');
+            const out = document.getElementById('deploy-output');
+            btn.disabled = true; btn.textContent = 'Deploy laeuft...'; btn.style.opacity = '0.6';
+            const whatif = document.getElementById('opt-whatif').checked;
+            const lines = [
+                { t: '[14:32:01] Starte Deploy...', c: 'line-info' },
+                { t: '[14:32:02] Lade Konfiguration: tiermodel-ous.json', c: 'line-info' },
+                { t: '[14:32:02] Lade Konfiguration: tiermodel-groups.json', c: 'line-info' },
+                { t: '[14:32:03] Prerequisites: OK', c: '' },
+                { t: `[14:32:03] Plan: ${config.ous.length} OUs, ${config.groups.length} Gruppen, ${config.users.length} Users, ${config.acls.length} ACLs`, c: '' },
+                { t: '[14:32:04] OU: Tier 0 Member Servers ... wird erstellt', c: '' },
+                { t: '[14:32:04] OU: Tier 0 Server Staging ... wird erstellt', c: '' },
+                { t: '[14:32:05] Gruppe: PAWDomainJoin ... wird erstellt', c: '' },
+                { t: '[14:32:05] Gruppe: Tier0Admins ... wird erstellt', c: '' },
+            ];
+            if (whatif) lines.push({ t: '[14:32:06] WhatIf-Modus: Keine Aenderungen vorgenommen', c: 'line-warn' });
+            lines.push({ t: '[14:32:06] Deploy abgeschlossen' + (whatif ? ' (WhatIf)' : ''), c: 'line-info' });
+            out.innerHTML = '';
+            lines.forEach((l, i) => {
+                setTimeout(() => { out.innerHTML += `<span class="${l.c}">${l.t}</span>\n`; out.scrollTop = out.scrollHeight; }, (i+1) * 400);
+            });
+            setTimeout(() => { btn.disabled = false; btn.textContent = 'Deploy starten'; btn.style.opacity = '1'; showToast('Deploy abgeschlossen'); }, lines.length * 400 + 200);
+        }
+        function runAudit() {
+            const btn = document.getElementById('btn-audit');
+            const out = document.getElementById('audit-output');
+            btn.disabled = true; btn.textContent = 'Audit laeuft...'; btn.style.opacity = '0.6';
+            const lines = [
+                { t: '[14:35:10] Starte Audit...', c: 'line-info' },
+                { t: '[14:35:11] Lade Soll-Konfiguration...', c: 'line-info' },
+                { t: '[14:35:12] Lade Ist-Zustand aus AD...', c: 'line-info' },
+                { t: `[14:35:13] OU-Check: ${config.ous.length}/${config.ous.length} OUs vorhanden`, c: '' },
+                { t: `[14:35:14] Gruppen-Check: ${config.groups.length}/${config.groups.length} vorhanden`, c: '' },
+                { t: '[14:35:15] DRIFT: Gruppe Tier0Admins - Member fehlt: jdoe', c: 'line-warn' },
+                { t: '[14:35:15] DRIFT: ACL auf OU=Tier 0 Accounts - Berechtigung fehlt', c: 'line-warn' },
+                { t: '[14:35:16] User-Check: ' + config.users.length + '/' + config.users.length + ' vorhanden', c: '' },
+                { t: '[14:35:17] ACL-Check: ' + (config.acls.length-2) + '/' + config.acls.length + ' korrekt', c: '' },
+                { t: '[14:35:18] Audit abgeschlossen: 2 Abweichungen', c: 'line-info' }
+            ];
+            out.innerHTML = '';
+            lines.forEach((l, i) => {
+                setTimeout(() => { out.innerHTML += `<span class="${l.c}">${l.t}</span>\n`; out.scrollTop = out.scrollHeight; }, (i+1) * 500);
+            });
+            setTimeout(() => { btn.disabled = false; btn.textContent = 'Audit starten'; btn.style.opacity = '1'; showToast('Audit abgeschlossen: 2 Abweichungen', 'error'); }, lines.length * 500 + 200);
+        }
+
+        // === Search ===
+        document.getElementById('ou-search').addEventListener('input', e => renderOUS(e.target.value));
+        document.getElementById('group-search').addEventListener('input', e => renderGroups(e.target.value));
+        document.getElementById('user-search').addEventListener('input', e => renderUsers(e.target.value));
+        document.getElementById('acl-search').addEventListener('input', e => renderACLs(e.target.value));
+
+        // === Init ===
+        renderDashboard(); renderOUS(); renderGroups(); renderUsers(); renderACLs(); renderConfigPanels();
+    </script>
 </body>
 </html>

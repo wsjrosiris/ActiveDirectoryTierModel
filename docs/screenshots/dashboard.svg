@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500" font-family="Segoe UI, system-ui, sans-serif">
+  <rect width="900" height="500" fill="#0b0d14"/>
+  <!-- Sidebar -->
+  <rect width="200" height="500" fill="#141821"/>
+  <rect width="200" height="1" fill="#2a3042" y="60"/>
+  <text x="20" y="35" fill="#f0f2f8" font-size="15" font-weight="700">Tier Model</text>
+  <text x="20" y="50" fill="#a0a8c0" font-size="9">AD Management Console</text>
+  <!-- Nav items -->
+  <rect x="8" y="72" width="184" height="32" rx="8" fill="rgba(107,154,255,0.12)" stroke="rgba(107,154,255,0.2)" stroke-width="1"/>
+  <text x="36" y="93" fill="#6b9aff" font-size="12" font-weight="500">Dashboard</text>
+  <text x="36" y="125" fill="#a0a8c0" font-size="12">Organizational Units</text>
+  <text x="36" y="153" fill="#a0a8c0" font-size="12">Gruppen</text>
+  <text x="36" y="181" fill="#a0a8c0" font-size="12">Benutzer</text>
+  <text x="36" y="209" fill="#a0a8c0" font-size="12">ACL Delegationen</text>
+  <text x="36" y="245" fill="#a0a8c0" font-size="12">Konfiguration</text>
+  <text x="36" y="273" fill="#a0a8c0" font-size="12">Deploy</text>
+  <text x="36" y="301" fill="#a0a8c0" font-size="12">Audit</text>
+  <text x="20" y="480" fill="#707890" font-size="9">v1.3.0 | Port 8080</text>
+  <!-- Main content -->
+  <text x="225" y="40" fill="#f0f2f8" font-size="20" font-weight="700">Dashboard</text>
+  <!-- Stats -->
+  <rect x="225" y="55" width="125" height="65" rx="10" fill="#141821" stroke="#2a3042" stroke-width="1"/>
+  <text x="240" y="73" fill="#a0a8c0" font-size="9" text-transform="uppercase" letter-spacing="0.8">OUs GESAMT</text>
+  <text x="240" y="105" fill="#f0f2f8" font-size="22" font-weight="700">29</text>
+  <rect x="360" y="55" width="125" height="65" rx="10" fill="#141821" stroke="#2a3042" stroke-width="1"/>
+  <text x="375" y="73" fill="#a0a8c0" font-size="9">GRUPPEN</text>
+  <text x="375" y="105" fill="#f0f2f8" font-size="22" font-weight="700">24</text>
+  <rect x="495" y="55" width="125" height="65" rx="10" fill="#141821" stroke="#2a3042" stroke-width="1"/>
+  <text x="510" y="73" fill="#a0a8c0" font-size="9">BENUTZER</text>
+  <text x="510" y="105" fill="#f0f2f8" font-size="22" font-weight="700">2</text>
+  <rect x="630" y="55" width="125" height="65" rx="10" fill="#141821" stroke="#2a3042" stroke-width="1"/>
+  <text x="645" y="73" fill="#a0a8c0" font-size="9">ACLs</text>
+  <text x="645" y="105" fill="#f0f2f8" font-size="22" font-weight="700">62</text>
+  <!-- Tier stats -->
+  <rect x="225" y="130" width="125" height="65" rx="10" fill="#141821" stroke="#2a3042" stroke-width="1"/>
+  <text x="240" y="148" fill="#a0a8c0" font-size="9">TIER 0</text>
+  <text x="240" y="180" fill="#ff8a8a" font-size="22" font-weight="700">5</text>
+  <rect x="360" y="130" width="125" height="65" rx="10" fill="#141821" stroke="#2a3042" stroke-width="1"/>
+  <text x="375" y="148" fill="#a0a8c0" font-size="9">TIER 1</text>
+  <text x="375" y="180" fill="#ffc56b" font-size="22" font-weight="700">5</text>
+  <rect x="495" y="130" width="125" height="65" rx="10" fill="#141821" stroke="#2a3042" stroke-width="1"/>
+  <text x="510" y="148" fill="#a0a8c0" font-size="9">TIER 2</text>
+  <text x="510" y="180" fill="#5dd9a0" font-size="22" font-weight="700">9</text>
+  <rect x="630" y="130" width="125" height="65" rx="10" fill="#141821" stroke="#2a3042" stroke-width="1"/>
+  <text x="645" y="148" fill="#a0a8c0" font-size="9">ADMIN</text>
+  <text x="645" y="180" fill="#a8b4ff" font-size="22" font-weight="700">10</text>
+  <!-- OU Tree -->
+  <rect x="225" y="210" width="650" height="270" rx="14" fill="#141821" stroke="#2a3042" stroke-width="1"/>
+  <text x="245" y="235" fill="#f0f2f8" font-size="13" font-weight="600">OU Struktur</text>
+  <!-- Tree nodes -->
+  <text x="260" y="265" fill="#f0f2f8" font-size="12">📁 Tier 0 Member Servers</text>
+  <rect x="385" y="253" width="22" height="16" rx="8" fill="rgba(255,138,138,0.12)"/>
+  <text x="389" y="265" fill="#ff8a8a" font-size="8" font-weight="600">T0</text>
+  <text x="280" y="285" fill="#a0a8c0" font-size="11">📁 Tier 0 Server Staging</text>
+  <text x="260" y="310" fill="#f0f2f8" font-size="12">📁 Tier 1 Member Servers</text>
+  <rect x="385" y="298" width="22" height="16" rx="8" fill="rgba(255,197,107,0.12)"/>
+  <text x="389" y="310" fill="#ffc56b" font-size="8" font-weight="600">T1</text>
+  <text x="260" y="340" fill="#f0f2f8" font-size="12">📁 Tier Model Administration</text>
+  <rect x="420" y="328" width="36" height="16" rx="8" fill="rgba(168,180,255,0.12)"/>
+  <text x="424" y="340" fill="#a8b4ff" font-size="8" font-weight="600">Admin</text>
+  <text x="280" y="360" fill="#a0a8c0" font-size="11">📁 PAW Staging</text>
+  <text x="280" y="380" fill="#a0a8c0" font-size="11">📁 Tier 0</text>
+  <text x="300" y="400" fill="#707890" font-size="10">📁 Tier 0 Accounts</text>
+  <text x="300" y="416" fill="#707890" font-size="10">📁 Tier 0 Groups</text>
+  <text x="300" y="432" fill="#707890" font-size="10">📁 Tier 0 Service Accounts</text>
+  <text x="280" y="455" fill="#a0a8c0" font-size="11">📁 Tier 1</text>
+  <text x="280" y="475" fill="#a0a8c0" font-size="11">📁 Tier 2</text>
+</svg>
