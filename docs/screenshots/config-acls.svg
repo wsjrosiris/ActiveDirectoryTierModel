@@ -1,56 +1,42 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500" font-family="Segoe UI, system-ui, sans-serif">
-  <rect width="900" height="500" fill="#0b0d14"/>
-  <rect width="200" height="500" fill="#141821"/>
-  <text x="20" y="35" fill="#f0f2f8" font-size="15" font-weight="700">Tier Model</text>
-  <text x="20" y="50" fill="#a0a8c0" font-size="9">AD Management Console</text>
-  <text x="36" y="93" fill="#a0a8c0" font-size="12">Dashboard</text>
-  <text x="36" y="126" fill="#a0a8c0" font-size="12">Organizational Units</text>
-  <text x="36" y="153" fill="#a0a8c0" font-size="12">Gruppen</text>
-  <text x="36" y="181" fill="#a0a8c0" font-size="12">Benutzer</text>
-  <text x="36" y="209" fill="#a0a8c0" font-size="12">ACL Delegationen</text>
-  <rect x="8" y="198" width="184" height="32" rx="8" fill="rgba(107,154,255,0.12)" stroke="rgba(107,154,255,0.2)" stroke-width="1"/>
-  <text x="36" y="220" fill="#6b9aff" font-size="12" font-weight="500">Konfiguration</text>
-  <text x="36" y="245" fill="#a0a8c0" font-size="12">Deploy</text>
-  <text x="36" y="273" fill="#a0a8c0" font-size="12">Audit</text>
-  <!-- Main -->
-  <text x="225" y="40" fill="#f0f2f8" font-size="18" font-weight="700">Konfiguration</text>
-  <rect x="225" y="55" width="650" height="36" rx="10" fill="#1c2130"/>
-  <text x="245" y="78" fill="#a0a8c0" font-size="11">OUs</text>
-  <text x="310" y="78" fill="#a0a8c0" font-size="11">Gruppen</text>
-  <text x="395" y="78" fill="#a0a8c0" font-size="11">Benutzer</text>
-  <rect x="445" y="59" width="60" height="28" rx="6" fill="#141821"/>
-  <text x="460" y="78" fill="#f0f2f8" font-size="11" font-weight="600">ACLs</text>
-  <text x="520" y="78" fill="#a0a8c0" font-size="11">GPOs</text>
+  <rect width="900" height="500" fill="#ffffff"/>
+  <rect width="200" height="500" fill="#1a1818"/>
+  <text x="20" y="35" fill="#ffffff" font-size="15" font-weight="700">Tier Model</text>
+  <text x="20" y="50" fill="#818181" font-size="9">AD Management Console</text>
+  <text x="36" y="93" fill="#818181" font-size="12">Dashboard</text>
+  <text x="36" y="126" fill="#818181" font-size="12">Organizational Units</text>
+  <text x="36" y="153" fill="#818181" font-size="12">Gruppen</text>
+  <text x="36" y="181" fill="#818181" font-size="12">Benutzer</text>
+  <rect x="8" y="198" width="184" height="32" rx="10" fill="rgba(247,183,72,0.12)"/>
+  <text x="36" y="220" fill="#f7b748" font-size="12" font-weight="500">Konfiguration</text>
+  <text x="225" y="40" fill="#1a1818" font-size="18" font-weight="700">Konfiguration</text>
+  <rect x="225" y="55" width="650" height="36" rx="10" fill="#f5f5f5"/>
+  <text x="245" y="78" fill="#666666" font-size="11">OUs</text>
+  <text x="310" y="78" fill="#666666" font-size="11">Gruppen</text>
+  <text x="395" y="78" fill="#666666" font-size="11">Benutzer</text>
+  <rect x="445" y="59" width="60" height="28" rx="6" fill="#ffffff"/>
+  <text x="460" y="78" fill="#1a1818" font-size="11" font-weight="600">ACLs</text>
+  <text x="520" y="78" fill="#666666" font-size="11">GPOs</text>
   <!-- ACL Card -->
-  <rect x="225" y="105" width="420" height="200" rx="14" fill="#141821" stroke="#2a3042" stroke-width="1"/>
-  <line x1="225" y1="140" x2="645" y2="140" stroke="#2a3042" stroke-width="1"/>
-  <text x="245" y="128" fill="#f0f2f8" font-size="12" font-weight="600">Tier0Admins</text>
-  <text x="245" y="160" fill="#707890" font-size="8">OU-PFAD</text>
-  <rect x="245" y="165" width="380" height="22" rx="5" fill="#1c2130" stroke="#2a3042" stroke-width="1"/>
-  <text x="253" y="180" fill="#f0f2f8" font-size="10">OU=Tier 0 Member Servers,{{DOMAIN_DN}}</text>
-  <text x="245" y="200" fill="#707890" font-size="8">PRINCIPAL</text>
-  <rect x="245" y="205" width="180" height="22" rx="5" fill="#1c2130" stroke="#2a3042" stroke-width="1"/>
-  <text x="253" y="220" fill="#f0f2f8" font-size="10">Tier0Admins ▾</text>
-  <text x="435" y="200" fill="#707890" font-size="8">TYP</text>
-  <rect x="435" y="205" width="100" height="22" rx="5" fill="#1c2130" stroke="#2a3042" stroke-width="1"/>
-  <text x="443" y="220" fill="#5dd9a0" font-size="10">Allow ▾</text>
-  <text x="245" y="240" fill="#707890" font-size="8">OBJEKTTYP</text>
-  <rect x="245" y="245" width="180" height="22" rx="5" fill="#1c2130" stroke="#2a3042" stroke-width="1"/>
-  <text x="253" y="260" fill="#f0f2f8" font-size="10">Computer ▾</text>
-  <text x="435" y="240" fill="#707890" font-size="8">VERERBUNG</text>
-  <rect x="435" y="245" width="120" height="22" rx="5" fill="#1c2130" stroke="#2a3042" stroke-width="1"/>
-  <text x="443" y="260" fill="#f0f2f8" font-size="10">Descendents ▾</text>
-  <text x="245" y="285" fill="#707890" font-size="8">RECHTE</text>
-  <rect x="245" y="290" width="380" height="22" rx="5" fill="#1c2130" stroke="#2a3042" stroke-width="1"/>
-  <text x="253" y="305" fill="#f0f2f8" font-size="10">GenericAll, CreateChild, DeleteChild</text>
-  <!-- ACL Card 2 -->
-  <rect x="225" y="320" width="420" height="140" rx="14" fill="#141821" stroke="#2a3042" stroke-width="1"/>
-  <line x1="225" y1="355" x2="645" y2="355" stroke="#2a3042" stroke-width="1"/>
-  <text x="245" y="343" fill="#f0f2f8" font-size="12" font-weight="600">Tier0ServerOperators</text>
-  <text x="245" y="375" fill="#707890" font-size="8">PRINCIPAL</text>
-  <rect x="245" y="380" width="180" height="22" rx="5" fill="#1c2130" stroke="#2a3042" stroke-width="1"/>
-  <text x="253" y="395" fill="#f0f2f8" font-size="10">Tier0ServerOperators ▾</text>
-  <text x="245" y="420" fill="#707890" font-size="8">RECHTE</text>
-  <rect x="245" y="425" width="380" height="22" rx="5" fill="#1c2130" stroke="#2a3042" stroke-width="1"/>
-  <text x="253" y="440" fill="#f0f2f8" font-size="10">CreateChild, WriteProperty, ReadProperty</text>
+  <rect x="225" y="105" width="420" height="200" rx="14" fill="#ffffff" stroke="#ededed" stroke-width="1"/>
+  <line x1="225" y1="140" x2="645" y2="140" stroke="#ededed" stroke-width="1"/>
+  <text x="245" y="128" fill="#1a1818" font-size="12" font-weight="600">Tier0Admins</text>
+  <text x="245" y="160" fill="#999999" font-size="8">OU-PFAD</text>
+  <rect x="245" y="165" width="380" height="22" rx="5" fill="#f5f5f5" stroke="#ededed" stroke-width="1"/>
+  <text x="253" y="180" fill="#1a1818" font-size="10">OU=Tier 0 Member Servers,{{DOMAIN_DN}}</text>
+  <text x="245" y="200" fill="#999999" font-size="8">PRINCIPAL</text>
+  <rect x="245" y="205" width="180" height="22" rx="5" fill="#f5f5f5" stroke="#ededed" stroke-width="1"/>
+  <text x="253" y="220" fill="#1a1818" font-size="10">Tier0Admins ▾</text>
+  <text x="435" y="200" fill="#999999" font-size="8">TYP</text>
+  <rect x="435" y="205" width="100" height="22" rx="5" fill="#f5f5f5" stroke="#ededed" stroke-width="1"/>
+  <text x="443" y="220" fill="#02cd98" font-size="10">Allow ▾</text>
+  <text x="245" y="240" fill="#999999" font-size="8">OBJEKTTYP</text>
+  <rect x="245" y="245" width="180" height="22" rx="5" fill="#f5f5f5" stroke="#ededed" stroke-width="1"/>
+  <text x="253" y="260" fill="#1a1818" font-size="10">Computer ▾</text>
+  <text x="435" y="240" fill="#999999" font-size="8">VERERBUNG</text>
+  <rect x="435" y="245" width="120" height="22" rx="5" fill="#f5f5f5" stroke="#ededed" stroke-width="1"/>
+  <text x="443" y="260" fill="#1a1818" font-size="10">Descendents ▾</text>
+  <text x="245" y="285" fill="#999999" font-size="8">RECHTE</text>
+  <rect x="245" y="290" width="380" height="22" rx="5" fill="#f5f5f5" stroke="#ededed" stroke-width="1"/>
+  <text x="253" y="305" fill="#1a1818" font-size="10">GenericAll, CreateChild, DeleteChild</text>
 </svg>
