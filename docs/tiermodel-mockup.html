@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mockup - Tier Model Manager</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --surface2: #232736;
+            --border: #2d3148;
+            --text: #e4e6f0;
+            --text2: #8b8fa8;
+            --accent: #4f8cff;
+            --accent2: #3a6fd8;
+            --green: #34d399;
+            --red: #f87171;
+            --orange: #fbbf24;
+            --tier0: #f87171;
+            --tier1: #fbbf24;
+            --tier2: #34d399;
+            --tierAdmin: #818cf8;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #080a0e; color: var(--text); }
+
+        .mockup-page {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        .mockup-title {
+            text-align: center; margin-bottom: 40px;
+        }
+        .mockup-title h1 { font-size: 28px; color: white; }
+        .mockup-title p { color: var(--text2); font-size: 13px; margin-top: 8px; }
+        .mockup-title .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; background: rgba(79,140,255,0.15); color: var(--accent); margin-top: 8px; }
+
+        .page-label {
+            display: flex; align-items: center; gap: 12px;
+            margin: 48px 0 16px;
+        }
+        .page-label h2 { font-size: 18px; color: white; }
+        .page-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+        /* App Frame */
+        .app-frame {
+            display: flex; border: 1px solid var(--border); border-radius: 16px;
+            overflow: hidden; background: var(--bg); min-height: 600px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 240px; background: var(--surface); border-right: 1px solid var(--border);
+            display: flex; flex-direction: column; flex-shrink: 0;
+        }
+        .sidebar-header { padding: 20px; border-bottom: 1px solid var(--border); }
+        .sidebar-header h1 { font-size: 16px; color: var(--accent); font-weight: 700; }
+        .sidebar-header p { font-size: 10px; color: var(--text2); margin-top: 2px; }
+        .sidebar nav { flex: 1; padding: 10px 8px; }
+        .nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 9px 12px; border-radius: 8px;
+            color: var(--text2); font-size: 12px; margin-bottom: 2px;
+        }
+        .nav-item.active { background: var(--accent); color: white; }
+        .nav-item .icon { font-size: 14px; width: 18px; text-align: center; }
+        .nav-sep { height: 1px; background: var(--border); margin: 6px 12px; }
+
+        /* Main Content */
+        .main-content { flex: 1; padding: 24px; overflow: hidden; }
+
+        /* Stats */
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+        .stat-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 10px; padding: 16px;
+        }
+        .stat-card .label { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; }
+        .stat-card .value { font-size: 24px; font-weight: 700; margin-top: 2px; }
+        .stat-card .value.t0 { color: var(--tier0); }
+        .stat-card .value.t1 { color: var(--tier1); }
+        .stat-card .value.t2 { color: var(--tier2); }
+        .stat-card .value.admin { color: var(--tierAdmin); }
+
+        /* Card */
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 12px; padding: 20px; margin-bottom: 16px;
+        }
+        .card h2 { font-size: 14px; margin-bottom: 12px; color: var(--text); }
+
+        /* Table */
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th { text-align: left; padding: 8px 10px; color: var(--text2); font-weight: 600; border-bottom: 1px solid var(--border); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--text); }
+
+        /* Badge */
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; }
+        .badge-t0 { background: rgba(248,113,113,0.15); color: var(--tier0); }
+        .badge-t1 { background: rgba(251,191,36,0.15); color: var(--tier1); }
+        .badge-t2 { background: rgba(52,211,153,0.15); color: var(--tier2); }
+        .badge-admin { background: rgba(129,140,248,0.15); color: var(--tierAdmin); }
+        .badge-green { background: rgba(52,211,153,0.15); color: var(--green); }
+        .badge-red { background: rgba(248,113,113,0.15); color: var(--red); }
+
+        /* Buttons */
+        .btn { padding: 7px 14px; border-radius: 8px; border: none; font-size: 12px; font-weight: 600; }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+        .btn-success { background: var(--green); color: #0f1117; }
+        .btn-danger { background: var(--red); color: white; padding: 4px 8px; font-size: 10px; }
+        .btn-sm { padding: 4px 8px; font-size: 10px; }
+
+        /* Toolbar */
+        .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+        .toolbar-right { display: flex; gap: 8px; align-items: center; }
+        .search-box { padding: 7px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 12px; width: 200px; }
+
+        /* OU Tree */
+        .ou-tree { font-size: 12px; }
+        .ou-tree ul { list-style: none; padding-left: 18px; }
+        .ou-tree > ul { padding-left: 0; }
+        .ou-tree li { position: relative; padding: 3px 0; }
+        .ou-tree li::before { content: ''; position: absolute; left: -14px; top: 0; bottom: 0; width: 1px; background: var(--border); }
+        .ou-tree li::after { content: ''; position: absolute; left: -14px; top: 12px; width: 10px; height: 1px; background: var(--border); }
+        .ou-node { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 5px; }
+        .ou-node .ou-icon { font-size: 12px; }
+        .ou-node .ou-name { font-weight: 500; }
+        .ou-node .ou-tag { font-size: 9px; padding: 1px 5px; border-radius: 4px; }
+
+        /* Terminal */
+        .terminal {
+            background: #0a0c10; border: 1px solid var(--border);
+            border-radius: 8px; padding: 14px; font-family: 'Cascadia Code', 'Consolas', monospace;
+            font-size: 11px; line-height: 1.6; color: var(--green);
+        }
+        .terminal .line-error { color: var(--red); }
+        .terminal .line-warn { color: var(--orange); }
+        .terminal .line-info { color: var(--accent); }
+
+        /* Form */
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 11px; color: var(--text2); margin-bottom: 4px; font-weight: 600; }
+        .form-group input, .form-group select {
+            width: 100%; padding: 8px 10px; background: var(--surface2);
+            border: 1px solid var(--border); border-radius: 8px;
+            color: var(--text); font-size: 12px;
+        }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .form-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
+        .form-check input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--accent); }
+
+        /* Config Tabs */
+        .config-tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+        .config-tab {
+            padding: 7px 14px; border-radius: 8px 8px 0 0;
+            font-size: 11px; font-weight: 600; color: var(--text2);
+            border: 1px solid transparent; border-bottom: none;
+        }
+        .config-tab.active { color: var(--accent); background: var(--surface); border-color: var(--border); }
+
+        /* Config Cards */
+        .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+        .config-item {
+            background: var(--surface2); border: 1px solid var(--border);
+            border-radius: 10px; padding: 14px;
+        }
+        .config-item:hover { border-color: var(--accent); }
+        .config-item .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .config-item .item-title { font-weight: 600; font-size: 12px; }
+        .config-item .item-fields { display: flex; flex-direction: column; gap: 6px; }
+        .config-item .field-row { display: flex; gap: 6px; align-items: center; }
+        .config-item .field-label { font-size: 9px; color: var(--text2); min-width: 70px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .config-item .field-value {
+            flex: 1; padding: 5px 7px; background: var(--surface);
+            border: 1px solid var(--border); border-radius: 5px;
+            font-size: 11px; color: var(--text);
+        }
+        .config-item .field-check { display: flex; align-items: center; gap: 4px; }
+        .config-item .field-check input { width: 12px; height: 12px; accent-color: var(--accent); }
+        .config-item .field-check label { font-size: 10px; color: var(--text2); }
+
+        .rights-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+        .rights-grid label { display: flex; align-items: center; gap: 3px; font-size: 10px; color: var(--text2); }
+        .rights-grid input { width: 11px; height: 11px; accent-color: var(--accent); }
+
+        /* Modal */
+        .modal-demo {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 12px; padding: 24px; max-width: 500px; margin: 16px auto;
+        }
+        .modal-demo h3 { font-size: 16px; margin-bottom: 16px; }
+        .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+        .code-inline { background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-family: Consolas, monospace; font-size: 11px; color: var(--accent); }
+    </style>
+</head>
+<body>
+    <div class="mockup-page">
+        <div class="mockup-title">
+            <h1>Tier Model Manager</h1>
+            <p>Visual Mockup der Webanwendung</p>
+            <div class="badge">PowerShell Webserver | Port 8080</div>
+        </div>
+
+        <!-- ===== DASHBOARD ===== -->
+        <div class="page-label"><h2>1. Dashboard</h2></div>
+        <div class="app-frame">
+            <div class="sidebar">
+                <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
+                <nav>
+                    <div class="nav-item active"><span class="icon">&#9632;</span><span>Dashboard</span></div>
+                    <div class="nav-sep"></div>
+                    <div class="nav-item"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
+                    <div class="nav-item"><span class="icon">&#128101;</span><span>Gruppen</span></div>
+                    <div class="nav-item"><span class="icon">&#128100;</span><span>Benutzer</span></div>
+                    <div class="nav-item"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
+                    <div class="nav-sep"></div>
+                    <div class="nav-item"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
+                    <div class="nav-item"><span class="icon">&#9654;</span><span>Deploy</span></div>
+                    <div class="nav-item"><span class="icon">&#128202;</span><span>Audit</span></div>
+                </nav>
+            </div>
+            <div class="main-content">
+                <h2 style="font-size:20px; margin-bottom:16px;">Dashboard</h2>
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="label">OUs gesamt</div><div class="value">29</div></div>
+                    <div class="stat-card"><div class="label">Gruppen</div><div class="value">24</div></div>
+                    <div class="stat-card"><div class="label">Benutzer</div><div class="value">2</div></div>
+                    <div class="stat-card"><div class="label">ACLs</div><div class="value">62</div></div>
+                    <div class="stat-card"><div class="label">Tier 0 OUs</div><div class="value t0">5</div></div>
+                    <div class="stat-card"><div class="label">Tier 1 OUs</div><div class="value t1">5</div></div>
+                    <div class="stat-card"><div class="label">Tier 2 OUs</div><div class="value t2">9</div></div>
+                    <div class="stat-card"><div class="label">Admin OUs</div><div class="value admin">10</div></div>
+                </div>
+                <div class="card">
+                    <h2>OU Struktur</h2>
+                    <div class="ou-tree">
+                        <ul>
+                            <li>
+                                <span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 0 Member Servers</span><span class="ou-tag badge-t0">T0</span></span>
+                                <ul>
+                                    <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 0 Server Staging</span><span class="ou-tag badge-t0">T0</span></span></li>
+                                </ul>
+                            </li>
+                            <li>
+                                <span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 1 Member Servers</span><span class="ou-tag badge-t1">T1</span></span>
+                                <ul>
+                                    <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 1 Server Staging</span><span class="ou-tag badge-t1">T1</span></span></li>
+                                </ul>
+                            </li>
+                            <li>
+                                <span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 2 End-User Accounts</span><span class="ou-tag badge-t2">T2</span></span>
+                                <ul>
+                                    <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Disabled End-Users Accounts</span><span class="ou-tag badge-t2">T2</span></span></li>
+                                </ul>
+                            </li>
+                            <li>
+                                <span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier Model Administration</span><span class="ou-tag badge-admin">Admin</span></span>
+                                <ul>
+                                    <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">PAW Staging</span><span class="ou-tag badge-admin">Admin</span></span></li>
+                                    <li>
+                                        <span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 0</span><span class="ou-tag badge-t0">T0</span></span>
+                                        <ul>
+                                            <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 0 Accounts</span><span class="ou-tag badge-t0">T0</span></span></li>
+                                            <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 0 Groups</span><span class="ou-tag badge-t0">T0</span></span></li>
+                                            <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 0 Service Accounts</span><span class="ou-tag badge-t0">T0</span></span></li>
+                                        </ul>
+                                    </li>
+                                    <li>
+                                        <span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 1</span><span class="ou-tag badge-t1">T1</span></span>
+                                        <ul>
+                                            <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 1 Accounts</span><span class="ou-tag badge-t1">T1</span></span></li>
+                                            <li><span class="ou-node"><span class="ou-icon">&#128193;</span><span class="ou-name">Tier 1 Groups</span><span class="ou-tag badge-t1">T1</span></span></li>
+                                        </ul>
+                                    </li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== ORGANIZATIONAL UNITS ===== -->
+        <div class="page-label"><h2>2. Organizational Units</h2></div>
+        <div class="app-frame">
+            <div class="sidebar">
+                <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
+                <nav>
+                    <div class="nav-item"><span class="icon">&#9632;</span><span>Dashboard</span></div>
+                    <div class="nav-sep"></div>
+                    <div class="nav-item active"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
+                    <div class="nav-item"><span class="icon">&#128101;</span><span>Gruppen</span></div>
+                    <div class="nav-item"><span class="icon">&#128100;</span><span>Benutzer</span></div>
+                    <div class="nav-item"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
+                    <div class="nav-sep"></div>
+                    <div class="nav-item"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
+                    <div class="nav-item"><span class="icon">&#9654;</span><span>Deploy</span></div>
+                    <div class="nav-item"><span class="icon">&#128202;</span><span>Audit</span></div>
+                </nav>
+            </div>
+            <div class="main-content">
+                <div class="toolbar">
+                    <h2 style="font-size:16px;">Organizational Units</h2>
+                    <div class="toolbar-right">
+                        <input class="search-box" value="Tier 0" readonly>
+                        <button class="btn btn-primary">+ OU hinzufuegen</button>
+                        <button class="btn btn-outline">Speichern</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <table>
+                        <thead><tr><th>Name</th><th>Pfad</th><th>Schutz</th><th>GPO-Block</th><th>Kommentar</th><th></th></tr></thead>
+                        <tbody>
+                            <tr><td><strong>Tier 0 Member Servers</strong></td><td style="font-size:10px;color:var(--text2)">{{DOMAIN_DN}}</td><td><span class="badge badge-green">Ja</span></td><td><span class="badge badge-green">Ja</span></td><td style="font-size:10px">Tier 0: Member server objects</td><td><button class="btn btn-danger">X</button></td></tr>
+                            <tr><td><strong>Tier 0 Server Staging</strong></td><td style="font-size:10px;color:var(--text2)">OU=Tier 0 Member Servers</td><td><span class="badge badge-green">Ja</span></td><td><span class="badge badge-green">Ja</span></td><td style="font-size:10px">Tier 0: Staging server objects</td><td><button class="btn btn-danger">X</button></td></tr>
+                            <tr><td><strong>Tier 0 Accounts</strong></td><td style="font-size:10px;color:var(--text2)">OU=Tier 0,OU=Tier Model Administration</td><td><span class="badge badge-green">Ja</span></td><td>-</td><td style="font-size:10px">Tier 0: Accounts</td><td><button class="btn btn-danger">X</button></td></tr>
+                            <tr><td><strong>Tier 0 Groups</strong></td><td style="font-size:10px;color:var(--text2)">OU=Tier 0,OU=Tier Model Administration</td><td><span class="badge badge-green">Ja</span></td><td>-</td><td style="font-size:10px">Tier 0: Groups</td><td><button class="btn btn-danger">X</button></td></tr>
+                            <tr><td><strong>Tier 0 Service Accounts</strong></td><td style="font-size:10px;color:var(--text2)">OU=Tier 0,OU=Tier Model Administration</td><td><span class="badge badge-green">Ja</span></td><td>-</td><td style="font-size:10px">Tier 0: Service Accounts</td><td><button class="btn btn-danger">X</button></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== GRUPPEN ===== -->
+        <div class="page-label"><h2>3. Gruppen</h2></div>
+        <div class="app-frame">
+            <div class="sidebar">
+                <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
+                <nav>
+                    <div class="nav-item"><span class="icon">&#9632;</span><span>Dashboard</span></div>
+                    <div class="nav-sep"></div>
+                    <div class="nav-item"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
+                    <div class="nav-item active"><span class="icon">&#128101;</span><span>Gruppen</span></div>
+                    <div class="nav-item"><span class="icon">&#128100;</span><span>Benutzer</span></div>
+                    <div class="nav-item"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
+                    <div class="nav-sep"></div>
+                    <div class="nav-item"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
+                    <div class="nav-item"><span class="icon">&#9654;</span><span>Deploy</span></div>
+                    <div class="nav-item"><span class="icon">&#128202;</span><span>Audit</span></div>
+                </nav>
+            </div>
+            <div class="main-content">
+                <div class="toolbar">
+                    <h2 style="font-size:16px;">Sicherheitsgruppen</h2>
+                    <div class="toolbar-right">
+                        <input class="search-box" placeholder="Suchen...">
+                        <button class="btn btn-primary">+ Gruppe hinzufuegen</button>
+                        <button class="btn btn-outline">Speichern</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <table>
+                        <thead><tr><th>Name</th><th>SamAccountName</th><th>Scope</th><th>Kategorie</th><th></th></tr></thead>
+                        <tbody>
+                            <tr><td><strong>Tier 0 Admins</strong></td><td><code class="code-inline">Tier0Admins</code></td><td><span class="badge badge-t0">Global</span></td><td>Security</td><td><button class="btn btn-danger">X</button></td></tr>
+                            <tr><td><strong>Tier 0 Operators</strong></td><td><code class="code-inline">Tier0Operators</code></td><td><span class="badge badge-t0">Global</span></td><td>Security</td><td><button class="btn btn-danger">X</button></td></tr>
+                            <tr><td><strong>Tier 0 Server Operators</strong></td><td><code class="code-inline">Tier0ServerOperators</code></td><td><span class="badge badge-t0">Global</span></td><td>Security</td><td><button class="btn btn-danger">X</button></td></tr>
+                            <tr><td><strong>Tier 0 Member Servers</strong></td><td><code class="code-inline">Tier0MemberServers</code></td><td><span class="badge badge-admin">Universal</span></td><td>Security</td><td><button class="btn btn-danger">X</button></td></tr>
+                            <tr><td><strong>Tier 1 Admins</strong></td><td><code class="code-inline">Tier1Admins</code></td><td><span class="badge badge-t1">Global</span></td><td>Security</td><td><button class="btn btn-danger">X</button></td></tr>
+                            <tr><td><strong>Tier 2 Admins</strong></td><td><code class="code-inline">Tier2Admins</code></td><td><span class="badge badge-t2">Global</span></td><td>Security</td><td><button class="btn btn-danger">X</button></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== DEPLOY ===== -->
+        <div class="page-label"><h2>4. Deploy</h2></div>
+        <div class="app-frame">
+            <div class="sidebar">
+                <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
+                <nav>
+                    <div class="nav-item"><span class="icon">&#9632;</span><span>Dashboard</span></div>
+                    <div class="nav-sep"></div>
+                    <div class="nav-item"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
+                    <div class="nav-item"><span class="icon">&#128101;</span><span>Gruppen</span></div>
+                    <div class="nav-item"><span class="icon">&#128100;</span><span>Benutzer</span></div>
+                    <div class="nav-item"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
+                    <div class="nav-sep"></div>
+                    <div class="nav-item"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
+                    <div class="nav-item active"><span class="icon">&#9654;</span><span>Deploy</span></div>
+                    <div class="nav-item"><span class="icon">&#128202;</span><span>Audit</span></div>
+                </nav>
+            </div>
+            <div class="main-content">
+                <h2 style="font-size:16px; margin-bottom:12px;">Tier Model Deployen</h2>
+                <div class="card">
+                    <h3 style="font-size:13px; color:var(--text2); margin-bottom:10px;">Optionen</h3>
+                    <div class="form-row" style="margin-bottom:10px;">
+                        <div class="form-check"><input type="checkbox" checked><label>WhatIf (nur Plan anzeigen)</label></div>
+                        <div class="form-check"><input type="checkbox"><label>ConfirmApply (Bestaetigung)</label></div>
+                    </div>
+                    <div class="form-row" style="margin-bottom:10px;">
+                        <div class="form-check"><input type="checkbox"><label>IncludeMsa</label></div>
+                        <div class="form-check"><input type="checkbox"><label>IncludeGmsa</label></div>
+                    </div>
+                    <div class="form-row" style="margin-bottom:10px;">
+                        <div class="form-check"><input type="checkbox"><label>IncludeDmsa</label></div>
+                        <div class="form-check"><input type="checkbox"><label>IncludeWinLaps</label></div>
+                    </div>
+                    <button class="btn btn-success" style="margin-top:8px;">Deploy starten</button>
+                </div>
+                <div class="card">
+                    <h3 style="font-size:13px; color:var(--text2); margin-bottom:10px;">Ausgabe</h3>
+                    <div class="terminal">
+<span class="line-info">[14:32:01] Starte Deploy...</span>
+<span class="line-info">[14:32:02] Lade Konfiguration: tiermodel-ous.json</span>
+<span class="line-info">[14:32:02] Lade Konfiguration: tiermodel-groups.json</span>
+<span class="line-info">[14:32:03] Lade Konfiguration: tiermodel-users.json</span>
+<span class="line-info">[14:32:03] Prerequisites: OK</span>
+[14:32:04] Plan generiert: 29 OUs, 24 Gruppen, 2 Users, 62 ACLs
+<span class="line-info">[14:32:04] WhatIf-Modus: Keine Aenderungen werden vorgenommen</span>
+[14:32:05] OU: Tier 0 Member Servers ... wird erstellt
+[14:32:05] OU: Tier 0 Server Staging ... wird erstellt
+[14:32:06] OU: Tier 1 Member Servers ... wird erstellt
+<span class="line-warn">[14:32:06] WARNUNG: OU 'Tier 2 End-User Accounts' existiert bereits</span>
+[14:32:07] Gruppe: PAWDomainJoin ... wird erstellt
+[14:32:07] Gruppe: Tier0Admins ... wird erstellt
+<span class="line-info">[14:32:08] Deploy abgeschlossen (WhatIf)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== AUDIT ===== -->
+        <div class="page-label"><h2>5. Audit (Drift Detection)</h2></div>
+        <div class="app-frame">
+            <div class="sidebar">
+                <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
+                <nav>
+                    <div class="nav-item"><span class="icon">&#9632;</span><span>Dashboard</span></div>
+                    <div class="nav-sep"></div>
+                    <div class="nav-item"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
+                    <div class="nav-item"><span class="icon">&#128101;</span><span>Gruppen</span></div>
+                    <div class="nav-item"><span class="icon">&#128100;</span><span>Benutzer</span></div>
+                    <div class="nav-item"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
+                    <div class="nav-sep"></div>
+                    <div class="nav-item"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
+                    <div class="nav-item"><span class="icon">&#9654;</span><span>Deploy</span></div>
+                    <div class="nav-item active"><span class="icon">&#128202;</span><span>Audit</span></div>
+                </nav>
+            </div>
+            <div class="main-content">
+                <h2 style="font-size:16px; margin-bottom:12px;">Tier Model Auditieren</h2>
+                <div class="card"><button class="btn btn-primary">Audit starten</button></div>
+                <div class="card">
+                    <h3 style="font-size:13px; color:var(--text2); margin-bottom:10px;">Ergebnis</h3>
+                    <div class="terminal">
+<span class="line-info">[14:35:10] Starte Audit...</span>
+<span class="line-info">[14:35:11] Lade Soll-Konfiguration...</span>
+<span class="line-info">[14:35:12] Lade Ist-Zustand aus AD...</span>
+[14:35:13] OU-Check: 29/29 OUs vorhanden
+[14:35:14] Gruppen-Check: 24/24 Gruppen vorhanden
+<span class="line-warn">[14:35:15] DRIFT: Gruppe 'Tier0Admins' - Member fehlt: jdoe</span>
+<span class="line-warn">[14:35:15] DRIFT: ACL auf 'OU=Tier 0 Accounts' - Berechtigung fehlt: GenericAll</span>
+[14:35:16] User-Check: 2/2 Benutzer vorhanden
+<span class="line-error">[14:35:17] DRIFT: OU 'Tier 2 End-User Devices' - GPO-Vererbung nicht blockiert (erwartet: true)</span>
+[14:35:18] ACL-Check: 60/62 ACLs korrekt
+<span class="line-info">[14:35:19] Audit abgeschlossen: 3 Abweichungen gefunden</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== KONFIGURATION OUs ===== -->
+        <div class="page-label"><h2>6. Konfiguration - OUs (Formular)</h2></div>
+        <div class="app-frame">
+            <div class="sidebar">
+                <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
+                <nav>
+                    <div class="nav-item"><span class="icon">&#9632;</span><span>Dashboard</span></div>
+                    <div class="nav-sep"></div>
+                    <div class="nav-item"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
+                    <div class="nav-item"><span class="icon">&#128101;</span><span>Gruppen</span></div>
+                    <div class="nav-item"><span class="icon">&#128100;</span><span>Benutzer</span></div>
+                    <div class="nav-item"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
+                    <div class="nav-sep"></div>
+                    <div class="nav-item active"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
+                    <div class="nav-item"><span class="icon">&#9654;</span><span>Deploy</span></div>
+                    <div class="nav-item"><span class="icon">&#128202;</span><span>Audit</span></div>
+                </nav>
+            </div>
+            <div class="main-content">
+                <div class="toolbar">
+                    <h2 style="font-size:16px;">Konfiguration</h2>
+                    <div class="toolbar-right">
+                        <button class="btn btn-outline">Neu laden</button>
+                        <button class="btn btn-primary">Alle speichern</button>
+                    </div>
+                </div>
+                <div class="config-tabs">
+                    <div class="config-tab active">OUs</div>
+                    <div class="config-tab">Gruppen</div>
+                    <div class="config-tab">Benutzer</div>
+                    <div class="config-tab">ACLs</div>
+                    <div class="config-tab">GPOs</div>
+                </div>
+                <div class="config-grid">
+                    <div class="config-item">
+                        <div class="item-header"><span class="item-title">Tier 0 Member Servers</span></div>
+                        <div class="item-fields">
+                            <div class="field-row"><span class="field-label">Name</span><div class="field-value">Tier 0 Member Servers</div></div>
+                            <div class="field-row"><span class="field-label">Pfad</span><div class="field-value">{{DOMAIN_DN}}</div></div>
+                            <div class="field-row"><span class="field-label">Kommentar</span><div class="field-value">Tier 0: Member server objects</div></div>
+                            <div class="field-row"><div class="field-check"><input type="checkbox" checked><label>Schutz</label></div><div class="field-check"><input type="checkbox" checked><label>GPO-Block</label></div><div class="field-check"><input type="checkbox" checked><label>Vererbung aus</label></div></div>
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <div class="item-header"><span class="item-title">Tier 0 Server Staging</span></div>
+                        <div class="item-fields">
+                            <div class="field-row"><span class="field-label">Name</span><div class="field-value">Tier 0 Server Staging</div></div>
+                            <div class="field-row"><span class="field-label">Pfad</span><div class="field-value">OU=Tier 0 Member Servers</div></div>
+                            <div class="field-row"><span class="field-label">Kommentar</span><div class="field-value">Tier 0: Staging server objects</div></div>
+                            <div class="field-row"><div class="field-check"><input type="checkbox" checked><label>Schutz</label></div><div class="field-check"><input type="checkbox" checked><label>GPO-Block</label></div><div class="field-check"><input type="checkbox"><label>Vererbung aus</label></div></div>
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <div class="item-header"><span class="item-title">Tier 0 Accounts</span></div>
+                        <div class="item-fields">
+                            <div class="field-row"><span class="field-label">Name</span><div class="field-value">Tier 0 Accounts</div></div>
+                            <div class="field-row"><span class="field-label">Pfad</span><div class="field-value">OU=Tier 0,OU=Tier Model Administration</div></div>
+                            <div class="field-row"><span class="field-label">Kommentar</span><div class="field-value">Tier 0: Accounts</div></div>
+                            <div class="field-row"><div class="field-check"><input type="checkbox" checked><label>Schutz</label></div><div class="field-check"><input type="checkbox"><label>GPO-Block</label></div><div class="field-check"><input type="checkbox"><label>Vererbung aus</label></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== KONFIGURATION GRUPPEN ===== -->
+        <div class="page-label"><h2>7. Konfiguration - Gruppen (Formular)</h2></div>
+        <div class="app-frame">
+            <div class="sidebar">
+                <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
+                <nav>
+                    <div class="nav-item"><span class="icon">&#9632;</span><span>Dashboard</span></div>
+                    <div class="nav-sep"></div>
+                    <div class="nav-item"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
+                    <div class="nav-item"><span class="icon">&#128101;</span><span>Gruppen</span></div>
+                    <div class="nav-item"><span class="icon">&#128100;</span><span>Benutzer</span></div>
+                    <div class="nav-item"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
+                    <div class="nav-sep"></div>
+                    <div class="nav-item active"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
+                    <div class="nav-item"><span class="icon">&#9654;</span><span>Deploy</span></div>
+                    <div class="nav-item"><span class="icon">&#128202;</span><span>Audit</span></div>
+                </nav>
+            </div>
+            <div class="main-content">
+                <div class="config-tabs">
+                    <div class="config-tab">OUs</div>
+                    <div class="config-tab active">Gruppen</div>
+                    <div class="config-tab">Benutzer</div>
+                    <div class="config-tab">ACLs</div>
+                    <div class="config-tab">GPOs</div>
+                </div>
+                <div class="config-grid">
+                    <div class="config-item">
+                        <div class="item-header"><span class="item-title">Tier 0 Admins</span></div>
+                        <div class="item-fields">
+                            <div class="field-row"><span class="field-label">Name</span><div class="field-value">Tier 0 Admins</div></div>
+                            <div class="field-row"><span class="field-label">SAM</span><div class="field-value">Tier0Admins</div></div>
+                            <div class="field-row"><span class="field-label">Beschreibung</span><div class="field-value">Members administer Tier 0, 1, and 2</div></div>
+                            <div class="field-row"><span class="field-label">Scope</span><select class="field-value"><option selected>Global</option><option>Universal</option><option>DomainLocal</option></select></div>
+                            <div class="field-row"><span class="field-label">Kategorie</span><select class="field-value"><option selected>Security</option><option>Distribution</option></select></div>
+                            <div class="field-row"><span class="field-label">Pfad</span><div class="field-value">OU=Tier 0 Groups,OU=Tier 0,OU=Tier Model Administration</div></div>
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <div class="item-header"><span class="item-title">Tier 0 Operators</span></div>
+                        <div class="item-fields">
+                            <div class="field-row"><span class="field-label">Name</span><div class="field-value">Tier 0 Operators</div></div>
+                            <div class="field-row"><span class="field-label">SAM</span><div class="field-value">Tier0Operators</div></div>
+                            <div class="field-row"><span class="field-label">Beschreibung</span><div class="field-value">Delegated rights to log on to Tier 0 PAWs</div></div>
+                            <div class="field-row"><span class="field-label">Scope</span><select class="field-value"><option selected>Global</option><option>Universal</option><option>DomainLocal</option></select></div>
+                            <div class="field-row"><span class="field-label">Kategorie</span><select class="field-value"><option selected>Security</option><option>Distribution</option></select></div>
+                            <div class="field-row"><span class="field-label">Pfad</span><div class="field-value">OU=Tier 0 Groups,OU=Tier 0,OU=Tier Model Administration</div></div>
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <div class="item-header"><span class="item-title">Tier 0 Member Servers</span></div>
+                        <div class="item-fields">
+                            <div class="field-row"><span class="field-label">Name</span><div class="field-value">Tier 0 Member Servers</div></div>
+                            <div class="field-row"><span class="field-label">SAM</span><div class="field-value">Tier0MemberServers</div></div>
+                            <div class="field-row"><span class="field-label">Scope</span><select class="field-value"><option>Global</option><option selected>Universal</option><option>DomainLocal</option></select></div>
+                            <div class="field-row"><span class="field-label">Kategorie</span><select class="field-value"><option selected>Security</option><option>Distribution</option></select></div>
+                            <div class="field-row"><span class="field-label">Pfad</span><div class="field-value">OU=Tier 0 Groups,OU=Tier 0,OU=Tier Model Administration</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== KONFIGURATION ACLs ===== -->
+        <div class="page-label"><h2>8. Konfiguration - ACLs (Formular)</h2></div>
+        <div class="app-frame">
+            <div class="sidebar">
+                <div class="sidebar-header"><h1>Tier Model</h1><p>AD Management Console</p></div>
+                <nav>
+                    <div class="nav-item"><span class="icon">&#9632;</span><span>Dashboard</span></div>
+                    <div class="nav-sep"></div>
+                    <div class="nav-item"><span class="icon">&#128193;</span><span>Organizational Units</span></div>
+                    <div class="nav-item"><span class="icon">&#128101;</span><span>Gruppen</span></div>
+                    <div class="nav-item"><span class="icon">&#128100;</span><span>Benutzer</span></div>
+                    <div class="nav-item"><span class="icon">&#128274;</span><span>ACL Delegationen</span></div>
+                    <div class="nav-sep"></div>
+                    <div class="nav-item active"><span class="icon">&#9881;</span><span>Konfiguration</span></div>
+                    <div class="nav-item"><span class="icon">&#9654;</span><span>Deploy</span></div>
+                    <div class="nav-item"><span class="icon">&#128202;</span><span>Audit</span></div>
+                </nav>
+            </div>
+            <div class="main-content">
+                <div class="config-tabs">
+                    <div class="config-tab">OUs</div>
+                    <div class="config-tab">Gruppen</div>
+                    <div class="config-tab">Benutzer</div>
+                    <div class="config-tab active">ACLs</div>
+                    <div class="config-tab">GPOs</div>
+                </div>
+                <div class="config-grid">
+                    <div class="config-item">
+                        <div class="item-header"><span class="item-title">Tier0Admins</span></div>
+                        <div class="item-fields">
+                            <div class="field-row"><span class="field-label">OU-Pfad</span><div class="field-value">OU=Tier 0 Member Servers,{{DOMAIN_DN}}</div></div>
+                            <div class="field-row"><span class="field-label">Principal</span><select class="field-value"><option selected>Tier0Admins</option><option>Tier0Operators</option><option>Tier0ServerOperators</option></select></div>
+                            <div class="field-row"><span class="field-label">Typ</span><select class="field-value"><option selected>Allow</option><option>Deny</option></select></div>
+                            <div class="field-row"><span class="field-label">Objekttyp</span><select class="field-value"><option selected>Computer</option><option>User</option><option>Group</option><option>Alle</option></select></div>
+                            <div class="field-row"><span class="field-label">Vererbung</span><select class="field-value"><option>All</option><option selected>Descendents</option><option>SelfAndChildren</option></select></div>
+                            <div class="field-row"><span class="field-label">Rechte</span><div class="field-value">GenericAll, CreateChild, DeleteChild</div></div>
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <div class="item-header"><span class="item-title">Tier0ServerOperators</span></div>
+                        <div class="item-fields">
+                            <div class="field-row"><span class="field-label">OU-Pfad</span><div class="field-value">OU=Tier 0 Server Staging,OU=Tier 0 Member Servers</div></div>
+                            <div class="field-row"><span class="field-label">Principal</span><select class="field-value"><option>Tier0Admins</option><option>Tier0Operators</option><option selected>Tier0ServerOperators</option></select></div>
+                            <div class="field-row"><span class="field-label">Typ</span><select class="field-value"><option selected>Allow</option><option>Deny</option></select></div>
+                            <div class="field-row"><span class="field-label">Objekttyp</span><select class="field-value"><option selected>Computer</option><option>User</option><option>Group</option></select></div>
+                            <div class="field-row"><span class="field-label">Vererbung</span><select class="field-value"><option>All</option><option selected>Descendents</option><option>SelfAndChildren</option></select></div>
+                            <div class="field-row"><span class="field-label">Rechte</span><div class="field-value">CreateChild, WriteProperty, ReadProperty</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== ACL MODAL ===== -->
+        <div class="page-label"><h2>9. Modal - Neue ACL Delegation</h2></div>
+        <div style="max-width: 580px; margin: 0 auto;">
+            <div class="modal-demo">
+                <h3>Neue ACL Delegation</h3>
+                <div class="form-group"><label>Target OU-Pfad</label><input value="OU=Tier 0 Accounts,{{DOMAIN_DN}}" readonly></div>
+                <div class="form-row">
+                    <div class="form-group"><label>Principal (Gruppe)</label><select><option>Tier0Admins</option><option selected>Tier1Admins</option><option>Tier2Admins</option></select></div>
+                    <div class="form-group"><label>Access Control Type</label><select><option selected>Allow</option><option>Deny</option></select></div>
+                </div>
+                <div class="form-group"><label>Objekttyp</label><select><option>Alle Objekte</option><option selected>User</option><option>Computer</option><option>Group</option></select></div>
+                <div class="form-group"><label>Active Directory Rechte</label>
+                    <div class="rights-grid">
+                        <label><input type="checkbox" checked> GenericAll</label>
+                        <label><input type="checkbox" checked> CreateChild</label>
+                        <label><input type="checkbox" checked> DeleteChild</label>
+                        <label><input type="checkbox"> ReadProperty</label>
+                        <label><input type="checkbox"> WriteProperty</label>
+                        <label><input type="checkbox"> ExtendedRight</label>
+                        <label><input type="checkbox"> Delete</label>
+                        <label><input type="checkbox"> DeleteTree</label>
+                        <label><input type="checkbox"> GenericExecute</label>
+                    </div>
+                </div>
+                <div class="form-group"><label>Vererbungstyp</label><select><option selected>All</option><option>Descendents</option><option>SelfAndChildren</option><option>Children</option></select></div>
+                <div class="modal-actions">
+                    <button class="btn btn-outline">Abbrechen</button>
+                    <button class="btn btn-primary">Hinzufuegen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== MODAL OU ===== -->
+        <div class="page-label"><h2>10. Modal - Neue OU hinzufuegen</h2></div>
+        <div style="max-width: 540px; margin: 0 auto;">
+            <div class="modal-demo">
+                <h3>Neue OU</h3>
+                <div class="form-group"><label>Name</label><input value="Tier 0 PAW Devices" readonly></div>
+                <div class="form-group"><label>Pfad (parent)</label><input value="OU=Tier 0,OU=Tier Model Administration,{{DOMAIN_DN}}" readonly></div>
+                <div class="form-group"><label>Kommentar</label><input value="Tier 0: PAW Devices" readonly></div>
+                <div class="form-row">
+                    <div class="form-check"><input type="checkbox" checked><label>Vor Loeschung schuetzen</label></div>
+                    <div class="form-check"><input type="checkbox"><label>GPO-Vererbung blockieren</label></div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-outline">Abbrechen</button>
+                    <button class="btn btn-primary">Hinzufuegen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== ARCHITEKTUR ===== -->
+        <div class="page-label"><h2>11. Architektur</h2></div>
+        <div style="max-width: 800px; margin: 0 auto;">
+            <div class="card" style="font-size:13px; line-height:1.8;">
+                <h2 style="margin-bottom:16px;">Technische Details</h2>
+                <table>
+                    <tr><td style="color:var(--text2); width:180px;">Startbefehl</td><td><code class="code-inline">.\Start-TierModelManager.ps1</code></td></tr>
+                    <tr><td style="color:var(--text2);">Server</td><td><code class="code-inline">http://localhost:8080</code></td></tr>
+                    <tr><td style="color:var(--text2);">Config-Pfad</td><td><code class="code-inline">ActiveDirectoryTierModel-main\config\</code></td></tr>
+                    <tr><td style="color:var(--text2);">Voraussetzung</td><td>PowerShell 7+, AD-Modul, Domain Admin</td></tr>
+                    <tr><td style="color:var(--text2);">Sprache</td><td>Mehrsprachig (DE, EN, FR, ...)</td></tr>
+                </table>
+                <h3 style="margin: 20px 0 12px; font-size: 13px;">API Endpunkte</h3>
+                <table>
+                    <tr><td><code class="code-inline">GET /</code></td><td>HTML Oberflaeche</td></tr>
+                    <tr><td><code class="code-inline">GET /api/config/{file}</code></td><td>JSON-Konfiguration lesen</td></tr>
+                    <tr><td><code class="code-inline">POST /api/config/{file}</code></td><td>JSON-Konfiguration speichern</td></tr>
+                    <tr><td><code class="code-inline">POST /api/deploy</code></td><td>Deploy-TierModel.ps1 ausfuehren</td></tr>
+                    <tr><td><code class="code-inline">POST /api/audit</code></td><td>Audit-TierModel.ps1 ausfuehren</td></tr>
+                </table>
+                <h3 style="margin: 20px 0 12px; font-size: 13px;">Konfigurationsdateien</h3>
+                <table>
+                    <tr><td><code class="code-inline">tiermodel-ous.json</code></td><td>29 Organizational Units</td></tr>
+                    <tr><td><code class="code-inline">tiermodel-groups.json</code></td><td>24 Sicherheitsgruppen</td></tr>
+                    <tr><td><code class="code-inline">tiermodel-users.json</code></td><td>2 Service-Accounts</td></tr>
+                    <tr><td><code class="code-inline">tiermodel-acls.json</code></td><td>62 ACL-Delegationen</td></tr>
+                    <tr><td><code class="code-inline">tiermodel-gpos.json</code></td><td>Group Policy Objects</td></tr>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>
