@@ -337,6 +337,24 @@ $HtmlPage = @'
         </div>
     </div>
 
+    <!-- Rename OU Modal -->
+    <div class="modal-overlay" id="rename-ou-modal">
+        <div class="modal">
+            <h2>OU umbenennen</h2>
+            <input type="hidden" id="rename-ou-index">
+            <div class="form-group"><label>Aktueller Name</label><input id="rename-ou-old" readonly style="opacity:0.6"></div>
+            <div class="form-group"><label>Neuer Name</label><input id="rename-ou-new" placeholder="Neuer OU-Name"></div>
+            <div class="form-check" style="margin-top:8px;">
+                <input type="checkbox" id="rename-ou-paths" checked>
+                <label for="rename-ou-paths">Alle Referenzen in Pfaden aktualisieren</label>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="hideModal('rename-ou-modal')">Abbrechen</button>
+                <button class="btn btn-primary" onclick="executeRenameOU()">Umbenennen</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ACL Modal -->
     <div class="modal-overlay" id="acl-modal">
         <div class="modal">
@@ -556,7 +574,7 @@ $HtmlPage = @'
         function renderOUS(filter = '') {
             const f = filter.toLowerCase();
             const data = config.ous.filter(ou => !f || ou.name.toLowerCase().includes(f));
-            document.getElementById('ou-table').innerHTML = `<table><thead><tr><th>Name</th><th>Pfad</th><th>Schutz</th><th>GPO-Block</th><th>Kommentar</th><th></th></tr></thead><tbody>${data.map(ou => { const idx = config.ous.indexOf(ou); return `<tr><td><strong>${esc(ou.name)}</strong></td><td style="font-size:11px;color:var(--text2)">${esc(ou.path)}</td><td>${ou.protectFromAccidentalDeletion ? '<span class="badge badge-green">Ja</span>' : '<span class="badge badge-red">Nein</span>'}</td><td>${ou.blockGpoInheritance ? '<span class="badge badge-green">Ja</span>' : '-'}</td><td style="font-size:11px">${esc(ou.comment || '')}</td><td><button class="btn btn-danger btn-sm" onclick="removeOU(${idx})">X</button></td></tr>`; }).join('')}</tbody></table>`;
+            document.getElementById('ou-table').innerHTML = `<table><thead><tr><th>Name</th><th>Pfad</th><th>Schutz</th><th>GPO-Block</th><th>Kommentar</th><th></th></tr></thead><tbody>${data.map(ou => { const idx = config.ous.indexOf(ou); return `<tr><td><strong>${esc(ou.name)}</strong></td><td style="font-size:11px;color:var(--text2)">${esc(ou.path)}</td><td>${ou.protectFromAccidentalDeletion ? '<span class="badge badge-green">Ja</span>' : '<span class="badge badge-red">Nein</span>'}</td><td>${ou.blockGpoInheritance ? '<span class="badge badge-green">Ja</span>' : '-'}</td><td style="font-size:11px">${esc(ou.comment || '')}</td><td><div style="display:flex;gap:4px"><button class="btn btn-outline btn-sm" onclick="showRenameOU(${idx})" title="Umbenennen">&#9998;</button><button class="btn btn-danger btn-sm" onclick="removeOU(${idx})" title="Loeschen">X</button></div></td></tr>`; }).join('')}</tbody></table>`;
         }
 
         function renderGroups(filter = '') {
@@ -593,7 +611,8 @@ $HtmlPage = @'
                     <div class="item-header">
                         <span class="item-title">${esc(ou.name)}</span>
                         <div class="item-actions">
-                            <button class="btn btn-danger btn-sm" onclick="removeOU(${i});renderConfigPanels();">X</button>
+                            <button class="btn btn-outline btn-sm" onclick="showRenameOU(${i})" title="Umbenennen">&#9998;</button>
+                            <button class="btn btn-danger btn-sm" onclick="removeOU(${i});renderConfigPanels();" title="Loeschen">X</button>
                         </div>
                     </div>
                     <div class="item-fields">
@@ -781,6 +800,82 @@ $HtmlPage = @'
         function removeGroup(i) { config.groups.splice(i, 1); renderGroups(); loadDashboard(); }
         function removeUser(i) { config.users.splice(i, 1); renderUsers(); loadDashboard(); }
         function removeACL(i) { config.acls.splice(i, 1); renderACLs(); }
+
+        // === Rename OU ===
+        function showRenameOU(index) {
+            const ou = config.ous[index];
+            document.getElementById('rename-ou-index').value = index;
+            document.getElementById('rename-ou-old').value = ou.name;
+            document.getElementById('rename-ou-new').value = '';
+            showModal('rename-ou-modal');
+            document.getElementById('rename-ou-new').focus();
+        }
+
+        function executeRenameOU() {
+            const index = parseInt(document.getElementById('rename-ou-index').value);
+            const oldName = config.ous[index].name;
+            const newName = document.getElementById('rename-ou-new').value.trim();
+            const updatePaths = document.getElementById('rename-ou-paths').checked;
+
+            if (!newName) { showToast('Neuer Name darf nicht leer sein', 'error'); return; }
+            if (newName === oldName) { hideModal('rename-ou-modal'); return; }
+
+            // Check for duplicate
+            if (config.ous.some((ou, i) => i !== index && ou.name === newName)) {
+                showToast('OU mit diesem Namen existiert bereits', 'error');
+                return;
+            }
+
+            // Rename the OU
+            config.ous[index].name = newName;
+
+            // Update all references in paths
+            if (updatePaths) {
+                const oldRef = 'OU=' + oldName;
+                const newRef = 'OU=' + newName;
+
+                // Update child OU paths
+                config.ous.forEach(ou => {
+                    if (ou.path && (ou.path === oldRef || ou.path.startsWith(oldRef + ','))) {
+                        ou.path = ou.path.replace(oldRef, newRef);
+                    }
+                });
+
+                // Update group paths
+                config.groups.forEach(g => {
+                    if (g.path && g.path.includes(oldRef)) {
+                        g.path = g.path.replace(oldRef, newRef);
+                    }
+                });
+
+                // Update user paths
+                config.users.forEach(u => {
+                    const p = u.ouPath || u.path || '';
+                    if (p.includes(oldRef)) {
+                        if (u.ouPath) u.ouPath = u.ouPath.replace(oldRef, newRef);
+                        if (u.path) u.path = u.path.replace(oldRef, newRef);
+                    }
+                });
+
+                // Update ACL target paths
+                config.acls.forEach(a => {
+                    if (a.targetOUPath && a.targetOUPath.includes(oldRef)) {
+                        a.targetOUPath = a.targetOUPath.replace(oldRef, newRef);
+                    }
+                });
+
+                // Update GPO link targets
+                config.gpos.forEach(g => {
+                    if (g.linkTargets) {
+                        g.linkTargets = g.linkTargets.map(t => t.includes(oldRef) ? t.replace(oldRef, newRef) : t);
+                    }
+                });
+            }
+
+            hideModal('rename-ou-modal');
+            renderOUS(); renderGroups(); renderUsers(); renderACLs(); renderConfigPanels(); loadDashboard();
+            showToast(`OU umbenannt: "${oldName}" → "${newName}"`);
+        }
 
         // === Save All ===
         async function saveAllConfigs() {
