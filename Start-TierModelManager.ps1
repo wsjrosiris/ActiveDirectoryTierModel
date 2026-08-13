@@ -111,6 +111,99 @@ $HtmlPage = @'
         .toast-success { background: var(--green); color: #fff; } .toast-error { background: var(--red); color: #fff; }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+        /* === Phase 1 & 2: New Components === */
+
+        /* Search Modal (Ctrl+K) */
+        .search-overlay { display: none; position: fixed; inset: 0; background: rgba(26,24,24,0.5); z-index: 2000; align-items: flex-start; justify-content: center; padding-top: 15vh; backdrop-filter: blur(4px); }
+        .search-overlay.show { display: flex; }
+        .search-modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 90%; max-width: 560px; max-height: 60vh; overflow: hidden; box-shadow: var(--shadow-lg); }
+        .search-input-wrap { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+        .search-input-wrap .search-icon { font-size: 18px; color: var(--text3); flex-shrink: 0; }
+        .search-input-wrap input { flex: 1; border: none; outline: none; font-size: 15px; background: transparent; color: var(--text); }
+        .search-input-wrap input::placeholder { color: var(--text4); }
+        .search-input-wrap kbd { font-size: 11px; padding: 2px 6px; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; color: var(--text3); font-family: inherit; }
+        .search-results { max-height: calc(60vh - 60px); overflow-y: auto; padding: 8px; }
+        .search-group-label { font-size: 10px; color: var(--text4); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; padding: 8px 12px 4px; }
+        .search-result { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-sm); cursor: pointer; transition: background 0.1s; }
+        .search-result:hover, .search-result.active { background: var(--accent-surface); }
+        .search-result .result-icon { font-size: 16px; width: 24px; text-align: center; flex-shrink: 0; }
+        .search-result .result-info { flex: 1; min-width: 0; }
+        .search-result .result-name { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .search-result .result-path { font-size: 11px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .search-result .result-badge { font-size: 9px; padding: 2px 6px; border-radius: 100px; font-weight: 600; flex-shrink: 0; }
+        .search-empty { padding: 24px; text-align: center; color: var(--text3); font-size: 13px; }
+
+        /* Command Palette */
+        .cmd-palette { display: none; position: fixed; inset: 0; background: rgba(26,24,24,0.5); z-index: 2000; align-items: flex-start; justify-content: center; padding-top: 20vh; backdrop-filter: blur(4px); }
+        .cmd-palette.show { display: flex; }
+        .cmd-modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 90%; max-width: 480px; overflow: hidden; box-shadow: var(--shadow-lg); }
+        .cmd-result { display: flex; align-items: center; gap: 12px; padding: 10px 16px; cursor: pointer; transition: background 0.1s; }
+        .cmd-result:hover, .cmd-result.active { background: var(--accent-surface); }
+        .cmd-result .cmd-icon { font-size: 16px; width: 24px; text-align: center; }
+        .cmd-result .cmd-label { flex: 1; font-size: 13px; color: var(--text); }
+        .cmd-result .cmd-shortcut { font-size: 11px; color: var(--text3); }
+        .cmd-sep { padding: 4px 16px; font-size: 10px; color: var(--text4); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
+
+        /* Diff View */
+        .diff-overlay { display: none; position: fixed; inset: 0; background: rgba(26,24,24,0.5); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+        .diff-overlay.show { display: flex; }
+        .diff-modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 90%; max-width: 700px; max-height: 80vh; overflow: hidden; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; }
+        .diff-header { padding: 20px 24px; border-bottom: 1px solid var(--border); }
+        .diff-header h2 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+        .diff-header p { font-size: 12px; color: var(--text3); }
+        .diff-body { flex: 1; overflow-y: auto; padding: 16px 24px; }
+        .diff-section { margin-bottom: 20px; }
+        .diff-section-title { font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+        .diff-item { padding: 10px 14px; border-radius: var(--radius-sm); margin-bottom: 6px; font-size: 12px; line-height: 1.5; }
+        .diff-add { background: rgba(2,205,152,0.08); border-left: 3px solid var(--green); }
+        .diff-remove { background: rgba(229,72,77,0.08); border-left: 3px solid var(--red); }
+        .diff-change { background: rgba(247,183,72,0.10); border-left: 3px solid var(--orange); }
+        .diff-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+        /* Audit Log */
+        .audit-log { max-height: 300px; overflow-y: auto; }
+        .audit-entry { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+        .audit-entry:last-child { border-bottom: none; }
+        .audit-time { font-size: 11px; color: var(--text3); min-width: 50px; flex-shrink: 0; }
+        .audit-icon { font-size: 14px; width: 20px; text-align: center; flex-shrink: 0; }
+        .audit-content { flex: 1; }
+        .audit-action { font-size: 12px; font-weight: 500; color: var(--text); }
+        .audit-detail { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+        /* Interactive OU Tree */
+        .ou-tree-node { margin-left: 20px; }
+        .ou-tree-node.root { margin-left: 0; }
+        .ou-tree-row { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: var(--radius-sm); cursor: pointer; transition: background 0.1s; user-select: none; }
+        .ou-tree-row:hover { background: var(--surface2); }
+        .ou-tree-row .tree-toggle { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--text3); transition: transform 0.15s; flex-shrink: 0; }
+        .ou-tree-row .tree-toggle.expanded { transform: rotate(90deg); }
+        .ou-tree-row .tree-toggle.leaf { visibility: hidden; }
+        .ou-tree-row .tree-icon { font-size: 14px; flex-shrink: 0; }
+        .ou-tree-row .tree-name { font-size: 13px; font-weight: 500; color: var(--text); }
+        .ou-tree-row .tree-tag { font-size: 9px; padding: 2px 6px; border-radius: 100px; font-weight: 600; }
+        .ou-tree-children { display: none; }
+        .ou-tree-children.expanded { display: block; }
+
+        /* Context Menu */
+        .context-menu { display: none; position: fixed; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); min-width: 180px; z-index: 3000; padding: 4px; }
+        .context-menu.show { display: block; }
+        .context-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; color: var(--text); transition: background 0.1s; }
+        .context-item:hover { background: var(--accent-surface); }
+        .context-item .ctx-icon { font-size: 14px; width: 18px; text-align: center; }
+        .context-item.danger { color: var(--red); }
+        .context-item.danger:hover { background: var(--red-surface); }
+        .context-sep { height: 1px; background: var(--border); margin: 4px 0; }
+
+        /* Validation Panel */
+        .validation-panel { margin-bottom: 20px; }
+        .validation-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border-radius: var(--radius-sm); margin-bottom: 6px; font-size: 12px; }
+        .validation-error { background: var(--red-surface); border-left: 3px solid var(--red); }
+        .validation-warn { background: var(--orange-surface); border-left: 3px solid var(--orange); }
+        .validation-ok { background: var(--green-surface); border-left: 3px solid var(--green); }
+        .validation-icon { font-size: 14px; flex-shrink: 0; }
+        .validation-text { flex: 1; color: var(--text); }
+
         @media (max-width: 768px) { .sidebar { width: 60px; } .sidebar-header h1, .sidebar-header p, .nav-item span:not(.icon), .sidebar-footer { display: none; } .main { margin-left: 60px; padding: 16px; } .form-row, .form-row-3 { grid-template-columns: 1fr; } .config-grid { grid-template-columns: 1fr; } .stats-grid { grid-template-columns: repeat(2, 1fr); } }
 
     </style>
@@ -134,7 +227,7 @@ $HtmlPage = @'
             <div class="nav-item" data-page="deploy" role="link" tabindex="0"><span class="icon" aria-hidden="true">&#9654;</span><span>Deploy</span></div>
             <div class="nav-item" data-page="audit" role="link" tabindex="0"><span class="icon" aria-hidden="true">&#128202;</span><span>Audit</span></div>
         </nav>
-        <div class="sidebar-footer">v1.3.0 | Port 8080</div>
+        <div class="sidebar-footer">v1.4.0 | Ctrl+K Suche | Ctrl+Shift+P Befehle</div>
     </div>
 
     <main id="main-content" class="main" role="main">
@@ -142,9 +235,17 @@ $HtmlPage = @'
         <div class="page active" id="page-dashboard" role="region" aria-label="Dashboard">
             <h2 class="page-title">Dashboard</h2>
             <div class="stats-grid" id="stats-grid" aria-label="Statistiken"></div>
-            <div class="card">
-                <h2>OU Struktur</h2>
-                <div class="ou-tree" id="ou-tree" role="tree" aria-label="OU-Baumstruktur"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                <div class="card">
+                    <h2>OU Struktur</h2>
+                    <div id="ou-tree-interactive" role="tree" aria-label="OU-Baumstruktur"></div>
+                </div>
+                <div class="card">
+                    <h2>Aenderungsprotokoll</h2>
+                    <div class="audit-log" id="audit-log">
+                        <div class="search-empty" style="padding:20px;">Noch keine Aenderungen protokolliert.</div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -257,7 +358,7 @@ $HtmlPage = @'
                     <div class="form-check"><input type="checkbox" id="opt-dmsa"><label for="opt-dmsa">IncludeDmsa</label></div>
                     <div class="form-check"><input type="checkbox" id="opt-winlaps"><label for="opt-winlaps">IncludeWinLaps</label></div>
                 </div>
-                <button class="btn btn-success" onclick="runDeploy()" id="btn-deploy" style="margin-top:8px;">Deploy starten</button>
+                <button class="btn btn-success" onclick="showDeployPreview()" id="btn-deploy" style="margin-top:8px;">Deploy starten</button>
             </div>
             <div class="card">
                 <h3>Ausgabe</h3>
@@ -431,6 +532,50 @@ $HtmlPage = @'
 
     <div class="toast-container" id="toast-container"></div>
 
+    <!-- Search Modal (Ctrl+K) -->
+    <div class="search-overlay" id="search-overlay">
+        <div class="search-modal">
+            <div class="search-input-wrap">
+                <span class="search-icon">&#128269;</span>
+                <input type="text" id="search-input" placeholder="Suchen... (OUs, Gruppen, Benutzer, ACLs, GPOs)" autocomplete="off">
+                <kbd>Esc</kbd>
+            </div>
+            <div class="search-results" id="search-results">
+                <div class="search-empty">Tippen um zu suchen...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Command Palette -->
+    <div class="cmd-palette" id="cmd-palette">
+        <div class="cmd-modal">
+            <div class="search-input-wrap">
+                <span class="search-icon">&#9889;</span>
+                <input type="text" id="cmd-input" placeholder="Befehl eingeben..." autocomplete="off">
+                <kbd>Esc</kbd>
+            </div>
+            <div id="cmd-results"></div>
+        </div>
+    </div>
+
+    <!-- Diff View Modal -->
+    <div class="diff-overlay" id="diff-overlay">
+        <div class="diff-modal">
+            <div class="diff-header">
+                <h2>&#128202; Aenderungen vor Deploy</h2>
+                <p id="diff-summary">Vergleich: aktuelle Konfiguration vs. laufendes AD</p>
+            </div>
+            <div class="diff-body" id="diff-body"></div>
+            <div class="diff-footer">
+                <button class="btn btn-outline" onclick="hideDiff()">Abbrechen</button>
+                <button class="btn btn-success" onclick="hideDiff();runDeploy();">Deploy starten</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="context-menu"></div>
+
     <script>
         // === State ===
         let config = { ous: [], groups: [], users: [], acls: [], gpos: [] };
@@ -532,7 +677,7 @@ $HtmlPage = @'
                 <div class="stat-card"><div class="label">Tier 2 OUs</div><div class="value t2">${tiers.t2}</div></div>
                 <div class="stat-card"><div class="label">Admin OUs</div><div class="value admin">${tiers.admin}</div></div>
             `;
-            renderOUTree();
+            renderInteractiveOUTree();
         }
 
         // === OU Tree ===
@@ -760,25 +905,36 @@ $HtmlPage = @'
         // === Add/Remove ===
         // BUG-002 FIX: Input validation before adding
         // BUG-011 FIX: OU tree updates on add
+        // Phase 1: Undo/Redo + Audit Log
         function addOU() {
             const name = document.getElementById('ou-name').value.trim();
             if (!name) { showToast('Name darf nicht leer sein', 'error'); return; }
-            config.ous.push({ name, path: document.getElementById('ou-path').value.trim() || '{{DOMAIN_DN}}', protectFromAccidentalDeletion: document.getElementById('ou-protect').checked, disableInheritance: false, blockGpoInheritance: document.getElementById('ou-blockgpo').checked, comment: document.getElementById('ou-comment').value.trim() });
+            pushState();
+            const path = document.getElementById('ou-path').value.trim() || '{{DOMAIN_DN}}';
+            config.ous.push({ name, path, protectFromAccidentalDeletion: document.getElementById('ou-protect').checked, disableInheritance: false, blockGpoInheritance: document.getElementById('ou-blockgpo').checked, comment: document.getElementById('ou-comment').value.trim() });
             hideModal('ou-modal'); document.getElementById('ou-name').value = ''; document.getElementById('ou-path').value = ''; document.getElementById('ou-comment').value = '';
+            addAuditEntry('OU erstellt', `"${name}" in ${path}`, '&#10010;');
             renderOUS(); renderConfigPanels(); loadDashboard(); showToast('OU hinzugefuegt');
         }
         function addGroup() {
             const name = document.getElementById('grp-name').value.trim();
             const sam = document.getElementById('grp-sam').value.trim();
             if (!name || !sam) { showToast('Name und SAM duerfen nicht leer sein', 'error'); return; }
+            pushState();
             config.groups.push({ name, samaccountname: sam, description: document.getElementById('grp-desc').value.trim(), groupscope: document.getElementById('grp-scope').value, groupcategory: document.getElementById('grp-cat').value, path: document.getElementById('grp-path').value.trim() });
-            hideModal('group-modal'); renderGroups(); renderConfigPanels(); loadDashboard(); showToast('Gruppe hinzugefuegt');
+            hideModal('group-modal');
+            addAuditEntry('Gruppe erstellt', `"${name}" (${sam})`, '&#10010;');
+            renderGroups(); renderConfigPanels(); loadDashboard(); showToast('Gruppe hinzugefuegt');
         }
         function addUser() {
             const sam = document.getElementById('usr-sam').value.trim();
             if (!sam) { showToast('SamAccountName darf nicht leer sein', 'error'); return; }
-            config.users.push({ samAccountName: sam, displayName: document.getElementById('usr-display').value.trim() || sam, description: document.getElementById('usr-desc').value.trim(), ouPath: document.getElementById('usr-path').value.trim(), enabled: document.getElementById('usr-enabled').checked });
-            hideModal('user-modal'); renderUsers(); renderConfigPanels(); loadDashboard(); showToast('Benutzer hinzugefuegt');
+            pushState();
+            const displayName = document.getElementById('usr-display').value.trim() || sam;
+            config.users.push({ samAccountName: sam, displayName, description: document.getElementById('usr-desc').value.trim(), ouPath: document.getElementById('usr-path').value.trim(), enabled: document.getElementById('usr-enabled').checked });
+            hideModal('user-modal');
+            addAuditEntry('Benutzer erstellt', `"${sam}"`, '&#10010;');
+            renderUsers(); renderConfigPanels(); loadDashboard(); showToast('Benutzer hinzugefuegt');
         }
         function addACL() {
             const ou = document.getElementById('acl-ou').value.trim();
@@ -786,20 +942,51 @@ $HtmlPage = @'
             const rights = [];
             document.querySelectorAll('#acl-modal .rights-grid input:checked').forEach(cb => rights.push(cb.value));
             if (rights.length === 0) { showToast('Mindestens ein Recht muss ausgewaehlt sein', 'error'); return; }
-            config.acls.push({ targetOUPath: ou, identityreference: document.getElementById('acl-principal').value, activedirectoryrights: rights, accesscontroltype: document.getElementById('acl-type').value, objecttype: document.getElementById('acl-objtype').value, activeDirectorysecurityinheritance: document.getElementById('acl-inheritance').value, resolveguid: false });
-            hideModal('acl-modal'); renderACLs(); renderConfigPanels(); showToast('ACL hinzugefuegt');
+            pushState();
+            const principal = document.getElementById('acl-principal').value;
+            config.acls.push({ targetOUPath: ou, identityreference: principal, activedirectoryrights: rights, accesscontroltype: document.getElementById('acl-type').value, objecttype: document.getElementById('acl-objtype').value, activeDirectorysecurityinheritance: document.getElementById('acl-inheritance').value, resolveguid: false });
+            hideModal('acl-modal');
+            addAuditEntry('ACL erstellt', `${principal} auf ${ou}`, '&#10010;');
+            renderACLs(); renderConfigPanels(); showToast('ACL hinzugefuegt');
         }
         function addGPO() {
             const name = document.getElementById('gpo-name').value.trim();
             if (!name) { showToast('Name darf nicht leer sein', 'error'); return; }
+            pushState();
             config.gpos.push({ name, mode: document.getElementById('gpo-mode').value, linkTargets: document.getElementById('gpo-links').value.split(',').map(s => s.trim()).filter(Boolean) });
-            hideModal('gpo-modal'); renderConfigPanels(); showToast('GPO hinzugefuegt');
+            hideModal('gpo-modal');
+            addAuditEntry('GPO erstellt', `"${name}"`, '&#10010;');
+            renderConfigPanels(); showToast('GPO hinzugefuegt');
         }
 
-        function removeOU(i) { config.ous.splice(i, 1); renderOUS(); loadDashboard(); }
-        function removeGroup(i) { config.groups.splice(i, 1); renderGroups(); loadDashboard(); }
-        function removeUser(i) { config.users.splice(i, 1); renderUsers(); loadDashboard(); }
-        function removeACL(i) { config.acls.splice(i, 1); renderACLs(); }
+        function removeOU(i) {
+            pushState();
+            const name = config.ous[i].name;
+            config.ous.splice(i, 1);
+            addAuditEntry('OU geloescht', `"${name}"`, '&#128465;');
+            renderOUS(); loadDashboard();
+        }
+        function removeGroup(i) {
+            pushState();
+            const name = config.groups[i].name;
+            config.groups.splice(i, 1);
+            addAuditEntry('Gruppe geloescht', `"${name}"`, '&#128465;');
+            renderGroups(); loadDashboard();
+        }
+        function removeUser(i) {
+            pushState();
+            const name = config.users[i].samAccountName;
+            config.users.splice(i, 1);
+            addAuditEntry('Benutzer geloescht', `"${name}"`, '&#128465;');
+            renderUsers(); loadDashboard();
+        }
+        function removeACL(i) {
+            pushState();
+            const name = config.acls[i].identityreference;
+            config.acls.splice(i, 1);
+            addAuditEntry('ACL geloescht', `"${name}"`, '&#128465;');
+            renderACLs();
+        }
 
         // === Rename OU ===
         function showRenameOU(index) {
@@ -826,45 +1013,37 @@ $HtmlPage = @'
                 return;
             }
 
+            pushState();
+
             // Rename the OU
             config.ous[index].name = newName;
+
+            // Count updated references
+            let refCount = 0;
 
             // Update all references in paths
             if (updatePaths) {
                 const oldRef = 'OU=' + oldName;
                 const newRef = 'OU=' + newName;
 
-                // Update child OU paths
                 config.ous.forEach(ou => {
                     if (ou.path && (ou.path === oldRef || ou.path.startsWith(oldRef + ','))) {
-                        ou.path = ou.path.replace(oldRef, newRef);
+                        ou.path = ou.path.replace(oldRef, newRef); refCount++;
                     }
                 });
-
-                // Update group paths
                 config.groups.forEach(g => {
-                    if (g.path && g.path.includes(oldRef)) {
-                        g.path = g.path.replace(oldRef, newRef);
-                    }
+                    if (g.path && g.path.includes(oldRef)) { g.path = g.path.replace(oldRef, newRef); refCount++; }
                 });
-
-                // Update user paths
                 config.users.forEach(u => {
                     const p = u.ouPath || u.path || '';
                     if (p.includes(oldRef)) {
-                        if (u.ouPath) u.ouPath = u.ouPath.replace(oldRef, newRef);
-                        if (u.path) u.path = u.path.replace(oldRef, newRef);
+                        if (u.ouPath) { u.ouPath = u.ouPath.replace(oldRef, newRef); refCount++; }
+                        if (u.path) { u.path = u.path.replace(oldRef, newRef); }
                     }
                 });
-
-                // Update ACL target paths
                 config.acls.forEach(a => {
-                    if (a.targetOUPath && a.targetOUPath.includes(oldRef)) {
-                        a.targetOUPath = a.targetOUPath.replace(oldRef, newRef);
-                    }
+                    if (a.targetOUPath && a.targetOUPath.includes(oldRef)) { a.targetOUPath = a.targetOUPath.replace(oldRef, newRef); refCount++; }
                 });
-
-                // Update GPO link targets
                 config.gpos.forEach(g => {
                     if (g.linkTargets) {
                         g.linkTargets = g.linkTargets.map(t => t.includes(oldRef) ? t.replace(oldRef, newRef) : t);
@@ -873,6 +1052,7 @@ $HtmlPage = @'
             }
 
             hideModal('rename-ou-modal');
+            addAuditEntry('OU umbenannt', `"${oldName}" → "${newName}"${refCount > 0 ? ` (${refCount} Referenzen)` : ''}`, '&#9998;');
             renderOUS(); renderGroups(); renderUsers(); renderACLs(); renderConfigPanels(); loadDashboard();
             showToast(`OU umbenannt: "${oldName}" → "${newName}"`);
         }
@@ -893,6 +1073,7 @@ $HtmlPage = @'
                     if (r.success) ok++;
                 } catch(e) {}
             }
+            addAuditEntry('Konfiguration gespeichert', `${ok}/${files.length} Dateien`, '&#128190;');
             showToast(`${ok}/${files.length} Dateien gespeichert`);
         }
 
@@ -913,14 +1094,16 @@ $HtmlPage = @'
         }
 
         // === Deploy/Audit ===
+        // Phase 2: Diff-View + Audit-Log
         async function runDeploy() {
             const btn = document.getElementById('btn-deploy');
             const out = document.getElementById('deploy-output');
             btn.disabled = true; btn.textContent = 'Deploy laeuft...';
             out.innerHTML = '<span class="line-info">Starte Deploy...</span>\n';
+            const whatif = document.getElementById('opt-whatif').checked;
             try {
                 const r = await api('/api/deploy', 'POST', {
-                    whatif: document.getElementById('opt-whatif').checked,
+                    whatif,
                     confirmApply: document.getElementById('opt-confirm').checked,
                     msa: document.getElementById('opt-msa').checked,
                     gmsa: document.getElementById('opt-gmsa').checked,
@@ -928,9 +1111,14 @@ $HtmlPage = @'
                     winlaps: document.getElementById('opt-winlaps').checked
                 });
                 out.innerHTML += (r.output || []).map(l => `<span class="${l.type === 'error' ? 'line-error' : l.type === 'warn' ? 'line-warn' : ''}">${esc(l.text)}</span>`).join('\n');
-                if (r.success) showToast('Deploy abgeschlossen');
-                else showToast('Deploy fehlgeschlagen', 'error');
-            } catch(e) { out.innerHTML += `<span class="line-error">Fehler: ${esc(e.message)}</span>`; }
+                if (r.success) {
+                    addAuditEntry('Deploy ausgefuehrt', `${whatif ? '(WhatIf) ' : ''}${config.ous.length} OUs, ${config.groups.length} Gruppen`, '&#9654;');
+                    showToast('Deploy abgeschlossen');
+                } else {
+                    addAuditEntry('Deploy fehlgeschlagen', '', '&#10060;');
+                    showToast('Deploy fehlgeschlagen', 'error');
+                }
+            } catch(e) { out.innerHTML += `<span class="line-error">Fehler: ${esc(e.message)}</span>`; addAuditEntry('Deploy Fehler', e.message, '&#10060;'); }
             btn.disabled = false; btn.textContent = 'Deploy starten';
         }
 
@@ -941,11 +1129,27 @@ $HtmlPage = @'
             out.innerHTML = '<span class="line-info">Starte Audit...</span>\n';
             try {
                 const r = await api('/api/audit', 'POST');
+                const errors = (r.output || []).filter(l => l.type === 'error' || l.type === 'warn').length;
                 out.innerHTML += (r.output || []).map(l => `<span class="${l.type === 'error' ? 'line-error' : l.type === 'warn' ? 'line-warn' : ''}">${esc(l.text)}</span>`).join('\n');
-                if (r.success) showToast('Audit abgeschlossen');
-                else showToast('Audit fehlgeschlagen', 'error');
-            } catch(e) { out.innerHTML += `<span class="line-error">Fehler: ${esc(e.message)}</span>`; }
+                if (r.success) {
+                    addAuditEntry('Audit abgeschlossen', `${errors} Abweichungen gefunden`, '&#128202;');
+                    showToast(`Audit abgeschlossen: ${errors} Abweichungen`);
+                } else {
+                    addAuditEntry('Audit fehlgeschlagen', '', '&#10060;');
+                    showToast('Audit fehlgeschlagen', 'error');
+                }
+            } catch(e) { out.innerHTML += `<span class="line-error">Fehler: ${esc(e.message)}</span>`; addAuditEntry('Audit Fehler', e.message, '&#10060;'); }
             btn.disabled = false; btn.textContent = 'Audit starten';
+        }
+
+        // Show diff before deploy
+        function showDeployPreview() {
+            const issues = validateConfig();
+            if (issues.some(i => i.type === 'error')) {
+                showDiff();
+            } else {
+                runDeploy();
+            }
         }
 
         // === Search ===
@@ -957,12 +1161,318 @@ $HtmlPage = @'
         // === Helper ===
         function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
         function escAttr(s) { return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+        function getTierBadge(name) {
+            const n = (name || '').toLowerCase();
+            if (n.includes('tier 0')) return '<span class="ou-tag badge-t0">T0</span>';
+            if (n.includes('tier 1')) return '<span class="ou-tag badge-t1">T1</span>';
+            if (n.includes('tier 2')) return '<span class="ou-tag badge-t2">T2</span>';
+            if (n.includes('tier model') || n.includes('paw')) return '<span class="ou-tag badge-admin">Admin</span>';
+            return '';
+        }
+        function getTierColor(name) {
+            const n = (name || '').toLowerCase();
+            if (n.includes('tier 0')) return 'var(--tier0)';
+            if (n.includes('tier 1')) return 'var(--tier1)';
+            if (n.includes('tier 2')) return 'var(--tier2)';
+            return 'var(--tierAdmin)';
+        }
 
-        // === Modal Escape Key (BUG-004) ===
+        // === Phase 1: Undo/Redo System ===
+        const history = { past: [], future: [] };
+        function pushState() {
+            history.past.push(JSON.parse(JSON.stringify(config)));
+            if (history.past.length > 50) history.past.shift();
+            history.future = [];
+        }
+        function undo() {
+            if (!history.past.length) return;
+            history.future.push(JSON.parse(JSON.stringify(config)));
+            const prev = history.past.pop();
+            config.ous = prev.ous; config.groups = prev.groups; config.users = prev.users;
+            config.acls = prev.acls; config.gpos = prev.gpos;
+            renderOUS(); renderGroups(); renderUsers(); renderACLs(); renderConfigPanels(); loadDashboard();
+            showToast('Rueckgaengig');
+        }
+        function redo() {
+            if (!history.future.length) return;
+            history.past.push(JSON.parse(JSON.stringify(config)));
+            const next = history.future.pop();
+            config.ous = next.ous; config.groups = next.groups; config.users = next.users;
+            config.acls = next.acls; config.gpos = next.gpos;
+            renderOUS(); renderGroups(); renderUsers(); renderACLs(); renderConfigPanels(); loadDashboard();
+            showToast('Wiederherstellen');
+        }
+
+        // === Phase 1: Audit Log ===
+        const auditLog = [];
+        function addAuditEntry(action, detail, icon = '&#9998;') {
+            const now = new Date();
+            const time = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+            auditLog.unshift({ time, action, detail, icon });
+            if (auditLog.length > 100) auditLog.pop();
+            renderAuditLog();
+        }
+        function renderAuditLog() {
+            const el = document.getElementById('audit-log');
+            if (!auditLog.length) { el.innerHTML = '<div class="search-empty" style="padding:20px;">Noch keine Aenderungen protokolliert.</div>'; return; }
+            el.innerHTML = auditLog.map(e => `
+                <div class="audit-entry">
+                    <span class="audit-time">${esc(e.time)}</span>
+                    <span class="audit-icon">${e.icon}</span>
+                    <div class="audit-content">
+                        <div class="audit-action">${esc(e.action)}</div>
+                        ${e.detail ? `<div class="audit-detail">${esc(e.detail)}</div>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // === Phase 1: Global Search (Ctrl+K) ===
+        function showSearch() {
+            document.getElementById('search-overlay').classList.add('show');
+            const input = document.getElementById('search-input');
+            input.value = '';
+            input.focus();
+            renderSearchResults('');
+        }
+        function hideSearch() {
+            document.getElementById('search-overlay').classList.remove('show');
+        }
+        function renderSearchResults(query) {
+            const el = document.getElementById('search-results');
+            if (!query) { el.innerHTML = '<div class="search-empty">Tippen um zu suchen...</div>'; return; }
+            const q = query.toLowerCase();
+            const results = [];
+            config.ous.forEach(ou => {
+                if (ou.name.toLowerCase().includes(q) || (ou.path || '').toLowerCase().includes(q) || (ou.comment || '').toLowerCase().includes(q)) {
+                    results.push({ type: 'ou', icon: '&#128193;', name: ou.name, path: ou.path, badge: getTierBadge(ou.name), page: 'ous' });
+                }
+            });
+            config.groups.forEach(g => {
+                if (g.name.toLowerCase().includes(q) || g.samaccountname.toLowerCase().includes(q)) {
+                    results.push({ type: 'group', icon: '&#128101;', name: g.name, path: g.samaccountname, badge: '', page: 'groups' });
+                }
+            });
+            config.users.forEach(u => {
+                if ((u.samAccountName || '').toLowerCase().includes(q) || (u.displayName || '').toLowerCase().includes(q)) {
+                    results.push({ type: 'user', icon: '&#128100;', name: u.displayName || u.samAccountName, path: u.samAccountName, badge: '', page: 'users' });
+                }
+            });
+            config.acls.forEach(a => {
+                if (a.identityreference.toLowerCase().includes(q) || (a.targetOUPath || '').toLowerCase().includes(q)) {
+                    results.push({ type: 'acl', icon: '&#128274;', name: a.identityreference, path: a.targetOUPath, badge: '', page: 'acls' });
+                }
+            });
+            config.gpos.forEach(g => {
+                if (g.name.toLowerCase().includes(q)) {
+                    results.push({ type: 'gpo', icon: '&#128196;', name: g.name, path: g.mode, badge: '', page: 'config' });
+                }
+            });
+            if (!results.length) { el.innerHTML = '<div class="search-empty">Keine Ergebnisse fuer "' + esc(query) + '"</div>'; return; }
+            const grouped = {};
+            results.forEach(r => { if (!grouped[r.type]) grouped[r.type] = []; grouped[r.type].push(r); });
+            const labels = { ou: 'OUs', group: 'Gruppen', user: 'Benutzer', acl: 'ACLs', gpo: 'GPOs' };
+            let html = '';
+            for (const [type, items] of Object.entries(grouped)) {
+                html += `<div class="search-group-label">${labels[type] || type}</div>`;
+                items.forEach(r => {
+                    html += `<div class="search-result" onclick="hideSearch();navigateTo('${r.page}')"><span class="result-icon">${r.icon}</span><div class="result-info"><div class="result-name">${esc(r.name)}</div><div class="result-path">${esc(r.path || '')}</div></div>${r.badge ? `<span class="result-badge">${r.badge}</span>` : ''}</div>`;
+                });
+            }
+            el.innerHTML = html;
+        }
+
+        // === Phase 1: Command Palette (Ctrl+Shift+P) ===
+        function showCmdPalette() {
+            document.getElementById('cmd-palette').classList.add('show');
+            const input = document.getElementById('cmd-input');
+            input.value = '';
+            input.focus();
+            renderCmdResults('');
+        }
+        function hideCmdPalette() {
+            document.getElementById('cmd-palette').classList.remove('show');
+        }
+        function renderCmdResults(query) {
+            const q = query.toLowerCase();
+            const commands = [
+                { icon: '&#128202;', label: 'Dashboard oeffnen', shortcut: '', action: () => navigateTo('dashboard') },
+                { icon: '&#128193;', label: 'OUs anzeigen', shortcut: '', action: () => navigateTo('ous') },
+                { icon: '&#128101;', label: 'Gruppen anzeigen', shortcut: '', action: () => navigateTo('groups') },
+                { icon: '&#128100;', label: 'Benutzer anzeigen', shortcut: '', action: () => navigateTo('users') },
+                { icon: '&#128274;', label: 'ACLs anzeigen', shortcut: '', action: () => navigateTo('acls') },
+                { icon: '&#9881;', label: 'Konfiguration anzeigen', shortcut: '', action: () => navigateTo('config') },
+                { icon: '&#9654;', label: 'Deploy starten', shortcut: '', action: () => navigateTo('deploy') },
+                { icon: '&#128202;', label: 'Audit starten', shortcut: '', action: () => navigateTo('audit') },
+                { icon: '&#128193;', label: 'Neue OU erstellen', shortcut: '', action: () => { navigateTo('ous'); showModal('ou-modal'); } },
+                { icon: '&#128101;', label: 'Neue Gruppe erstellen', shortcut: '', action: () => { navigateTo('groups'); showModal('group-modal'); } },
+                { icon: '&#128100;', label: 'Neuen Benutzer erstellen', shortcut: '', action: () => { navigateTo('users'); showModal('user-modal'); } },
+                { icon: '&#128274;', label: 'Neue ACL erstellen', shortcut: '', action: () => { navigateTo('acls'); showModal('acl-modal'); } },
+                { icon: '&#128196;', label: 'Neue GPO erstellen', shortcut: '', action: () => { navigateTo('config'); showModal('gpo-modal'); } },
+                { icon: '&#128190;', label: 'Alle Konfigurationen speichern', shortcut: '', action: () => saveAllConfigs() },
+                { icon: '&#8634;', label: 'Rueckgaengig', shortcut: 'Ctrl+Z', action: () => undo() },
+                { icon: '&#8635;', label: 'Wiederherstellen', shortcut: 'Ctrl+Y', action: () => redo() },
+            ];
+            const filtered = q ? commands.filter(c => c.label.toLowerCase().includes(q)) : commands;
+            const el = document.getElementById('cmd-results');
+            if (!filtered.length) { el.innerHTML = '<div class="search-empty">Keine Befehle gefunden</div>'; return; }
+            let html = '<div class="cmd-sep">Befehle</div>';
+            filtered.forEach((c, i) => {
+                html += `<div class="cmd-result${i === 0 ? ' active' : ''}" onclick="hideCmdPalette();(${c.action})()"><span class="cmd-icon">${c.icon}</span><span class="cmd-label">${esc(c.label)}</span>${c.shortcut ? `<span class="cmd-shortcut">${c.shortcut}</span>` : ''}</div>`;
+            });
+            el.innerHTML = html;
+        }
+
+        // === Phase 1: Config Validation ===
+        function validateConfig() {
+            const issues = [];
+            // Check OU parent references
+            config.ous.forEach(ou => {
+                if (ou.path && ou.path !== '{{DOMAIN_DN}}' && ou.path.startsWith('OU=')) {
+                    const parentName = ou.path.split(',')[0].replace('OU=', '');
+                    if (!config.ous.some(o => o.name === parentName)) {
+                        issues.push({ type: 'error', text: `OU "${ou.name}" referenziert nicht existierende Parent-OU "${parentName}"` });
+                    }
+                }
+            });
+            // Check for duplicate SAM names
+            const sams = new Set();
+            config.groups.forEach(g => {
+                if (sams.has(g.samaccountname)) issues.push({ type: 'error', text: `Doppelter SAM-Name: "${g.samaccountname}"` });
+                sams.add(g.samaccountname);
+            });
+            // Check ACL principal exists
+            config.acls.forEach(a => {
+                if (!config.groups.some(g => g.samaccountname === a.identityreference)) {
+                    issues.push({ type: 'warn', text: `ACL Principal "${a.identityreference}" existiert nicht als Gruppe` });
+                }
+            });
+            // Check empty configs
+            if (!config.ous.length) issues.push({ type: 'warn', text: 'Keine OUs konfiguriert' });
+            if (!config.groups.length) issues.push({ type: 'warn', text: 'Keine Gruppen konfiguriert' });
+            return issues;
+        }
+
+        // === Phase 2: Diff View ===
+        function showDiff() {
+            const body = document.getElementById('diff-body');
+            const issues = validateConfig();
+            let html = '';
+            if (issues.length) {
+                html += '<div class="diff-section"><div class="diff-section-title"><span>&#9888;&#65039;</span> Validierung</div>';
+                issues.forEach(i => {
+                    html += `<div class="validation-item ${i.type === 'error' ? 'validation-error' : 'validation-warn'}"><span class="validation-icon">${i.type === 'error' ? '&#10060;' : '&#9888;&#65039;'}</span><span class="validation-text">${esc(i.text)}</span></div>`;
+                });
+                html += '</div>';
+            }
+            // Show config summary
+            html += '<div class="diff-section"><div class="diff-section-title"><span>&#128203;</span> Konfiguration</div>';
+            html += `<div class="diff-item diff-add">OUs: ${config.ous.length} konfiguriert</div>`;
+            html += `<div class="diff-item diff-add">Gruppen: ${config.groups.length} konfiguriert</div>`;
+            html += `<div class="diff-item diff-add">Benutzer: ${config.users.length} konfiguriert</div>`;
+            html += `<div class="diff-item diff-add">ACLs: ${config.acls.length} konfiguriert</div>`;
+            html += `<div class="diff-item diff-add">GPOs: ${config.gpos.length} konfiguriert</div>`;
+            html += '</div>';
+            body.innerHTML = html;
+            document.getElementById('diff-overlay').classList.add('show');
+        }
+        function hideDiff() { document.getElementById('diff-overlay').classList.remove('show'); }
+
+        // === Phase 2: Interactive OU Tree ===
+        function renderInteractiveOUTree() {
+            const container = document.getElementById('ou-tree-interactive');
+            const rootOUs = config.ous.filter(ou => ou.path === '{{DOMAIN_DN}}');
+            function getChildren(name) {
+                return config.ous.filter(ou => ou.path && (ou.path === 'OU=' + name || ou.path.startsWith('OU=' + name + ',')));
+            }
+            function buildNode(ou, isRoot = false) {
+                const children = getChildren(ou.name);
+                const hasChildren = children.length > 0;
+                const badge = getTierBadge(ou.name);
+                const color = getTierColor(ou.name);
+                let html = `<div class="ou-tree-node${isRoot ? ' root' : ''}" data-name="${escAttr(ou.name)}">`;
+                html += `<div class="ou-tree-row" onclick="toggleTreeNode(this)" oncontextmenu="showOUContextMenu(event, '${escAttr(ou.name)}')">`;
+                html += `<span class="tree-toggle ${hasChildren ? '' : 'leaf'}">&#9654;</span>`;
+                html += `<span class="tree-icon">&#128193;</span>`;
+                html += `<span class="tree-name" style="color:${color}">${esc(ou.name)}</span>`;
+                if (badge) html += `<span class="tree-tag">${badge}</span>`;
+                html += '</div>';
+                if (hasChildren) {
+                    html += '<div class="ou-tree-children">';
+                    children.forEach(c => { html += buildNode(c); });
+                    html += '</div>';
+                }
+                html += '</div>';
+                return html;
+            }
+            let html = '';
+            rootOUs.forEach(ou => { html += buildNode(ou, true); });
+            container.innerHTML = html || '<div class="search-empty">Keine OUs konfiguriert.</div>';
+        }
+        function toggleTreeNode(row) {
+            const node = row.parentElement;
+            const toggle = row.querySelector('.tree-toggle');
+            const children = node.querySelector('.ou-tree-children');
+            if (!children) return;
+            const expanded = children.classList.toggle('expanded');
+            toggle.classList.toggle('expanded', expanded);
+        }
+
+        // === Phase 2: Context Menu ===
+        let contextTarget = null;
+        function showOUContextMenu(e, ouName) {
+            e.preventDefault();
+            contextTarget = ouName;
+            const menu = document.getElementById('context-menu');
+            const idx = config.ous.findIndex(ou => ou.name === ouName);
+            menu.innerHTML = `
+                <div class="context-item" onclick="hideContextMenu();navigateTo('ous')"><span class="ctx-icon">&#128193;</span> OUs anzeigen</div>
+                <div class="context-item" onclick="hideContextMenu();showRenameOU(${idx})"><span class="ctx-icon">&#9998;</span> Umbenennen</div>
+                <div class="context-item" onclick="hideContextMenu();showModal('ou-modal')"><span class="ctx-icon">&#10010;</span> Neue Unter-OU</span></div>
+                <div class="context-sep"></div>
+                <div class="context-item danger" onclick="hideContextMenu();removeOU(${idx})"><span class="ctx-icon">&#128465;</span> Loeschen</div>
+            `;
+            menu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
+            menu.style.top = Math.min(e.clientY, window.innerHeight - 200) + 'px';
+            menu.classList.add('show');
+        }
+        function hideContextMenu() { document.getElementById('context-menu').classList.remove('show'); }
+
+        // === Navigation Helper ===
+        function navigateTo(page) {
+            document.querySelectorAll('.nav-item').forEach(n => { n.classList.remove('active'); n.setAttribute('aria-current', ''); });
+            const item = document.querySelector(`.nav-item[data-page="${page}"]`);
+            if (item) { item.classList.add('active'); item.setAttribute('aria-current', 'page'); }
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById('page-' + page).classList.add('active');
+            if (page === 'dashboard') loadDashboard();
+            if (page === 'config') renderConfigPanels();
+        }
+
+        // === Global Keyboard Shortcuts ===
         document.addEventListener('keydown', e => {
+            // Ctrl+K: Search
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); showSearch(); return; }
+            // Ctrl+Shift+P: Command Palette
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'P') { e.preventDefault(); showCmdPalette(); return; }
+            // Ctrl+Z: Undo
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+            // Ctrl+Y or Ctrl+Shift+Z: Redo
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return; }
+            // Escape: Close overlays
             if (e.key === 'Escape') {
+                hideSearch(); hideCmdPalette(); hideDiff(); hideContextMenu();
                 document.querySelectorAll('.modal-overlay.show').forEach(m => m.classList.remove('show'));
             }
+        });
+
+        // Search input handler
+        document.getElementById('search-input')?.addEventListener('input', e => renderSearchResults(e.target.value));
+        document.getElementById('cmd-input')?.addEventListener('input', e => renderCmdResults(e.target.value));
+
+        // Close context menu on click outside
+        document.addEventListener('click', e => {
+            if (!e.target.closest('.context-menu')) hideContextMenu();
         });
 
         // === Init ===
