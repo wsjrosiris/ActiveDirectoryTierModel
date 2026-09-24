@@ -9,7 +9,11 @@ Tier Model dauerhaft betreiben, ohne die PowerShell-Skripte von Hand aufzurufen:
   ein Live-Protokoll.
 - **Zeitpläne** führen Audits regelmäßig aus. Abweichungen (Drift) erscheinen im Dashboard als Trend.
 - Das **Änderungsprotokoll** zeigt, wer wann was geändert, gestartet oder freigegeben hat.
-- **Benutzer und Rollen** regeln, wer lesen, bearbeiten, planen oder anwenden darf.
+- **Benutzer und Rollen** regeln, wer lesen, bearbeiten, planen oder anwenden darf – mit **Windows-Anmeldung**
+  (Rollen aus AD-Gruppen) oder lokalen Konten.
+- Das **Vier-Augen-Prinzip** verlangt für Änderungen am AD die Freigabe einer zweiten Person.
+- **Benachrichtigungen** per E-Mail, Microsoft Teams oder Webhook melden Drift, Fehler, angewendete Änderungen und
+  offene Freigaben.
 
 ![Dashboard](img/dashboard-light.png)
 
@@ -45,11 +49,14 @@ Tier Model dauerhaft betreiben, ohne die PowerShell-Skripte von Hand aufzurufen:
 | **PostgreSQL** | Konfigurationsversionen, Läufe mit Protokollzeilen und Befunden, Zeitpläne, Änderungsprotokoll, Benutzer, Einstellungen. |
 | **RunWorker** | Führt Läufe **nacheinander** aus. Änderungen am AD dürfen sich nie überschneiden. |
 | **Arbeitskopie je Lauf** | Für jeden Lauf entsteht `…\runs\<Nr>\` mit den Framework-Skripten und der Konfiguration aus der Datenbank. Spätere Änderungen beeinflussen einen laufenden Deploy nicht. |
-| **ScheduleWorker** | Prüft alle 30 Sekunden fällige Zeitpläne und löscht einmal täglich abgelaufene Protokolle und Arbeitskopien. |
+| **ScheduleWorker** | Prüft alle 30 Sekunden fällige Zeitpläne und abgelaufene Freigaben und löscht einmal täglich abgelaufene Protokolle und Arbeitskopien. |
+| **NotificationWorker** | Versendet Benachrichtigungen im Hintergrund (mit Wiederholung), damit ein langsamer Mailserver keinen Lauf aufhält. |
 
 ### Ablauf eines Laufs
 
-1. Ein Anwender startet Deploy oder Audit. Der Lauf kommt mit Status **Wartend** in die Warteschlange.
+1. Ein Anwender startet Deploy oder Audit. Der Lauf kommt mit Status **Wartend** in die Warteschlange –
+   bei aktivem Vier-Augen-Prinzip und *Anwenden* zuerst in **Wartet auf Freigabe** (mit festgeschriebenen
+   Konfigurationsversionen) und erst nach der Freigabe in die Warteschlange.
 2. Der RunWorker übernimmt ihn (**Läuft**) und merkt sich die Versionen aller Konfigurationsbereiche.
 3. Die Konfiguration wird validiert. Bei Fehlern startet **Anwenden** nicht.
 4. Der Dienst legt die Arbeitskopie an und startet `pwsh.exe -File Deploy-TierModel.ps1 …` bzw. `Audit-TierModel.ps1`.

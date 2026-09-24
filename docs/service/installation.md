@@ -153,8 +153,9 @@ Nach Bestätigung führt der Assistent aus:
 8. Dateiberechtigungen setzen (Konfigurationsdatei nur für SYSTEM, Administratoren und Dienstkonto lesbar)
 9. Ereignisquelle registrieren, Windows-Dienst `TierModelService` anlegen (verzögerter Autostart,
    Neustart nach Fehlern), Dienstkonto zuweisen
-10. Firewall-Regel anlegen
-11. Dienst starten und auf `https://localhost:<Port>/healthz` warten
+10. optional SPN `HTTP/<fqdn>` für das Dienstkonto registrieren (Windows-Anmeldung per Kerberos)
+11. Firewall-Regel anlegen
+12. Dienst starten und auf `https://localhost:<Port>/healthz` warten
 
 Am Ende steht die Adresse, z. B. `https://tiermodel01.contoso.com:8443/`.
 
@@ -164,7 +165,9 @@ Am Ende steht die Adresse, z. B. `https://tiermodel01.contoso.com:8443/`.
 - [ ] Unter **Konfiguration** die importierte Konfiguration an die eigene Umgebung anpassen.
 - [ ] Einen **Deploy im Planungsmodus** (WhatIf) starten und das Protokoll prüfen. Schlägt die Voraussetzungsprüfung
       fehl, sind Rechte oder Module des Dienstkontos zu klären ([Fehlerbehebung](betrieb.md#fehlerbehebung)).
-- [ ] Weitere Benutzer anlegen (**Administration › Benutzer**) – jede Person mit eigenem Konto und passender Rolle.
+- [ ] **Windows-Anmeldung** einrichten (AD-Gruppen je Rolle, [Betrieb](betrieb.md#windows-anmeldung-einrichten))
+      oder weitere lokale Benutzer anlegen – jede Person mit eigenem Konto und passender Rolle.
+- [ ] **Benachrichtigungen** einrichten (E-Mail/Teams) und bei mehreren Operatoren das **Vier-Augen-Prinzip** aktivieren.
 - [ ] Einen **Zeitplan** für nächtliche Audits anlegen.
 - [ ] Datensicherung der Datenbank einrichten ([Betrieb › Sicherung](betrieb.md#sicherung-und-wiederherstellung)).
 

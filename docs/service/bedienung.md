@@ -5,8 +5,16 @@ schalten sich über das Symbol oben rechts um; Voreinstellung ist die Einstellun
 
 ## Anmeldung und Rollen
 
-Jede Person meldet sich mit einem **eigenen Konto** an. Konten legt ein Administrator unter
-**Administration › Benutzer** an. Neue Konten und zurückgesetzte Passwörter müssen bei der nächsten Anmeldung
+Es gibt zwei Arten von Konten:
+
+- **Windows-Konto** (wenn eingerichtet): **Mit Windows-Konto anmelden** meldet ohne Passworteingabe mit dem
+  angemeldeten Domänenkonto an (Kerberos). Die Rolle ergibt sich bei jeder Anmeldung aus den AD-Gruppen, die ein
+  Administrator unter **Administration › Windows-Anmeldung** den Rollen zugeordnet hat. Das Konto erscheint nach der
+  ersten Anmeldung automatisch in der Benutzerliste.
+- **Lokales Konto**: Benutzername und Passwort, angelegt von einem Administrator unter **Administration › Benutzer**.
+  Mindestens ein lokales Administratorkonto sollte als Notfallzugang bestehen bleiben.
+
+Für lokale Konten gilt: Neue Konten und zurückgesetzte Passwörter müssen bei der nächsten Anmeldung
 ein eigenes Passwort (mindestens 12 Zeichen) vergeben. Nach **5 Fehlversuchen** ist ein Konto 15 Minuten
 gesperrt; ein Administrator kann es vorher entsperren.
 
@@ -16,6 +24,8 @@ gesperrt; ein Administrator kann es vorher entsperren.
 | **Bearbeiter** (Editor) | + Konfiguration ändern und Versionen wiederherstellen, Audits starten, Deploy im **Planungsmodus** |
 | **Operator** | + Deploy **anwenden** (ändert das AD), Läufe abbrechen, Zeitpläne verwalten |
 | **Administrator** | + Benutzer und Einstellungen verwalten |
+
+Wer in mehreren zugeordneten AD-Gruppen ist, erhält die höchste Rolle.
 
 Aktionen, die die eigene Rolle nicht erlaubt, sind ausgeblendet oder deaktiviert. Der Dienst prüft die Rolle
 zusätzlich bei jedem Aufruf.
@@ -117,6 +127,21 @@ Anschließend öffnet sich der Lauf mit Live-Protokoll.
 !!! tip "Empfohlenes Vorgehen"
     Immer zuerst planen, das Protokoll prüfen und erst dann mit denselben Parametern anwenden.
 
+### Freigabe durch eine zweite Person (Vier-Augen-Prinzip)
+
+Ist unter **Administration › Einstellungen** „Vier-Augen-Prinzip“ aktiv, wird ein Deploy im Modus *Anwenden* nicht
+sofort ausgeführt, sondern **zur Freigabe eingereicht** (Status *Wartet auf Freigabe*):
+
+1. Beim Einreichen werden die Versionen aller Konfigurationsbereiche **festgeschrieben**. Ausgeführt wird genau
+   dieser Stand – auch wenn die Konfiguration danach weiter bearbeitet wird.
+2. Eine **zweite Person mit der Rolle Operator** öffnet den Lauf (Dashboard › *Freigaben ausstehend* oder
+   Benachrichtigung), prüft Parameter, festgeschriebene Versionen und den zugehörigen Planungslauf und wählt
+   **Freigeben** (optional mit Kommentar) oder **Ablehnen** (mit Begründung).
+3. Nach der Freigabe läuft der Deploy wie gewohnt. Wer freigegeben hat, steht im Lauf und im Änderungsprotokoll.
+
+Die antragstellende Person kann den eigenen Antrag nicht freigeben, aber zurückziehen (**Abbrechen**). Anträge, die
+nicht innerhalb der eingestellten Frist (Standard 24 Stunden) entschieden werden, verfallen automatisch.
+
 ## Audits und Zeitpläne
 
 Unter **Audits** startet man ein Audit sofort (gleiche Parameter wie beim Deploy, ohne Modus) und sieht die
@@ -142,11 +167,13 @@ Die Liste zeigt alle Deploys und Audits mit Status, Auslöser, Dauer und Ergebni
 
 | Status | Bedeutung |
 |---|---|
+| Wartet auf Freigabe | Deploy/Anwenden, der noch von einer zweiten Person freigegeben werden muss |
 | Wartend | in der Warteschlange – Läufe werden nacheinander ausgeführt |
 | Läuft | PowerShell arbeitet |
 | Erfolgreich | Skript mit Code 0 beendet (ein Audit mit Abweichungen ist trotzdem erfolgreich) |
 | Fehlgeschlagen | Skript mit Fehlercode beendet, Validierungsfehler, Zeitüberschreitung oder Dienst-Neustart |
-| Abgebrochen | durch einen Operator abgebrochen |
+| Abgebrochen | durch einen Operator abgebrochen oder vom Antragsteller zurückgezogen |
+| Abgelehnt | Freigabe verweigert oder Frist abgelaufen |
 
 Die Detailseite eines Laufs enthält:
 
@@ -173,12 +200,31 @@ entsperren, löschen. Das eigene Konto kann weder gelöscht noch herabgestuft we
 Administrator bleibt immer erhalten. Änderungen an Rolle, Status oder Passwort beenden die Sitzungen des
 betroffenen Kontos sofort.
 
+**Windows-Anmeldung**: Anmeldung mit Windows-Konto ein-/ausschalten und je Rolle die AD-Gruppen festlegen
+(`DOMÄNE\Gruppe` oder SID). Voraussetzungen siehe [Betrieb › Windows-Anmeldung](betrieb.md#windows-anmeldung-einrichten).
+
+**Benachrichtigungen**: SMTP-Server und beliebig viele Kanäle (E-Mail, Microsoft Teams, Webhook). Je Kanal lässt sich
+wählen, bei welchen Ereignissen er benachrichtigt wird:
+
+| Ereignis | Wann |
+|---|---|
+| Drift | ein Audit hat Abweichungen gefunden |
+| Fehler | ein Lauf ist fehlgeschlagen |
+| Anwenden | ein Deploy hat Änderungen im AD angewendet |
+| Freigabe | ein Deploy wartet auf Freigabe |
+
+**Testnachricht senden** prüft einen Kanal sofort; der letzte Fehler eines Kanals wird angezeigt. Einrichtung siehe
+[Betrieb › Benachrichtigungen](betrieb.md#benachrichtigungen-einrichten).
+
 **Einstellungen**:
 
 | Einstellung | Bedeutung |
 |---|---|
 | Standard-Domain-Controller | Vorbelegung in Deploy, Audit und Zeitplänen |
 | ADML-Sprache | Standard für `-AdmlLanguage` |
+| Vier-Augen-Prinzip | Deploys im Modus *Anwenden* brauchen die Freigabe einer zweiten Person |
+| Freigabefrist (Stunden) | danach verfällt ein Antrag automatisch |
+| Öffentliche Adresse | z. B. `https://tiermodel01.contoso.com:8443` – für Links in Benachrichtigungen |
 | Aufbewahrung von Läufen (Tage) | Protokollzeilen und Arbeitsverzeichnisse älterer Läufe werden gelöscht; Status, Ergebnis und Befunde bleiben. `0` = unbegrenzt |
 
 Framework- und PowerShell-Pfad werden angezeigt, sind aber nur in der Dienstkonfiguration änderbar

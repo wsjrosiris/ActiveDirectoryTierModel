@@ -13,6 +13,9 @@ Abweichungen (Drift). Dieser Fork ergänzt:
 | **Versionierte Konfiguration** | Formulare statt JSON-Dateien, jede Änderung als Version mit Autor, Kommentar, Diff und Wiederherstellung |
 | **Deploy & Audit per Klick** | Warteschlange, Live-Protokoll, Planen vor Anwenden, Freigabe nur durch Operatoren |
 | **Geplante Audits** | Drift-Erkennung per Zeitplan mit Verlauf im Dashboard |
+| **Windows-Anmeldung** | Single Sign-on mit dem Domänenkonto, Rollen über AD-Gruppen |
+| **Vier-Augen-Prinzip** | Änderungen am AD erst nach Freigabe durch eine zweite Person, mit festgeschriebenem Konfigurationsstand |
+| **Benachrichtigungen** | E-Mail, Microsoft Teams und Webhooks bei Drift, Fehlern, Anwenden und offenen Freigaben |
 | **Weitere Host-Sprachen** | Deploy und Audit laufen auch auf Windows-Servern mit deutscher und 17 weiteren Systemsprachen ([Einschränkungen](#sprachen)) |
 
 | Dashboard | Konfiguration bearbeiten |
@@ -82,7 +85,7 @@ Beim TierModel Service gelten diese Anforderungen für das **Dienstkonto**.
 | **Audits** | sofort oder per Zeitplan (Cron + Zeitzone), Befunde je Lauf |
 | **Läufe** | Warteschlange, Live-Protokoll, Abbrechen, verwendete Konfigurationsversionen |
 | **Änderungsprotokoll** | wer hat wann was geändert, gestartet oder freigegeben |
-| **Administration** | Benutzer mit Rollen (Betrachter, Bearbeiter, Operator, Administrator), Einstellungen |
+| **Administration** | Benutzer mit Rollen (Betrachter, Bearbeiter, Operator, Administrator), Windows-Anmeldung mit AD-Gruppen, Benachrichtigungen, Vier-Augen-Prinzip, Einstellungen |
 
 **Technik:** ASP.NET Core 10 als Windows-Dienst (self-contained, keine .NET-Installation nötig), PostgreSQL,
 React/TypeScript-Oberfläche, die der Dienst selbst ausliefert. Nur HTTPS, eigene Konten mit Sperre nach

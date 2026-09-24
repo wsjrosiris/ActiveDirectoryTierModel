@@ -18,6 +18,8 @@ Deshalb gilt:
 | Bereich | Maßnahme |
 |---|---|
 | Transport | Nur HTTPS, HSTS; Zertifikat aus dem Windows-Zertifikatspeicher, privater Schlüssel nicht exportierbar |
+| Windows-Anmeldung | Kerberos/NTLM über den Windows-Server; Rollen ausschließlich über AD-Gruppen (SIDs, höchste Rolle gilt), bei jeder Anmeldung neu bestimmt; deaktivierte Konten bleiben gesperrt |
+| Vier-Augen-Prinzip | optional: *Anwenden* nur nach Freigabe durch einen zweiten Operator; festgeschriebene Konfigurationsversionen; Frist mit automatischem Verfall |
 | Anmeldung | Eigene Konten, Passwörter mit PBKDF2 gehasht (ASP.NET Core Identity), mindestens 12 Zeichen, Sperre nach 5 Fehlversuchen für 15 Minuten, Rate-Limit 10 Anmeldungen/Minute je IP, Antwortzeit unabhängig davon, ob das Konto existiert |
 | Sitzungen | Cookie `HttpOnly`, `Secure`, `SameSite=Strict`, 8 Stunden gleitend; wird bei Deaktivierung, Löschung, Rollen- oder Passwortänderung sofort ungültig |
 | CSRF | Antiforgery-Token (Cookie `XSRF-TOKEN` → Header `X-XSRF-TOKEN`) für jeden schreibenden Aufruf, an die angemeldete Identität gebunden |
@@ -26,6 +28,7 @@ Deshalb gilt:
 | Prozessstart | PowerShell wird ohne Shell mit Argumentliste gestartet; DC-Name und Sprache werden per Regex geprüft, bevor sie Argumente werden; stdin ist geschlossen, damit unerwartete Rückfragen nicht hängen |
 | Dateien | Konfigurationsdateinamen stammen aus einem festen Katalog – keine Pfadangaben aus Anfragen |
 | Nachvollziehbarkeit | Jede Konfigurationsänderung mit Autor, Kommentar und Diff; Änderungsprotokoll für Läufe, Benutzer, Zeitpläne, Einstellungen und Anmeldungen; jeder Lauf speichert die verwendeten Konfigurationsversionen |
+| Benachrichtigungen | SMTP-Passwort und Webhook-URLs mit ASP.NET Core Data Protection verschlüsselt in der Datenbank; URLs werden nur gekürzt angezeigt; Ziele nur per https |
 | Geheimnisse | Datenbankpasswort nur in `appsettings.Production.json` (ACL: SYSTEM, Administratoren, Dienstkonto); Installer übergibt Passwörter über stdin, nie auf der Kommandozeile; das Superuser-Passwort der lokalen PostgreSQL-Installation wird über eine temporäre, ACL-geschützte Optionsdatei übergeben und danach gelöscht |
 
 ## Härtungsempfehlungen
@@ -36,6 +39,9 @@ Deshalb gilt:
 - [ ] Zertifikat der Unternehmens-CA statt selbstsigniert.
 - [ ] Firewall-Regel auf das Netz der Tier-0-PAWs beschränken.
 - [ ] Bei entfernter Datenbank TLS mit Zertifikatsprüfung (`VerifyFull`) und `pg_hba.conf` nur für den Dienst-Server.
+- [ ] **Windows-Anmeldung** mit eigenen AD-Gruppen je Rolle nutzen; lokale Konten nur als Notfallzugang.
+- [ ] **Vier-Augen-Prinzip** aktivieren, sobald mehr als ein Operator existiert.
+- [ ] **Benachrichtigungen** für Drift, Fehler und Freigaben an das zuständige Team bzw. SIEM.
 - [ ] Rollen sparsam vergeben: die meisten Personen brauchen *Betrachter* oder *Bearbeiter*; *Operator* nur für
       die, die Änderungen im AD freigeben.
 - [ ] Datenbanksicherungen verschlüsselt und getrennt aufbewahren.
@@ -49,7 +55,7 @@ Deshalb gilt:
   Administratoren). Deshalb die Oberfläche nur aus einem geschützten Netz erreichbar machen und notfalls per
   Kommandozeile entsperren (`admin reset-password`).
 
-- Konten werden in der eigenen Datenbank verwaltet; es gibt (noch) keine Anmeldung per Kerberos/Entra ID und keine
-  Mehr-Faktor-Authentifizierung. Die Oberfläche deshalb nur aus einem geschützten Netz erreichbar machen.
-- Das „Vier-Augen-Prinzip“ (Freigabe eines Deploys durch eine zweite Person) ist nicht erzwungen; die Trennung
-  erfolgt über die Rollen *Bearbeiter* und *Operator*.
+- Keine Anmeldung per Entra ID und keine eigene Mehr-Faktor-Authentifizierung; mit der Windows-Anmeldung greift
+  die Anmeldung am Windows-Client (z. B. Smartcard/Windows Hello auf der PAW).
+- Das Vier-Augen-Prinzip ist optional und gilt nur für *Anwenden*; Konfigurationsänderungen selbst werden nicht
+  freigegeben (sie werden aber versioniert und protokolliert).

@@ -391,6 +391,25 @@ function Get-InstalledState {
     }
 }
 
+# Kerberos for the Windows sign-in needs HTTP/<fqdn> registered on the account the service runs as.
+# (Under LocalSystem the computer account's HOST SPN already covers it.)
+function Register-HttpSpn([string]$Fqdn, [string]$Account) {
+    Write-Info "Für die Anmeldung mit Windows-Konto (Kerberos) braucht $Account den SPN HTTP/$Fqdn."
+    if (-not (Read-YesNo 'SPN jetzt registrieren? (erfordert das Recht, SPNs im AD zu schreiben)' $true)) {
+        Write-Info "Später nachholen: setspn -S HTTP/$Fqdn $Account"
+        return
+    }
+    $short = $Fqdn.Split('.')[0]
+    foreach ($spn in @("HTTP/$Fqdn", "HTTP/$short") | Select-Object -Unique) {
+        $out = & setspn.exe -S $spn $Account 2>&1
+        if ($LASTEXITCODE -eq 0 -and "$out" -notmatch 'Duplicate SPN|Doppelter SPN') { Write-Ok "SPN $spn registriert." }
+        else {
+            Write-Warn "SPN $spn konnte nicht registriert werden – ggf. ist er bereits einem anderen Konto zugeordnet:"
+            Write-Info (("$out" -split "`n" | Select-Object -Last 3) -join ' ')
+        }
+    }
+}
+
 # Stops and deletes the service and waits until the SCM has really removed it.
 function Remove-TierModelService {
     Stop-Service $ServiceName -ErrorAction SilentlyContinue
@@ -757,6 +776,7 @@ function Write-Settings {
             DefaultPreferredDc    = $Defaults.PreferredDc
             AdmlLanguage          = $Defaults.AdmlLanguage
             CertificateThumbprint = $Web.Certificate.Thumbprint
+            PublicBaseUrl         = "https://$($Web.Fqdn):$($Web.Port)"
             RequireHttps          = $true
         }
         Kestrel           = [ordered]@{ Endpoints = [ordered]@{ Https = [ordered]@{ Url = "https://*:$($Web.Port)" } } }
@@ -867,6 +887,8 @@ function Install-New {
         if ($r.ReturnValue -ne 0) { throw "Dienstkonto konnte nicht gesetzt werden (Win32_Service.Change Code $($r.ReturnValue))." }
     }
     Write-Ok "Dienst '$ServiceDisplayName' registriert (Autostart verzögert, Neustart bei Fehlern)."
+
+    if ($svc.Kind -ne 'LocalSystem') { Register-HttpSpn -Fqdn $web.Fqdn -Account $svc.Account }
 
     if ($web.Firewall) {
         Remove-NetFirewallRule -Name $FirewallRuleName -ErrorAction SilentlyContinue

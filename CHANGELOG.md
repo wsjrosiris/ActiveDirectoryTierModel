@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Windows sign-in** for the TierModel Service: Kerberos/NTLM single sign-on, roles mapped from AD groups (by SID),
+  accounts provisioned on first sign-in; the installer can register the `HTTP/<fqdn>` SPN.
+- **Four-eyes principle** (optional): apply deploys wait for approval by a second operator; configuration versions are
+  pinned at submission; rejection with reason; automatic expiry.
+- **Notifications**: e-mail (SMTP), Microsoft Teams (Adaptive Cards) and webhooks for drift, failed runs, applied
+  deploys and approval requests; secrets encrypted at rest; test message per channel.
+- New setting `publicBaseUrl` for links in notifications (installer pre-fills it).
+
 ## [1.4.0] - 2026-09-24
 
 ### Added
