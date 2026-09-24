@@ -101,6 +101,7 @@ Fehlversuchen, CSRF-Schutz, Content-Security-Policy.
 | [Installation](docs/service/installation.md) | Voraussetzungen, Dienstkonto, Assistent, Aktualisieren, Deinstallieren |
 | [Bedienung](docs/service/bedienung.md) | Rollen, Konfiguration, Deploy, Audits, Zeitpläne, Läufe |
 | [Roadmap](docs/service/roadmap.md) | Geplante Funktionen und Umsetzungsstand |
+| [Testplan Windows](docs/service/testplan-windows.md) | Was vor dem Produktiveinsatz in einer echten (auch deutschen) Testdomäne zu prüfen ist |
 | [Betrieb](docs/service/betrieb.md) | Konfigurationsdatei, Protokolle, Sicherung, Zertifikat, Kommandozeile, Fehlerbehebung |
 | [Sicherheit](docs/service/sicherheit.md) | Einstufung als Tier-0-System, Schutzmaßnahmen, Härtung |
 | [Entwicklung](docs/service/entwicklung.md) | Lokale Umgebung, Tests, Release-Paket, Datenbank |
