@@ -16,6 +16,7 @@ Welcome to the Active Directory Tier Model documentation.
 - **[Deployment Methodology](deployment-methodology.md)** - Deployment strategy, validation framework, and idempotency principles
 - **[Drift Detection](drift-detection-details.md)** - Detecting configuration drift and compliance auditing
 - **[Privileged Access Monitoring](privileged-access-monitoring.md)** - Read-only snapshot of Tier 0 membership, admin account hygiene and ACL paths (`Watch-TierModelPrivilegedGroups.ps1`)
+- **[Just-in-Time Admin Access](jit-access.md)** - Time-limited group membership with TTL, early revocation and a read-only prerequisite check (`Grant-TierModelJitAccess.ps1`)
 - **[Authentication Policies and Silos](authentication-silos.md)** - Config-driven Kerberos authentication policies, silos and PAW/member server device groups (`-AuthSilosOnly`)
 - **[Cmdlet Architecture](cmdlet-architecture.md)** - Modular cmdlet design for testing and maintainability
 - **[Conditional Principals](conditional-principals.md)** - Managing conditional principals and dynamic group resolution

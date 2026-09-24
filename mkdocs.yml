@@ -30,6 +30,7 @@ nav:
   - Deployment Methodology: deployment-methodology.md
   - Drift Detection: drift-detection-details.md
   - Privileged Access Monitoring: privileged-access-monitoring.md
+  - Just-in-Time Admin Access: jit-access.md
   - Authentication Policies and Silos: authentication-silos.md
   - Cmdlet Architecture: cmdlet-architecture.md
   - CI/CD: ci-cd.md
