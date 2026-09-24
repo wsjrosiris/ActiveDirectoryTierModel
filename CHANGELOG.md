@@ -37,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Service: **privileged access monitoring** (run kind Monitor, schedules of kind Monitor): members by SID, change
   history, unexpected members, account hygiene, attack paths; notification on changes.
 - Service: **remediation by click** – a plan run for the area of an audit finding.
+- **Authentication policies and silos from configuration** (`config/tiermodel-authsilos.json`): policies with generated
+  `UserAllowedToAuthenticateFrom` SDDL (domain controllers OR any listed device group), silos, silo membership by OU
+  and device-group sync; new scope `-AuthSilosOnly` in Deploy and Audit, last phase of `-FullDeployment`
+  (`docs/authentication-silos.md`). The optional scripts are superseded; their Tier 0 SDDL used AND instead of OR.
 - Service: **compliance score** per tier on the dashboard with 30-day history and breakdown.
 - Roadmap for the next features (`docs/service/roadmap.md`).
 
