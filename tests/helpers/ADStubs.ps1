@@ -112,3 +112,21 @@ if (-not (Get-Command Find-LapsADExtendedRights -ErrorAction SilentlyContinue)) 
         Export-ModuleMember -Function *
     } | Import-Module -Global -Force
 }
+
+if (-not (Get-Command Get-ADAuthenticationPolicy -ErrorAction SilentlyContinue)) {
+
+    # ActiveDirectory authentication policy / silo stubs (Windows Server 2012 R2+ cmdlets) - required
+    # for Get-/New-/Test-TierModelAuthSilo. Registered as a separate in-memory module so they are also
+    # added when the ActiveDirectory stub module above already exists in the session.
+    New-Module -Name TierModelAuthPolicyStubs -ScriptBlock {
+        function Get-ADAuthenticationPolicy { param($Identity, $Filter, $LDAPFilter, $Properties, $Server, $ErrorAction) }
+        function New-ADAuthenticationPolicy { param($Name, $Description, $Enforce, $UserTGTLifetimeMins, $UserAllowedToAuthenticateFrom, $ProtectedFromAccidentalDeletion, $Server, $ErrorAction) }
+        function Set-ADAuthenticationPolicy { param($Identity, $Description, $Enforce, $UserTGTLifetimeMins, $UserAllowedToAuthenticateFrom, $Clear, $Server, $ErrorAction) }
+        function Get-ADAuthenticationPolicySilo { param($Identity, $Filter, $LDAPFilter, $Properties, $Server, $ErrorAction) }
+        function New-ADAuthenticationPolicySilo { param($Name, $Description, $Enforce, $UserAuthenticationPolicy, $ComputerAuthenticationPolicy, $ServiceAuthenticationPolicy, $ProtectedFromAccidentalDeletion, $Server, $ErrorAction) }
+        function Set-ADAuthenticationPolicySilo { param($Identity, $Description, $Enforce, $UserAuthenticationPolicy, $ComputerAuthenticationPolicy, $ServiceAuthenticationPolicy, $Clear, $Server, $ErrorAction) }
+        function Grant-ADAuthenticationPolicySiloAccess { param($Identity, $Account, $Server, $ErrorAction) }
+        function Set-ADAccountAuthenticationPolicySilo { param($Identity, $AuthenticationPolicySilo, $AuthenticationPolicy, $Server, $ErrorAction) }
+        Export-ModuleMember -Function *
+    } | Import-Module -Global -Force
+}

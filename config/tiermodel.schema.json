@@ -193,6 +193,79 @@
         },
         "additionalProperties": false
       }
+    },
+    "authSilos": {
+      "type": ["object", "null"],
+      "description": "Optional (tiermodel-authsilos.json): Kerberos authentication policies, authentication policy silos and device group synchronisation. The SDDL is generated, never configured.",
+      "properties": {
+        "authenticationPolicies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": {"type": "string", "minLength": 1},
+              "description": {"type": "string"},
+              "enforce": {"type": "boolean"},
+              "userTgtLifetimeMins": {"type": ["integer", "null"], "minimum": 45},
+              "allowedToAuthenticateFrom": {
+                "type": "object",
+                "properties": {
+                  "includeDomainControllers": {"type": "boolean"},
+                  "deviceGroups": {"type": "array", "items": {"type": "string"}}
+                },
+                "additionalProperties": false
+              },
+              "tier": {"type": "integer", "minimum": 0, "maximum": 2},
+              "comment": {"type": "string"}
+            },
+            "additionalProperties": false
+          }
+        },
+        "authenticationPolicySilos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": {"type": "string", "minLength": 1},
+              "description": {"type": "string"},
+              "enforce": {"type": "boolean"},
+              "userAuthenticationPolicy": {"type": "string"},
+              "computerAuthenticationPolicy": {"type": "string"},
+              "serviceAuthenticationPolicy": {"type": "string"},
+              "members": {
+                "type": "object",
+                "properties": {
+                  "userOUs": {"type": "array", "items": {"type": "string"}},
+                  "computerGroups": {"type": "array", "items": {"type": "string"}},
+                  "computerOUs": {"type": "array", "items": {"type": "string"}},
+                  "excludeAccounts": {"type": "array", "items": {"type": "string"}}
+                },
+                "additionalProperties": false
+              },
+              "tier": {"type": "integer", "minimum": 0, "maximum": 2},
+              "comment": {"type": "string"}
+            },
+            "additionalProperties": false
+          }
+        },
+        "deviceGroupSync": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["group", "sourceOUs"],
+            "properties": {
+              "group": {"type": "string", "minLength": 1},
+              "sourceOUs": {"type": "array", "items": {"type": "string"}},
+              "tier": {"type": "integer", "minimum": 0, "maximum": 2},
+              "comment": {"type": "string"}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

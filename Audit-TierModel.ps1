@@ -35,9 +35,15 @@ access control list delegations will be checked. (Not yet implemented in v0.2)
 Audit only ADMX template compliance. When specified, only administrative 
 template imports and configurations will be checked. (Not yet implemented in v0.2)
 
+.PARAMETER AuthSilosOnly
+Audit only Kerberos authentication policies, authentication policy silos, silo membership and
+device group membership against config/tiermodel-authsilos.json (Test-TierModelAuthSilo).
+Findings carry Area 'authsilos' and Severity High (Tier 0) or Medium.
+
 .PARAMETER FullDeployment
 Perform comprehensive audit of all TierModel components in dependency order:
-OUs -> Groups -> Users -> OU ACL Delegations -> GPOs -> ADMX.
+OUs -> Groups -> Users -> OU ACL Delegations -> GPOs -> ADMX [-> -Include* features]
+-> Authentication Policies and Silos (only when config/tiermodel-authsilos.json exists and has entries).
 Provides consolidated reporting at completion.
 
 .PARAMETER IncludeWinLaps
@@ -106,6 +112,7 @@ param(
     [switch]$GposOnly,
     [switch]$OuAclsOnly,
     [switch]$AdmxOnly,
+    [switch]$AuthSilosOnly,
     [switch]$FullDeployment,
     
     [switch]$IncludeMsa,
@@ -132,19 +139,19 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # Validate that only one audit scope parameter is specified
-$scopeParameters = @($OuOnly, $GroupOnly, $UserOnly, $GposOnly, $OuAclsOnly, $AdmxOnly, $FullDeployment)
+$scopeParameters = @($OuOnly, $GroupOnly, $UserOnly, $GposOnly, $OuAclsOnly, $AdmxOnly, $AuthSilosOnly, $FullDeployment)
 $activeScopeCount = @($scopeParameters | Where-Object { $_ }).Count
 $includeParameters = @($IncludeMsa, $IncludeGmsa, $IncludeDmsa, $IncludeWinLaps)
 $activeIncludeCount = @($includeParameters | Where-Object { $_ }).Count
 
 if ($activeScopeCount -eq 0 -and $activeIncludeCount -eq 0) {
-    Write-Error "You must specify exactly one audit scope parameter (-OuOnly, -GroupOnly, -UserOnly, -GposOnly, -OuAclsOnly, -AdmxOnly, -FullDeployment) or one or more -Include* switches (-IncludeMsa, -IncludeGmsa, -IncludeDmsa, -IncludeWinLaps)." -ErrorAction Stop
+    Write-Error "You must specify exactly one audit scope parameter (-OuOnly, -GroupOnly, -UserOnly, -GposOnly, -OuAclsOnly, -AdmxOnly, -AuthSilosOnly, -FullDeployment) or one or more -Include* switches (-IncludeMsa, -IncludeGmsa, -IncludeDmsa, -IncludeWinLaps)." -ErrorAction Stop
 }
 elseif ($activeScopeCount -gt 1) {
-    Write-Error "You can only specify one audit scope parameter at a time. Cannot combine -OuOnly, -GroupOnly, -UserOnly, -GposOnly, -OuAclsOnly, -AdmxOnly, and -FullDeployment" -ErrorAction Stop
+    Write-Error "You can only specify one audit scope parameter at a time. Cannot combine -OuOnly, -GroupOnly, -UserOnly, -GposOnly, -OuAclsOnly, -AdmxOnly, -AuthSilosOnly, and -FullDeployment" -ErrorAction Stop
 }
 elseif ($activeIncludeCount -gt 0 -and $activeScopeCount -eq 1 -and -not $FullDeployment) {
-    Write-Error "-IncludeMsa, -IncludeGmsa, -IncludeDmsa, and -IncludeWinLaps can only be used standalone or combined with -FullDeployment. They cannot be used with -OuOnly, -GroupOnly, -UserOnly, -GposOnly, -OuAclsOnly, or -AdmxOnly." -ErrorAction Stop
+    Write-Error "-IncludeMsa, -IncludeGmsa, -IncludeDmsa, and -IncludeWinLaps can only be used standalone or combined with -FullDeployment. They cannot be used with -OuOnly, -GroupOnly, -UserOnly, -GposOnly, -OuAclsOnly, -AdmxOnly, or -AuthSilosOnly." -ErrorAction Stop
 }
 
 Write-Host "Audit TierModel orchestration starting." -ForegroundColor Cyan
@@ -239,7 +246,7 @@ $auditSummary = @{
     ErrorCount = 0
 }
 $driftFindings = @()
-$selectedScope = if ($OuOnly) { 'OuOnly' } elseif ($GroupOnly) { 'GroupOnly' } elseif ($UserOnly) { 'UserOnly' } elseif ($GposOnly) { 'GposOnly' } elseif ($OuAclsOnly) { 'OuAclsOnly' } elseif ($AdmxOnly) { 'AdmxOnly' } else { 'FullDeployment' }
+$selectedScope = if ($OuOnly) { 'OuOnly' } elseif ($GroupOnly) { 'GroupOnly' } elseif ($UserOnly) { 'UserOnly' } elseif ($GposOnly) { 'GposOnly' } elseif ($OuAclsOnly) { 'OuAclsOnly' } elseif ($AdmxOnly) { 'AdmxOnly' } elseif ($AuthSilosOnly) { 'AuthSilosOnly' } else { 'FullDeployment' }
 
 # Load configuration
 Write-Host "Loading configuration..." -ForegroundColor Cyan
@@ -522,6 +529,36 @@ function Invoke-GpoAudit {
     return $audit
 }
 
+function Test-AuthSiloConfigured {
+    <# True when config/tiermodel-authsilos.json was loaded and has at least one entry. #>
+    param([Parameter(Mandatory)] [object]$Config)
+    if (-not $Config.PSObject.Properties['authSilos'] -or $null -eq $Config.authSilos) { return $false }
+    foreach ($name in @('authenticationPolicies', 'authenticationPolicySilos', 'deviceGroupSync')) {
+        if ($Config.authSilos.PSObject.Properties[$name] -and @($Config.authSilos.$name | Where-Object { $null -ne $_ }).Count -gt 0) { return $true }
+    }
+    return $false
+}
+
+function ConvertTo-AuthSiloAuditEntity {
+    <# Wraps the flat Test-TierModelAuthSilo result like the other entity results (EntityType + Summary). #>
+    param([Parameter(Mandatory)] $Audit)
+    [PSCustomObject]@{
+        EntityType = 'AuthSilo'
+        # PSCustomObject (not a hashtable) so the per-entity lines of the full audit can read it too
+        Summary = [PSCustomObject]@{
+            TotalAcls  = $Audit.TotalChecked
+            Compliant  = $Audit.Compliant
+            Missing    = $Audit.Missing
+            Mismatched = $Audit.Mismatched + $Audit.Unexpected
+            Errors     = 0   # Error findings are counted from Findings (avoids double counting)
+            # No Drift key: the consolidated report derives drift from Missing + Mismatched
+        }
+        Findings      = $Audit.Findings
+        DurationMs    = $Audit.DurationMs
+        CorrelationId = $Audit.CorrelationId
+    }
+}
+
 # Execute audit based on scope
 if ($FullDeployment) {
     Write-Host "FullAudit sequence:" -ForegroundColor Magenta
@@ -714,6 +751,17 @@ if ($FullDeployment) {
         }
     }
     
+    # Last phase: Authentication policies and silos (only when configured)
+    if (Test-AuthSiloConfigured -Config $config) {
+        Write-Host "Phase 7: Auditing Authentication Policies and Silos..." -ForegroundColor Cyan
+        try {
+            $authSiloAudit = Test-TierModelAuthSilo -Config $config -DomainController $PreferredDc -Silent
+            if ($authSiloAudit) { $auditResults += ConvertTo-AuthSiloAuditEntity -Audit $authSiloAudit }
+        } catch {
+            Write-Host "  Warning: Authentication silo audit failed: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+
     # Show consolidated audit report at the end
     Write-Host "`n=== Full Audit Results ===" -ForegroundColor Magenta
     
@@ -773,7 +821,7 @@ if ($FullDeployment) {
                 'OU ACL' { 
                     $totalChecked += if ($result.Summary -is [hashtable]) { $result.Summary['TotalAcls'] } else { $result.Summary.TotalAcls }
                 }
-                { $_ -in 'MSA ACL', 'gMSA ACL', 'dMSA ACL', 'WinLaps ACL', 'WinLaps Decryptor' } {
+                { $_ -in 'MSA ACL', 'gMSA ACL', 'dMSA ACL', 'WinLaps ACL', 'WinLaps Decryptor', 'AuthSilo' } {
                     $totalChecked += if ($result.Summary -is [hashtable]) { $result.Summary['TotalAcls'] } else { $result.Summary.TotalAcls }
                 }
                 default { 
@@ -871,6 +919,7 @@ if ($FullDeployment) {
                 'dMSA ACL' { 'dMSA ACL' }
                 'WinLaps ACL' { 'WinLaps ACL' }
                 'WinLaps Decryptor' { 'WinLaps Decryptor' }
+                'AuthSilo' { 'Authentication Silos' }
                 default { 'OU ACL' }
             }
         } elseif (Get-SafePropertyValue $result 'Summary.TotalOUs' -gt 0) { "OU" }
@@ -907,7 +956,7 @@ if ($FullDeployment) {
                     if ($result.Summary -is [hashtable]) { $result.Summary['TotalAcls'] } 
                     else { $result.Summary.TotalAcls }
                 }
-                { $_ -in 'MSA ACL', 'gMSA ACL', 'dMSA ACL', 'WinLaps ACL', 'WinLaps Decryptor' } {
+                { $_ -in 'MSA ACL', 'gMSA ACL', 'dMSA ACL', 'WinLaps ACL', 'WinLaps Decryptor', 'AuthSilo' } {
                     if ($result.Summary -is [hashtable]) { $result.Summary['TotalAcls'] } 
                     else { $result.Summary.TotalAcls }
                 }
@@ -1119,6 +1168,40 @@ else {
             }
         } else {
             Write-Host "  ✅ All ADMX/ADML files match configuration expectations." -ForegroundColor Green
+        }
+        Write-Host "" # Blank line before script completion message
+    }
+    if ($AuthSilosOnly) {
+        Write-Host "=== Authentication Silo-Only Audit ===" -ForegroundColor Magenta
+        if (-not (Test-AuthSiloConfigured -Config $config)) {
+            Write-Host "  No authentication policies or silos configured (config/tiermodel-authsilos.json missing or empty)." -ForegroundColor Gray
+        }
+        try {
+            $authSiloAudit = Test-TierModelAuthSilo -Config $config -DomainController $PreferredDc -SuppressSummary
+            foreach ($w in @($authSiloAudit.Warnings)) { Write-Host "  ⚠️  $w" -ForegroundColor Yellow }
+
+            # Report data (findings tagged with Area 'authsilos' and their tier-based Severity)
+            $authSiloMerged = Merge-TierModelAuditResult -AuditResults @(ConvertTo-AuthSiloAuditEntity -Audit $authSiloAudit) -Config $config
+            $auditSummary = $authSiloMerged.Summary
+            $driftFindings = @($authSiloMerged.Findings)
+
+            $authSiloCompliance = if ($authSiloAudit.TotalChecked -gt 0) {
+                [math]::Round((($authSiloAudit.TotalChecked - $authSiloAudit.Drift) / $authSiloAudit.TotalChecked) * 100, 2)
+            } else { 100 }
+            Write-Host "" # Blank line for spacing
+            Write-Host "Authentication Silo Audit Summary:" -ForegroundColor White
+            Write-Host "  Total Checked: $($authSiloAudit.TotalChecked)" -ForegroundColor Gray
+            Write-Host "  Missing: $($authSiloAudit.Missing)" -ForegroundColor Red
+            Write-Host "  Mismatched: $($authSiloAudit.Mismatched)" -ForegroundColor Yellow
+            Write-Host "  Unexpected: $($authSiloAudit.Unexpected)" -ForegroundColor Yellow
+            Write-Host "  Total Drift: $($authSiloAudit.Drift)" -ForegroundColor $(if ($authSiloAudit.Drift -eq 0) { 'Green' } else { 'Red' })
+            Write-Host "  Total Errors: $($authSiloAudit.Errors)" -ForegroundColor $(if ($authSiloAudit.Errors -gt 0) { 'Red' } else { 'Green' })
+            Write-Host "  Compliance: $authSiloCompliance%" -ForegroundColor $(if ($authSiloCompliance -ge 90) { 'Green' } elseif ($authSiloCompliance -ge 70) { 'Yellow' } else { 'Red' })
+            if (@($authSiloAudit.Findings).Count -eq 0) {
+                Write-Host "  ✅ Authentication policies and silos match the configuration." -ForegroundColor Green
+            }
+        } catch {
+            Write-Host "Error during authentication silo audit: $($_.Exception.Message)" -ForegroundColor Red
         }
         Write-Host "" # Blank line before script completion message
     }

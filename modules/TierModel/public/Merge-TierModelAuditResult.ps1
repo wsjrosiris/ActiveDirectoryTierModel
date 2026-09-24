@@ -5,7 +5,7 @@
 function Get-TierModelAuditArea {
     <#
     .SYNOPSIS
-    Maps an audit result EntityType to the report area (ous, groups, users, acls, gpos, admx, msa, gmsa, dmsa, winlaps).
+    Maps an audit result EntityType to the report area (ous, groups, users, acls, gpos, admx, msa, gmsa, dmsa, winlaps, authsilos).
     #>
     [CmdletBinding()]
     param([AllowNull()][AllowEmptyString()][string]$EntityType)
@@ -21,6 +21,7 @@ function Get-TierModelAuditArea {
         '^gMSA ACL$'            { return 'gmsa' }
         '^dMSA ACL$'            { return 'dmsa' }
         '^WinLaps( ACL| Decryptor)?$' { return 'winlaps' }
+        '^(AuthSilo|Auth Silo|AuthSilos)$' { return 'authsilos' }
         default                 { return $null }
     }
 }
@@ -173,7 +174,7 @@ function ConvertTo-TierModelAuditReportFinding {
             }
         }
         default {
-            # admx, msa, gmsa, dmsa, winlaps: keep every original field, skip compliant entries,
+            # admx, msa, gmsa, dmsa, winlaps, authsilos: keep every original field, skip compliant entries,
             # and add Type/Identifier/Details where the source object has other names for them.
             if (& $has $AuditResult 'Findings') {
                 foreach ($f in @($AuditResult.Findings)) {
@@ -238,9 +239,10 @@ function Merge-TierModelAuditResult {
     OU ACL, GPO, ADMX, MSA/gMSA/dMSA ACL, WinLaps ACL/Decryptor - identified by its EntityType
     property) the non-compliant findings are collected in report format. Every finding keeps its
     existing fields and gets two additional ones:
-      Area     - ous | groups | users | acls | gpos | admx | msa | gmsa | dmsa | winlaps
+      Area     - ous | groups | users | acls | gpos | admx | msa | gmsa | dmsa | winlaps | authsilos
       Severity - High (Tier 0 object, GPO/ACL on a Tier-0 OU or the domain root, or an Error finding),
-                 Medium (Tier 1), Low (otherwise)
+                 Medium (Tier 1), Low (otherwise); authsilos findings keep the severity set by
+                 Test-TierModelAuthSilo (High for Tier 0, Medium otherwise)
     The summary is computed from the collected findings (and the per-entity checked counts).
 
     .PARAMETER AuditResults
@@ -292,7 +294,9 @@ function Merge-TierModelAuditResult {
         $entityFindings = ConvertTo-TierModelAuditReportFinding -AuditResult $result -Area $area
         $entityIssues = 0
         foreach ($finding in @($entityFindings)) {
-            $severity = Get-TierModelAuditFindingSeverity -Finding $finding -Area $area -GpoTargets $gpoTargets
+            # Auth silo findings carry their own severity (High = Tier 0, Medium otherwise)
+            $ownSeverity = if ($area -eq 'authsilos' -and $finding.PSObject.Properties['Severity']) { [string]$finding.Severity } else { $null }
+            $severity = if ($ownSeverity) { $ownSeverity } else { Get-TierModelAuditFindingSeverity -Finding $finding -Area $area -GpoTargets $gpoTargets }
             $finding | Add-Member -NotePropertyName 'Area' -NotePropertyValue $area -Force
             $finding | Add-Member -NotePropertyName 'Severity' -NotePropertyValue $severity -Force
             $findings.Add($finding)

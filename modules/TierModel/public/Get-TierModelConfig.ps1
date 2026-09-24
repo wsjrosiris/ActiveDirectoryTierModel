@@ -13,6 +13,10 @@ function Get-TierModelConfig {
     - tiermodel-gpos.json
     - tiermodel-admx.json
     
+    Optional segments (loaded only when present): tiermodel-msa.json, tiermodel-gmsa.json,
+    tiermodel-dmsa.json, tiermodel-winlaps.json and tiermodel-authsilos.json (property authSilos:
+    authenticationPolicies, authenticationPolicySilos, deviceGroupSync).
+    
     Merges them into a single logical configuration object and validates schema.
     
     .PARAMETER ConfigPath
@@ -95,7 +99,8 @@ function Get-TierModelConfig {
         'tiermodel-msa.json',
         'tiermodel-gmsa.json',
         'tiermodel-dmsa.json',
-        'tiermodel-winlaps.json'
+        'tiermodel-winlaps.json',
+        'tiermodel-authsilos.json'
     )
     $optionalSegments = @{}
     foreach ($fileName in $optionalFiles) {
@@ -147,6 +152,14 @@ function Get-TierModelConfig {
             gmsaAclDelegations = if ($optionalSegments['tiermodel-gmsa.json'] -and $optionalSegments['tiermodel-gmsa.json'].PSObject.Properties['aclDelegations']) { $optionalSegments['tiermodel-gmsa.json'].aclDelegations } else { $null }
             dmsaAclDelegations = if ($optionalSegments['tiermodel-dmsa.json'] -and $optionalSegments['tiermodel-dmsa.json'].PSObject.Properties['aclDelegations']) { $optionalSegments['tiermodel-dmsa.json'].aclDelegations } else { $null }
             winLapsDelegations = if ($optionalSegments['tiermodel-winlaps.json'] -and $optionalSegments['tiermodel-winlaps.json'].PSObject.Properties['winLapsDelegations']) { $optionalSegments['tiermodel-winlaps.json'].winLapsDelegations } else { $null }
+            authSilos = if ($optionalSegments['tiermodel-authsilos.json']) {
+                $authSiloSegment = $optionalSegments['tiermodel-authsilos.json']
+                [PSCustomObject]@{
+                    authenticationPolicies    = if ($authSiloSegment.PSObject.Properties['authenticationPolicies'] -and $authSiloSegment.authenticationPolicies) { @($authSiloSegment.authenticationPolicies) } else { @() }
+                    authenticationPolicySilos = if ($authSiloSegment.PSObject.Properties['authenticationPolicySilos'] -and $authSiloSegment.authenticationPolicySilos) { @($authSiloSegment.authenticationPolicySilos) } else { @() }
+                    deviceGroupSync           = if ($authSiloSegment.PSObject.Properties['deviceGroupSync'] -and $authSiloSegment.deviceGroupSync) { @($authSiloSegment.deviceGroupSync) } else { @() }
+                }
+            } else { $null }
         }
         
         # Compute composite hash for provenance (FR-005)

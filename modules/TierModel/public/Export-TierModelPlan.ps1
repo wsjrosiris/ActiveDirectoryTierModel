@@ -14,6 +14,7 @@ $script:TierModelPlanAreaNames = [ordered]@{
     gmsa    = 'gMSA ACL Delegations'
     dmsa    = 'dMSA ACL Delegations'
     winlaps = 'Windows LAPS ACL Delegations'
+    authsilos = 'Authentication Policies and Silos'
 }
 
 # Known lower-case configuration keys -> camelCase detail keys
@@ -178,6 +179,8 @@ function Get-TierModelPlanActionCategory {
     CreateOU/CreateGroup/CreateUser/CreateAcl/CreateGPO/ImportAdmx/ImportAdml -> create;
     UpdateUserMembership/ImportGPO/UpdateAdmx/UpdateAdml -> update; LinkGPO -> link;
     ConfigureGPO/ConfigureLapsDecryptor -> configure.
+    Auth silos: CreateAuthPolicy/CreateAuthSilo -> create; UpdateAuthPolicy/UpdateAuthSilo/
+    AddDeviceGroupMember -> update; GrantSiloAccess/AssignSilo -> configure.
     #>
     param([string]$Action)
     switch -Regex ($Action) {
@@ -186,6 +189,8 @@ function Get-TierModelPlanActionCategory {
         '^(Update|Import)'    { return 'update' }
         '^Link'               { return 'link' }
         '^Configure'          { return 'configure' }
+        '^(Grant|Assign)'     { return 'configure' }
+        '^Add'                { return 'update' }
         default               { return 'create' }
     }
 }
@@ -232,7 +237,7 @@ function Export-TierModelPlan {
     .DESCRIPTION
     Contract (version "1", camelCase keys, UTF-8 without BOM, ConvertTo-Json -Depth 10):
     {
-      "metadata": { "version": "1", "scope": "FullDeployment|OuOnly|GroupOnly|UserOnly|GposOnly|OuAclsOnly|AdmxOnly|IncludeOnly",
+      "metadata": { "version": "1", "scope": "FullDeployment|OuOnly|GroupOnly|UserOnly|GposOnly|OuAclsOnly|AdmxOnly|AuthSilosOnly|IncludeOnly",
                     "preferredDc": "...", "timestamp": "<ISO-8601 UTC>", "includes": ["Msa","Gmsa","Dmsa","WinLaps"] },
       "summary":  { "totalActions": 0, "create": 0, "update": 0, "link": 0, "configure": 0, "existing": 0 },
       "phases":   [ { "phase": 1, "name": "Organizational Units", "area": "ous", "actionCount": 0, "existingCount": 0 } ],
@@ -246,12 +251,12 @@ function Export-TierModelPlan {
 
     .PARAMETER Phases
     Phase descriptors: objects/hashtables with Phase (int), Area (ous|groups|users|acls|gpos|admx|
-    msa|gmsa|dmsa|winlaps), optional Name, Actions (plan action objects with Action, ResourceType,
+    msa|gmsa|dmsa|winlaps|authsilos), optional Name, Actions (plan action objects with Action, ResourceType,
     Name, Path, Data), optional ExistingCount and optional AdmxPlan (Get-TierModelAdmx result - its
     analysis is converted to actions).
 
     .PARAMETER Scope
-    FullDeployment, OuOnly, GroupOnly, UserOnly, GposOnly, OuAclsOnly, AdmxOnly or IncludeOnly.
+    FullDeployment, OuOnly, GroupOnly, UserOnly, GposOnly, OuAclsOnly, AdmxOnly, AuthSilosOnly or IncludeOnly.
 
     .PARAMETER Path
     Output file. Without -Path the JSON string is returned.
@@ -267,7 +272,7 @@ function Export-TierModelPlan {
         [object[]]$Phases,
 
         [Parameter(Mandatory)]
-        [ValidateSet('FullDeployment', 'OuOnly', 'GroupOnly', 'UserOnly', 'GposOnly', 'OuAclsOnly', 'AdmxOnly', 'IncludeOnly')]
+        [ValidateSet('FullDeployment', 'OuOnly', 'GroupOnly', 'UserOnly', 'GposOnly', 'OuAclsOnly', 'AdmxOnly', 'AuthSilosOnly', 'IncludeOnly')]
         [string]$Scope,
 
         [Parameter(Mandatory)]
