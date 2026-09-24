@@ -16,8 +16,9 @@ public static class ImportStatus
 }
 
 /// <summary>Stored preview (WorkPath/imports/&lt;id&gt;.json). Contents are the incoming texts after replacements.</summary>
+/// <param name="DomainId">Domain the preview was made for (roadmap 17); previews from before have none and belong to the first domain.</param>
 public record StoredPreview(Guid Id, string Label, string SourceKind, string CreatedBy, DateTimeOffset CreatedAt,
-    List<ReplacementRule> Replacements, List<string> Notices, List<StoredPreviewSection> Sections, ImportSource Source);
+    List<ReplacementRule> Replacements, List<string> Notices, List<StoredPreviewSection> Sections, ImportSource Source, int DomainId = 1);
 
 public record StoredPreviewSection(string Key, string Status, int? BaseVersion, int? SourceVersion, string? Content, int Replacements, string? Error);
 
@@ -36,7 +37,7 @@ public record ImportApplyResultDto(List<ImportAppliedSectionDto> Applied);
 
 public record ImportAppliedSectionDto(string Key, string Title, int FromVersion, int ToVersion);
 
-public class ImportPreviewNotFoundException() : Exception("Die Vorschau ist abgelaufen oder existiert nicht. Bitte erneut laden.");
+public class ImportPreviewNotFoundException(string message = "Die Vorschau ist abgelaufen oder existiert nicht. Bitte erneut laden.") : Exception(message);
 
 public class ImportConflictException(string message, List<string> keys) : Exception(message)
 {
@@ -44,7 +45,8 @@ public class ImportConflictException(string message, List<string> keys) : Except
 }
 
 /// <summary>Test → Produktion (roadmap 15): preview of an incoming configuration and its takeover as new versions.</summary>
-public class ImportService(AppDbContext db, ConfigService config, IOptions<TierModelOptions> options)
+/// <remarks>Previews and imports target the current domain (roadmap 17); a preview can only be used in the domain it was made for.</remarks>
+public class ImportService(AppDbContext db, ConfigService config, IOptions<TierModelOptions> options, Domains.DomainContext domain, Domains.DomainRegistry domains)
 {
     public static readonly TimeSpan PreviewLifetime = TimeSpan.FromHours(24);
     public const int MaxReplacements = 50;
@@ -144,7 +146,7 @@ public class ImportService(AppDbContext db, ConfigService config, IOptions<TierM
         if (missing.Count > 0) notices.Add($"Nicht in der Quelle enthalten (bleiben unverändert): {string.Join(", ", missing)}");
         if (rules.Count > 0 && sections.Sum(s => s.Replacements) == 0) notices.Add("Die Ersetzungen haben keinen Treffer.");
 
-        var preview = new StoredPreview(Guid.NewGuid(), source.Label, sourceKind, user, DateTimeOffset.UtcNow, rules, notices, sections, source);
+        var preview = new StoredPreview(Guid.NewGuid(), source.Label, sourceKind, user, DateTimeOffset.UtcNow, rules, notices, sections, source, domain.Id);
         Directory.CreateDirectory(Dir);
         await File.WriteAllTextAsync(PathOf(preview.Id), JsonSerializer.Serialize(preview, JsonSerializerOptions.Web), ct);
         return await ToDtoAsync(preview, null, ct);
@@ -244,8 +246,10 @@ public class ImportService(AppDbContext db, ConfigService config, IOptions<TierM
 
     private async Task<Dictionary<string, (int Version, string Sha256, string Content)>> CurrentAsync(CancellationToken ct)
     {
+        var domainId = domain.Id;
         var rows = await (from s in db.ConfigSections
-                          join v in db.ConfigVersions on new { s.Key, V = s.CurrentVersion } equals new { Key = v.SectionKey, V = v.Version }
+                          join v in db.ConfigVersions on new { s.DomainId, s.Key, V = s.CurrentVersion } equals new { v.DomainId, Key = v.SectionKey, V = v.Version }
+                          where s.DomainId == domainId
                           select new { s.Key, v.Version, v.Sha256, v.Content }).AsNoTracking().ToListAsync(ct);
         return rows.ToDictionary(r => r.Key, r => (r.Version, r.Sha256, r.Content));
     }
@@ -254,8 +258,12 @@ public class ImportService(AppDbContext db, ConfigService config, IOptions<TierM
     {
         var path = PathOf(id);
         if (!File.Exists(path) || File.GetLastWriteTimeUtc(path) < DateTime.UtcNow - PreviewLifetime) throw new ImportPreviewNotFoundException();
-        return JsonSerializer.Deserialize<StoredPreview>(await File.ReadAllTextAsync(path, ct), JsonSerializerOptions.Web)
+        var preview = JsonSerializer.Deserialize<StoredPreview>(await File.ReadAllTextAsync(path, ct), JsonSerializerOptions.Web)
             ?? throw new ImportPreviewNotFoundException();
+        if (preview.DomainId != domain.Id)
+            throw new ImportPreviewNotFoundException(
+                $"Die Vorschau wurde für die Domäne „{domains.Find(preview.DomainId)?.DisplayName ?? "?"}“ erstellt. Bitte dorthin wechseln oder die Vorschau neu laden.");
+        return preview;
     }
 
     private string PathOf(Guid id) => Path.Combine(Dir, $"{id:N}.json");

@@ -6,20 +6,24 @@ namespace TierModel.Service.Maintenance;
 
 public static class MaintenanceEndpoints
 {
-    public record WindowRequest(string Name, int[]? Days, string From, string To, string TimeZone, bool Enabled);
+    /// <param name="DomainIds">Domains the window applies to (roadmap 17); empty = all domains, null = unchanged (new: all).</param>
+    public record WindowRequest(string Name, int[]? Days, string From, string To, string TimeZone, bool Enabled, int[]? DomainIds = null);
 
-    public record FreezeRequest(DateTimeOffset? From, DateTimeOffset? To, string Reason, bool Enabled);
+    public record FreezeRequest(DateTimeOffset? From, DateTimeOffset? To, string Reason, bool Enabled, int[]? DomainIds = null);
 
-    public record WindowDto(long Id, string Name, int[] Days, string From, string To, string TimeZone, bool Enabled, string CreatedBy, DateTimeOffset CreatedAt)
+    public record WindowDto(long Id, string Name, int[] Days, string From, string To, string TimeZone, bool Enabled, string CreatedBy, DateTimeOffset CreatedAt,
+        int[] DomainIds)
     {
         public static WindowDto Of(MaintenanceWindow w) =>
-            new(w.Id, w.Name, w.Days.Order().ToArray(), w.From.ToString("HH:mm"), w.To.ToString("HH:mm"), w.TimeZone, w.Enabled, w.CreatedBy, w.CreatedAt);
+            new(w.Id, w.Name, w.Days.Order().ToArray(), w.From.ToString("HH:mm"), w.To.ToString("HH:mm"), w.TimeZone, w.Enabled, w.CreatedBy, w.CreatedAt,
+                w.DomainIds.Order().ToArray());
     }
 
-    public record FreezeDto(long Id, DateTimeOffset From, DateTimeOffset To, string Reason, bool Enabled, bool Active, bool Past, string CreatedBy, DateTimeOffset CreatedAt)
+    public record FreezeDto(long Id, DateTimeOffset From, DateTimeOffset To, string Reason, bool Enabled, bool Active, bool Past, string CreatedBy, DateTimeOffset CreatedAt,
+        int[] DomainIds)
     {
         public static FreezeDto Of(FreezePeriod f, DateTimeOffset now) =>
-            new(f.Id, f.From, f.To, f.Reason, f.Enabled, f.Enabled && f.From <= now && now < f.To, f.To <= now, f.CreatedBy, f.CreatedAt);
+            new(f.Id, f.From, f.To, f.Reason, f.Enabled, f.Enabled && f.From <= now && now < f.To, f.To <= now, f.CreatedBy, f.CreatedAt, f.DomainIds.Order().ToArray());
     }
 
     public static void MapMaintenanceEndpoints(this IEndpointRouteBuilder app)
@@ -44,9 +48,9 @@ public static class MaintenanceEndpoints
 
         var admin = api.MapGroup("/").RequireAuthorization(nameof(Role.Admin));
 
-        admin.MapPost("/windows", async (WindowRequest r, HttpContext ctx, AppDbContext db, ChangeLogService log, MaintenanceService service) =>
+        admin.MapPost("/windows", async (WindowRequest r, HttpContext ctx, AppDbContext db, ChangeLogService log, MaintenanceService service, Domains.DomainRegistry domains) =>
         {
-            if (ValidateWindow(r, out var from, out var to) is { } problem) return problem;
+            if (ValidateWindow(r, domains, out var from, out var to) is { } problem) return problem;
             var w = new MaintenanceWindow { Name = r.Name.Trim(), TimeZone = r.TimeZone, CreatedBy = ctx.User.UserName(), CreatedAt = DateTimeOffset.UtcNow };
             Apply(w, r, from, to);
             db.MaintenanceWindows.Add(w);
@@ -57,11 +61,12 @@ public static class MaintenanceEndpoints
             return Results.Ok(WindowDto.Of(w));
         });
 
-        admin.MapPut("/windows/{id:long}", async (long id, WindowRequest r, HttpContext ctx, AppDbContext db, ChangeLogService log, MaintenanceService service) =>
+        admin.MapPut("/windows/{id:long}", async (long id, WindowRequest r, HttpContext ctx, AppDbContext db, ChangeLogService log, MaintenanceService service,
+            Domains.DomainRegistry domains) =>
         {
             var w = await db.MaintenanceWindows.FindAsync(id);
             if (w is null) return Results.NotFound();
-            if (ValidateWindow(r, out var from, out var to) is { } problem) return problem;
+            if (ValidateWindow(r, domains, out var from, out var to) is { } problem) return problem;
             Apply(w, r, from, to);
             log.Add(ctx.User.UserName(), "maintenance.window-update", "maintenance", id.ToString(), $"Wartungsfenster '{w.Name}' geändert ({Describe(w)})");
             await db.SaveChangesAsync();
@@ -80,9 +85,9 @@ public static class MaintenanceEndpoints
             return Results.NoContent();
         });
 
-        admin.MapPost("/freezes", async (FreezeRequest r, HttpContext ctx, AppDbContext db, ChangeLogService log, MaintenanceService service) =>
+        admin.MapPost("/freezes", async (FreezeRequest r, HttpContext ctx, AppDbContext db, ChangeLogService log, MaintenanceService service, Domains.DomainRegistry domains) =>
         {
-            if (ValidateFreeze(r) is { } problem) return problem;
+            if (ValidateFreeze(r, domains) is { } problem) return problem;
             var f = new FreezePeriod { Reason = r.Reason.Trim(), CreatedBy = ctx.User.UserName(), CreatedAt = DateTimeOffset.UtcNow };
             Apply(f, r);
             db.FreezePeriods.Add(f);
@@ -94,11 +99,12 @@ public static class MaintenanceEndpoints
             return Results.Ok(FreezeDto.Of(f, DateTimeOffset.UtcNow));
         });
 
-        admin.MapPut("/freezes/{id:long}", async (long id, FreezeRequest r, HttpContext ctx, AppDbContext db, ChangeLogService log, MaintenanceService service) =>
+        admin.MapPut("/freezes/{id:long}", async (long id, FreezeRequest r, HttpContext ctx, AppDbContext db, ChangeLogService log, MaintenanceService service,
+            Domains.DomainRegistry domains) =>
         {
             var f = await db.FreezePeriods.FindAsync(id);
             if (f is null) return Results.NotFound();
-            if (ValidateFreeze(r) is { } problem) return problem;
+            if (ValidateFreeze(r, domains) is { } problem) return problem;
             Apply(f, r);
             log.Add(ctx.User.UserName(), "maintenance.freeze-update", "maintenance", id.ToString(),
                 $"Sperrzeit '{f.Reason}' geändert ({MaintenanceCalendar.Format(f.From)} bis {MaintenanceCalendar.Format(f.To)}, {(f.Enabled ? "aktiv" : "inaktiv")})");
@@ -122,9 +128,15 @@ public static class MaintenanceEndpoints
     private static string Describe(MaintenanceWindow w) =>
         $"{string.Join(", ", w.Days.Order().Select(d => MaintenanceCalendar.DayNames[d]))} {w.From:HH\\:mm}–{w.To:HH\\:mm} {w.TimeZone}{(w.Enabled ? "" : ", inaktiv")}";
 
-    private static IResult? ValidateWindow(WindowRequest r, out TimeOnly from, out TimeOnly to)
+    private static void ValidateDomains(int[]? ids, Domains.DomainRegistry domains, Dictionary<string, string[]> errors)
+    {
+        if ((ids ?? []).Any(id => domains.Find(id) is null)) errors["domainIds"] = ["Unbekannte Domäne."];
+    }
+
+    private static IResult? ValidateWindow(WindowRequest r, Domains.DomainRegistry domains, out TimeOnly from, out TimeOnly to)
     {
         var errors = new Dictionary<string, string[]>();
+        ValidateDomains(r.DomainIds, domains, errors);
         if (string.IsNullOrWhiteSpace(r.Name) || r.Name.Trim().Length > 100) errors["name"] = ["Bitte einen Namen (max. 100 Zeichen) angeben."];
         if (r.Days is not { Length: > 0 } || r.Days.Any(d => d is < 0 or > 6)) errors["days"] = ["Mindestens einen Wochentag wählen."];
         if (!TimeOnly.TryParseExact(r.From ?? "", "HH:mm", out from)) errors["from"] = ["Uhrzeit im Format HH:MM angeben."];
@@ -133,9 +145,10 @@ public static class MaintenanceEndpoints
         return errors.Count > 0 ? Results.ValidationProblem(errors) : null;
     }
 
-    private static IResult? ValidateFreeze(FreezeRequest r)
+    private static IResult? ValidateFreeze(FreezeRequest r, Domains.DomainRegistry domains)
     {
         var errors = new Dictionary<string, string[]>();
+        ValidateDomains(r.DomainIds, domains, errors);
         if (string.IsNullOrWhiteSpace(r.Reason) || r.Reason.Trim().Length > 200) errors["reason"] = ["Bitte einen Grund (max. 200 Zeichen) angeben."];
         if (r.From is null) errors["from"] = ["Beginn angeben."];
         if (r.To is null) errors["to"] = ["Ende angeben."];
@@ -151,6 +164,8 @@ public static class MaintenanceEndpoints
         w.To = to;
         w.TimeZone = r.TimeZone;
         w.Enabled = r.Enabled;
+        // null (older clients, toggles): unchanged; [] = all domains.
+        if (r.DomainIds is not null) w.DomainIds = r.DomainIds.Distinct().Order().ToArray();
     }
 
     private static void Apply(FreezePeriod f, FreezeRequest r)
@@ -159,5 +174,6 @@ public static class MaintenanceEndpoints
         f.To = r.To!.Value.ToUniversalTime();
         f.Reason = r.Reason.Trim();
         f.Enabled = r.Enabled;
+        if (r.DomainIds is not null) f.DomainIds = r.DomainIds.Distinct().Order().ToArray();
     }
 }

@@ -36,14 +36,16 @@ public static class PrivilegedEndpoints
     {
         var api = app.MapGroup("/api").RequireAuthorization(nameof(Role.Viewer));
 
-        api.MapGet("/privileged", async (AppDbContext db, ConfigService config, SettingsService settings, CancellationToken ct) =>
+        // Everything of the current domain (roadmap 17).
+        api.MapGet("/privileged", async (AppDbContext db, ConfigService config, SettingsService settings, Domains.DomainContext domain, CancellationToken ct) =>
         {
+            var domainId = domain.Id;
             var s = await settings.GetAsync(ct);
             var thresholds = new HygieneThresholds(s.StaleDays, s.PasswordMaxAgeDays);
-            var latest = await db.PrivilegedSnapshots.AsNoTracking().Where(x => x.DomainId == 1).OrderByDescending(x => x.Id).FirstOrDefaultAsync(ct);
-            var lastRun = await db.Runs.AsNoTracking().Where(r => r.Kind == RunKind.Monitor).OrderByDescending(r => r.Id).FirstOrDefaultAsync(ct);
-            var schedules = await db.Schedules.CountAsync(x => x.Kind == RunKind.Monitor && x.Enabled, ct);
-            var count = await db.PrivilegedSnapshots.CountAsync(x => x.DomainId == 1, ct);
+            var latest = await db.PrivilegedSnapshots.AsNoTracking().Where(x => x.DomainId == domainId).OrderByDescending(x => x.Id).FirstOrDefaultAsync(ct);
+            var lastRun = await db.Runs.AsNoTracking().Where(r => r.DomainId == domainId && r.Kind == RunKind.Monitor).OrderByDescending(r => r.Id).FirstOrDefaultAsync(ct);
+            var schedules = await db.Schedules.CountAsync(x => x.DomainId == domainId && x.Kind == RunKind.Monitor && x.Enabled, ct);
+            var count = await db.PrivilegedSnapshots.CountAsync(x => x.DomainId == domainId, ct);
             var lastRunDto = lastRun is null ? null : RunSummaryDto.From(lastRun);
             if (latest is null || PrivilegedSnapshotReader.Deserialize(latest.Data) is not { } data)
                 return new PrivilegedOverviewDto(null, thresholds, [], [], [], [], lastRunDto, schedules, count);
@@ -51,7 +53,7 @@ public static class PrivilegedEndpoints
             var evaluation = PrivilegedEvaluation.Deserialize(latest.Evaluation)
                 ?? new PrivilegedEvaluation(true, [], [], [], [], [], thresholds);
             var tier0 = Tier0Config.From(await config.CurrentContentAsync(ct));
-            tier0.Jit.AddRange(await Jit.JitService.ExpectationsAsync(db, latest.TakenAt, ct));
+            tier0.Jit.AddRange(await Jit.JitService.ExpectationsAsync(db, latest.TakenAt, domainId, ct));
             var unexpected = evaluation.Unexpected.Select(u => (u.GroupSid, u.MemberSid)).ToHashSet();
             var monitored = data.Groups.SelectMany(g => new[] { g.Name, g.WellKnownName }).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -82,21 +84,22 @@ public static class PrivilegedEndpoints
                 evaluation.AttackPaths, lastRunDto, schedules, count);
         });
 
-        api.MapGet("/privileged/changes", async (int? limit, AppDbContext db, CancellationToken ct) =>
+        api.MapGet("/privileged/changes", async (int? limit, AppDbContext db, Domains.DomainContext domain, CancellationToken ct) =>
         {
+            var domainId = domain.Id;
             var take = Math.Clamp(limit ?? 50, 1, 200);
             var rows = await db.PrivilegedSnapshots.AsNoTracking()
-                .Where(x => x.DomainId == 1 && x.ChangeCount > 0)
+                .Where(x => x.DomainId == domainId && x.ChangeCount > 0)
                 .OrderByDescending(x => x.Id).Take(take)
                 .Select(x => new { x.RunId, x.TakenAt, x.Evaluation })
                 .ToListAsync(ct);
-            var total = await db.PrivilegedSnapshots.CountAsync(x => x.DomainId == 1, ct);
-            var first = await db.PrivilegedSnapshots.AsNoTracking().Where(x => x.DomainId == 1).OrderBy(x => x.Id).Select(x => (DateTimeOffset?)x.TakenAt).FirstOrDefaultAsync(ct);
+            var total = await db.PrivilegedSnapshots.CountAsync(x => x.DomainId == domainId, ct);
+            var first = await db.PrivilegedSnapshots.AsNoTracking().Where(x => x.DomainId == domainId).OrderBy(x => x.Id).Select(x => (DateTimeOffset?)x.TakenAt).FirstOrDefaultAsync(ct);
             var items = rows.Select(r => new ChangeSetDto(r.RunId, r.TakenAt, PrivilegedEvaluation.Deserialize(r.Evaluation)?.Changes ?? [])).ToList();
             return new ChangesDto(items, total, first);
         });
 
-        api.MapGet("/compliance", (AppDbContext db, CancellationToken ct) => ComplianceAsync(db, DateTimeOffset.UtcNow, ct));
+        api.MapGet("/compliance", (AppDbContext db, Domains.DomainContext domain, CancellationToken ct) => ComplianceAsync(db, DateTimeOffset.UtcNow, domain.Id, ct));
     }
 
     private static int SeverityRank(string severity) => severity switch { "High" => 0, "Medium" => 1, _ => 2 };
@@ -104,7 +107,7 @@ public static class PrivilegedEndpoints
     private record Point(long RunId, DateTimeOffset At);
 
     /// <summary>Current score and one value per day (UTC) for the last 30 days, each from the latest audit and monitor run up to that day.</summary>
-    public static async Task<ComplianceDto> ComplianceAsync(AppDbContext db, DateTimeOffset now, CancellationToken ct)
+    public static async Task<ComplianceDto> ComplianceAsync(AppDbContext db, DateTimeOffset now, int domainId, CancellationToken ct)
     {
         const int days = 30;
         var firstDay = now.UtcDateTime.Date.AddDays(-(days - 1));
@@ -112,7 +115,7 @@ public static class PrivilegedEndpoints
 
         async Task<List<Point>> AuditsAsync()
         {
-            var q = db.Runs.AsNoTracking().Where(r => r.Kind == RunKind.Audit && r.Status == RunStatus.Succeeded && r.FinishedAt != null);
+            var q = db.Runs.AsNoTracking().Where(r => r.DomainId == domainId && r.Kind == RunKind.Audit && r.Status == RunStatus.Succeeded && r.FinishedAt != null);
             var inWindow = await q.Where(r => r.FinishedAt >= windowStart).Select(r => new Point(r.Id, r.FinishedAt!.Value)).ToListAsync(ct);
             var before = await q.Where(r => r.FinishedAt < windowStart).OrderByDescending(r => r.FinishedAt).Select(r => new Point(r.Id, r.FinishedAt!.Value)).FirstOrDefaultAsync(ct);
             return [.. inWindow, .. before is null ? Array.Empty<Point>() : [before]];
@@ -120,7 +123,7 @@ public static class PrivilegedEndpoints
 
         async Task<List<Point>> MonitorsAsync()
         {
-            var q = db.PrivilegedSnapshots.AsNoTracking().Where(x => x.DomainId == 1);
+            var q = db.PrivilegedSnapshots.AsNoTracking().Where(x => x.DomainId == domainId);
             var inWindow = await q.Where(x => x.TakenAt >= windowStart).Select(x => new Point(x.RunId, x.TakenAt)).ToListAsync(ct);
             var before = await q.Where(x => x.TakenAt < windowStart).OrderByDescending(x => x.TakenAt).Select(x => new Point(x.RunId, x.TakenAt)).FirstOrDefaultAsync(ct);
             return [.. inWindow, .. before is null ? Array.Empty<Point>() : [before]];

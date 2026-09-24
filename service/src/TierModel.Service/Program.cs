@@ -69,6 +69,9 @@ if (OperatingSystem.IsWindows()) dataProtection.ProtectKeysWithDpapi();
 builder.Services.ConfigureHttpJsonOptions(o => JsonDefaults.Configure(o.SerializerOptions));
 builder.Services.AddProblemDetails();
 builder.Services.AddTierModelAuth(options.RequireHttps);
+// Several managed domains (roadmap 17): cached list, and the domain of the current request or background job.
+builder.Services.AddSingleton<TierModel.Service.Domains.DomainRegistry>();
+builder.Services.AddScoped<TierModel.Service.Domains.DomainContext>();
 builder.Services.AddScoped<ChangeLogService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<ConfigService>();
@@ -79,13 +82,15 @@ builder.Services.AddSingleton<NotificationQueue>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddSingleton<WorkerHeartbeats>();
 builder.Services.AddScoped<HealthService>();
-// Live AD view: a fake domain for development, the computer's domain on Windows, otherwise "not available".
+// Live AD view per managed domain: a fake domain for development, the domain's DC (or the computer's domain) on Windows,
+// otherwise "not available".
 if (options.FakeDirectory || builder.Configuration.GetValue<bool>("TierModel:FakeDirectory"))
-    builder.Services.AddSingleton<IDirectoryReader, FakeDirectoryReader>();
+    builder.Services.AddSingleton<IDirectoryReaderFactory>(new DelegateDirectoryReaderFactory(
+        t => new FakeDirectoryReader(Path.Combine(options.FrameworkPath, "config"), t.DnsName, t.PreferredDc)));
 else if (OperatingSystem.IsWindows())
-    builder.Services.AddSingleton<IDirectoryReader, WindowsDirectoryReader>();
+    builder.Services.AddSingleton<IDirectoryReaderFactory>(new DelegateDirectoryReaderFactory(t => new WindowsDirectoryReader(t)));
 else
-    builder.Services.AddSingleton<IDirectoryReader, UnavailableDirectoryReader>();
+    builder.Services.AddSingleton<IDirectoryReaderFactory>(new DelegateDirectoryReaderFactory(_ => new UnavailableDirectoryReader()));
 builder.Services.AddSingleton<DirectoryService>();
 builder.Services.AddHttpClient("notifications", c => c.Timeout = TimeSpan.FromSeconds(20));
 
@@ -107,6 +112,8 @@ var app = builder.Build();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+    await scope.ServiceProvider.GetRequiredService<TierModel.Service.Domains.DomainRegistry>()
+        .InitializeAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), options);
     // Change-log entries from before the hash chain get their hashes once (roadmap 23).
     if (await ChangeLogChain.BackfillAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>()) is > 0 and var chained)
         app.Logger.LogInformation("Änderungsprotokoll: {Count} ältere Einträge in die Hash-Kette aufgenommen", chained);
@@ -131,8 +138,10 @@ app.UseAuthentication();
 app.UseTierModelSecurity();
 app.UseRateLimiter();
 app.UseAuthorization();
+app.UseMiddleware<TierModel.Service.Domains.DomainMiddleware>();
 
 app.MapAuthEndpoints();
+TierModel.Service.Domains.DomainEndpoints.MapDomainEndpoints(app);
 app.MapConfigEndpoints();
 app.MapRunEndpoints();
 app.MapMiscEndpoints();

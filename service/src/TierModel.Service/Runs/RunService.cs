@@ -21,6 +21,8 @@ public record PlanApplicabilityDto(bool Applicable, string? Reason, DateTimeOffs
 public class RunService(AppDbContext db, RunQueue queue, ChangeLogService changeLog, SettingsService settings, ConfigService config, NotificationQueue notifications,
     MaintenanceService maintenance, Domains.DomainContext domain)
 {
+    public int DomainId => domain.Id;
+
     public async Task<Run> EnqueueAsync(RunKind kind, RunRequest r, bool confirmApply, string user, RunTrigger trigger = RunTrigger.Manual, long? scheduleId = null,
         CancellationToken ct = default, Run? planRun = null)
     {

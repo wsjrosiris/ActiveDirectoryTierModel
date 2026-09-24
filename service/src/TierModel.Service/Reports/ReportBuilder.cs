@@ -9,8 +9,11 @@ using TierModel.Service.Runs;
 namespace TierModel.Service.Reports;
 
 /// <summary>Collects the data of a report from the database into a <see cref="ReportDocument"/> (rendered as HTML or PDF).</summary>
-public class ReportBuilder(AppDbContext db, SettingsService settings)
+/// <summary>Reports cover the current domain (<see cref="Domains.DomainContext"/>, roadmap 17); instance-wide change-log entries are included.</summary>
+public class ReportBuilder(AppDbContext db, SettingsService settings, Domains.DomainContext domain, Domains.DomainRegistry domains)
 {
+    private int DomainId => domain.Id;
+
     /// <summary>Tables are cut after this many rows; the report says so.</summary>
     public const int MaxRows = 1000;
 
@@ -77,7 +80,9 @@ public class ReportBuilder(AppDbContext db, SettingsService settings)
         var (start, end) = Range(from, to, now);
         var s = await settings.GetAsync(ct);
         var instance = string.IsNullOrWhiteSpace(s.PublicBaseUrl) ? Environment.MachineName : s.PublicBaseUrl;
-        var compliance = await PrivilegedEndpoints.ComplianceAsync(db, now, ct);
+        // Several domains: the report names the one it covers.
+        if (domains.Multiple) instance = $"{instance} · Domäne {domain.Label}";
+        var compliance = await PrivilegedEndpoints.ComplianceAsync(db, now, DomainId, ct);
         var scores = ComplianceCalculator.Tiers.Select(tier =>
         {
             var c = compliance.Current?.FirstOrDefault(x => x.Tier == tier);
@@ -106,8 +111,9 @@ public class ReportBuilder(AppDbContext db, SettingsService settings)
 
     private async Task<ReportDocument> SollIstAsync(DateTimeOffset end, CancellationToken ct)
     {
+        var domainId = DomainId;
         var audit = await db.Runs.AsNoTracking()
-            .Where(r => r.Kind == RunKind.Audit && r.Status == RunStatus.Succeeded && r.CreatedAt < end)
+            .Where(r => r.DomainId == domainId && r.Kind == RunKind.Audit && r.Status == RunStatus.Succeeded && r.CreatedAt < end)
             .OrderByDescending(r => r.Id).FirstOrDefaultAsync(ct);
         const string subtitle = "Abgleich der Soll-Konfiguration mit dem Active Directory (letztes Audit)";
         if (audit is null)
@@ -226,12 +232,14 @@ public class ReportBuilder(AppDbContext db, SettingsService settings)
 
     private async Task<ReportDocument> ChangesAsync(DateTimeOffset start, DateTimeOffset end, CancellationToken ct)
     {
-        var versions = await db.ConfigVersions.AsNoTracking().Where(v => v.CreatedAt >= start && v.CreatedAt < end)
+        var domainId = DomainId;
+        var versions = await db.ConfigVersions.AsNoTracking().Where(v => v.DomainId == domainId && v.CreatedAt >= start && v.CreatedAt < end)
             .OrderByDescending(v => v.CreatedAt).Select(v => new { v.SectionKey, v.Version, v.CreatedBy, v.CreatedAt, v.Comment }).ToListAsync(ct);
-        var runs = await db.Runs.AsNoTracking().Where(r => r.CreatedAt >= start && r.CreatedAt < end).OrderByDescending(r => r.Id).ToListAsync(ct);
-        var approvals = await db.Runs.AsNoTracking().Where(r => r.ApprovedAt >= start && r.ApprovedAt < end).OrderByDescending(r => r.ApprovedAt).ToListAsync(ct);
-        var changeCount = await db.ChangeLog.CountAsync(e => e.At >= start && e.At < end, ct);
-        var changes = await db.ChangeLog.AsNoTracking().Where(e => e.At >= start && e.At < end).OrderByDescending(e => e.Id).Take(MaxRows)
+        var runs = await db.Runs.AsNoTracking().Where(r => r.DomainId == domainId && r.CreatedAt >= start && r.CreatedAt < end).OrderByDescending(r => r.Id).ToListAsync(ct);
+        var approvals = await db.Runs.AsNoTracking().Where(r => r.DomainId == domainId && r.ApprovedAt >= start && r.ApprovedAt < end).OrderByDescending(r => r.ApprovedAt).ToListAsync(ct);
+        var log = ChangeLogService.ForDomain(db.ChangeLog.AsNoTracking(), domain.Current);
+        var changeCount = await log.CountAsync(e => e.At >= start && e.At < end, ct);
+        var changes = await log.Where(e => e.At >= start && e.At < end).OrderByDescending(e => e.Id).Take(MaxRows)
             .Select(e => new { e.At, e.Username, e.Action, e.Summary }).ToListAsync(ct);
 
         var applies = runs.Count(r => r.Kind == RunKind.Deploy && r.Mode == RunMode.Apply);
@@ -326,7 +334,7 @@ public class ReportBuilder(AppDbContext db, SettingsService settings)
 
     private async Task<ReportDocument> PrivilegedAsync(DateTimeOffset start, DateTimeOffset end, ComplianceDto compliance, CancellationToken ct)
     {
-        var latest = await db.PrivilegedSnapshots.AsNoTracking().Where(x => x.DomainId == 1 && x.TakenAt < end).OrderByDescending(x => x.Id).FirstOrDefaultAsync(ct);
+        var latest = await db.PrivilegedSnapshots.AsNoTracking().Where(x => x.DomainId == DomainId && x.TakenAt < end).OrderByDescending(x => x.Id).FirstOrDefaultAsync(ct);
         const string subtitle = "Mitglieder privilegierter Gruppen, Hygiene, Angriffspfade und Compliance-Wert";
         if (latest is null || PrivilegedSnapshotReader.Deserialize(latest.Data) is not { } data)
             return Empty(subtitle, "Keine Überwachung vorhanden", [],
@@ -396,7 +404,7 @@ public class ReportBuilder(AppDbContext db, SettingsService settings)
 
         // Membership changes within the period.
         var changeRows = await db.PrivilegedSnapshots.AsNoTracking()
-            .Where(x => x.DomainId == 1 && x.ChangeCount > 0 && x.TakenAt >= start && x.TakenAt < end)
+            .Where(x => x.DomainId == DomainId && x.ChangeCount > 0 && x.TakenAt >= start && x.TakenAt < end)
             .OrderByDescending(x => x.Id).Take(200).Select(x => new { x.TakenAt, x.Evaluation }).ToListAsync(ct);
         var changes = changeRows.SelectMany(r => (PrivilegedEvaluation.Deserialize(r.Evaluation)?.Changes ?? []).Select(c => (r.TakenAt, c))).Take(MaxRows).ToList();
         sections.Add(new ReportSection("Änderungen an Mitgliedschaften im Zeitraum", null,

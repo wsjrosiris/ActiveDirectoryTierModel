@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Combobox } from '@/components/ui/combobox'
+import { MultiCombobox } from '@/components/ui/multi-combobox'
+import { useDomains } from '@/features/domains/domain-context'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -178,6 +180,7 @@ function WindowsCard({ windows, onEdit }: { windows: MaintenanceWindow[]; onEdit
               <TR key={w.id} className={cn(!w.enabled && 'text-muted-foreground')}>
                 <TD>
                   <p className="font-medium text-foreground">{w.name}</p>
+                  <DomainScopeBadges ids={w.domainIds} />
                   <div className="mt-1 flex flex-wrap gap-0.5">
                     {weekdays.map((d) => (
                       <span
@@ -278,6 +281,7 @@ function FreezesCard({ freezes, onEdit }: { freezes: FreezePeriod[]; onEdit: (f:
                 <TD>
                   <p className="font-medium text-foreground">{f.reason}</p>
                   <p className="text-xs text-muted-foreground">von {f.createdBy}</p>
+                  <DomainScopeBadges ids={f.domainIds} />
                 </TD>
                 <TD className="text-[13px]">
                   <p>{formatDateTime(f.from)}</p>
@@ -315,7 +319,7 @@ function FreezesCard({ freezes, onEdit }: { freezes: FreezePeriod[]; onEdit: (f:
   )
 }
 
-const defaultWindow = (): MaintenanceWindowInput => ({ name: '', days: [1, 2, 3, 4, 5], from: '22:00', to: '04:00', timeZone: 'Europe/Berlin', enabled: true })
+const defaultWindow = (): MaintenanceWindowInput => ({ name: '', days: [1, 2, 3, 4, 5], from: '22:00', to: '04:00', timeZone: 'Europe/Berlin', enabled: true, domainIds: [] })
 
 function WindowSheet({ value, onClose }: { value: MaintenanceWindow | 'new' | null; onClose: () => void }) {
   const open = value !== null
@@ -326,7 +330,7 @@ function WindowSheet({ value, onClose }: { value: MaintenanceWindow | 'new' | nu
 
   React.useEffect(() => {
     if (!value) return
-    setForm(value === 'new' ? defaultWindow() : { name: value.name, days: value.days, from: value.from, to: value.to, timeZone: value.timeZone, enabled: value.enabled })
+    setForm(value === 'new' ? defaultWindow() : { name: value.name, days: value.days, from: value.from, to: value.to, timeZone: value.timeZone, enabled: value.enabled, domainIds: value.domainIds ?? [] })
   }, [value])
 
   const toggleDay = (d: number) => setForm((f) => ({ ...f, days: f.days.includes(d) ? f.days.filter((x) => x !== d) : [...f.days, d] }))
@@ -418,6 +422,7 @@ function WindowSheet({ value, onClose }: { value: MaintenanceWindow | 'new' | nu
                 </label>
               </Field>
             </div>
+            <DomainScopeField id="mw-domains" value={form.domainIds ?? []} onChange={(v) => setForm({ ...form, domainIds: v })} what="Das Fenster" />
           </SheetBody>
           <SheetFooter>
             {error && <span className="mr-auto text-xs text-muted-foreground">{error}</span>}
@@ -448,7 +453,7 @@ function defaultFreeze() {
   start.setHours(0, 0, 0, 0)
   const end = new Date(start)
   end.setDate(end.getDate() + 7)
-  return { reason: '', from: toLocalInput(start.toISOString()), to: toLocalInput(end.toISOString()), enabled: true }
+  return { reason: '', from: toLocalInput(start.toISOString()), to: toLocalInput(end.toISOString()), enabled: true, domainIds: [] as number[] }
 }
 
 function FreezeSheet({ value, onClose }: { value: FreezePeriod | 'new' | null; onClose: () => void }) {
@@ -459,7 +464,7 @@ function FreezeSheet({ value, onClose }: { value: FreezePeriod | 'new' | null; o
 
   React.useEffect(() => {
     if (!value) return
-    setForm(value === 'new' ? defaultFreeze() : { reason: value.reason, from: toLocalInput(value.from), to: toLocalInput(value.to), enabled: value.enabled })
+    setForm(value === 'new' ? defaultFreeze() : { reason: value.reason, from: toLocalInput(value.from), to: toLocalInput(value.to), enabled: value.enabled, domainIds: value.domainIds ?? [] })
   }, [value])
 
   const from = fromLocalInput(form.from)
@@ -469,7 +474,7 @@ function FreezeSheet({ value, onClose }: { value: FreezePeriod | 'new' | null; o
 
   const save = useMutation({
     mutationFn: () => {
-      const body: FreezePeriodInput = { reason: form.reason.trim(), from: from!, to: to!, enabled: form.enabled }
+      const body: FreezePeriodInput = { reason: form.reason.trim(), from: from!, to: to!, enabled: form.enabled, domainIds: form.domainIds }
       return isNew ? opsApi.maintenance.createFreeze(body) : opsApi.maintenance.updateFreeze((value as FreezePeriod).id, body)
     },
     onSuccess: () => {
@@ -507,6 +512,7 @@ function FreezeSheet({ value, onClose }: { value: FreezePeriod | 'new' | null; o
                 {form.enabled ? 'Aktiv' : 'Deaktiviert'}
               </label>
             </Field>
+            <DomainScopeField id="fz-domains" value={form.domainIds} onChange={(v) => setForm({ ...form, domainIds: v })} what="Die Sperrzeit" />
           </SheetBody>
           <SheetFooter>
             {error && <span className="mr-auto text-xs text-muted-foreground">{error}</span>}
@@ -516,5 +522,38 @@ function FreezeSheet({ value, onClose }: { value: FreezePeriod | 'new' | null; o
         </form>
       </SheetContent>
     </Sheet>
+  )
+}
+
+/** Domain restriction of a window or freeze (roadmap 17): only shown when several domains exist. */
+function DomainScopeField({ id, value, onChange, what }: { id: string; value: number[]; onChange: (v: number[]) => void; what: string }) {
+  const { domains } = useDomains()
+  if (domains.length < 2) return null
+  const options = domains.map((d) => ({ value: String(d.id), label: d.displayName, hint: d.dnsName || d.key }))
+  return (
+    <Field label="Gilt für Domänen" htmlFor={id} hint={value.length === 0 ? `Leer lassen: ${what} gilt für alle Domänen.` : `${what} gilt nur für Anwenden-Läufe der gewählten Domänen.`}>
+      <MultiCombobox
+        id={id}
+        values={value.map(String)}
+        onChange={(v) => onChange(v.map(Number))}
+        options={options}
+        allowCustom={false}
+        placeholder={value.length === 0 ? 'Alle Domänen – Domäne wählen …' : 'Weitere Domäne …'}
+        emptyText="Keine Domäne gefunden"
+      />
+    </Field>
+  )
+}
+
+/** Names of the domains a window or freeze is limited to (nothing when it applies to all). */
+function DomainScopeBadges({ ids }: { ids: number[] | undefined }) {
+  const { byId, domains } = useDomains()
+  if (!ids?.length || domains.length < 2) return null
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {ids.map((id) => (
+        <Badge key={id} variant="outline">{byId(id)?.displayName ?? `Domäne ${id}`}</Badge>
+      ))}
+    </div>
   )
 }

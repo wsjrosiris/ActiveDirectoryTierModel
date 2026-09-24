@@ -66,7 +66,7 @@ public static class ConfigEndpoints
         g.MapGet("/validate", async (ConfigService config, CancellationToken ct) =>
             ConfigValidator.Validate(await config.CurrentContentAsync(ct)));
 
-        g.MapGet("/export", async (ConfigService config, CancellationToken ct) =>
+        g.MapGet("/export", async (ConfigService config, Domains.DomainContext domain, Domains.DomainRegistry domains, CancellationToken ct) =>
         {
             var snapshot = await config.SnapshotAsync(ct);
             var ms = new MemoryStream();
@@ -84,7 +84,8 @@ public static class ConfigEndpoints
                         new JsonObject(snapshot.Select(x => KeyValuePair.Create(x.Def.Key, (JsonNode?)x.Version))))), ct);
             }
             ms.Position = 0;
-            return Results.File(ms, "application/zip", $"tiermodel-config-{DateTime.UtcNow:yyyyMMdd-HHmm}.zip");
+            var name = domains.Multiple ? $"tiermodel-config-{domain.Key}-{DateTime.UtcNow:yyyyMMdd-HHmm}.zip" : $"tiermodel-config-{DateTime.UtcNow:yyyyMMdd-HHmm}.zip";
+            return Results.File(ms, "application/zip", name);
         });
     }
 }

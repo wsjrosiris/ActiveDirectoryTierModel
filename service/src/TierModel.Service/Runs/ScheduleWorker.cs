@@ -81,14 +81,23 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var runs = scope.ServiceProvider.GetRequiredService<RunService>();
+        var domain = scope.ServiceProvider.GetRequiredService<Domains.DomainContext>();
+        var domains = scope.ServiceProvider.GetRequiredService<Domains.DomainRegistry>();
         var now = DateTimeOffset.UtcNow;
 
         var due = await db.Schedules.Where(s => s.Enabled && s.NextRunAt != null && s.NextRunAt <= now).ToListAsync(ct);
         foreach (var s in due)
         {
+            // The run belongs to the schedule's domain (roadmap 17); disabled domains do not run.
+            domain.Use(s.DomainId);
+            var disabled = domains.Find(s.DomainId) is { Enabled: false };
             // Skip if the previous run of this schedule is still waiting or running.
             var busy = s.LastRunId is { } last && await db.Runs.AnyAsync(r => r.Id == last && (r.Status == RunStatus.Queued || r.Status == RunStatus.Running), ct);
-            if (!busy)
+            if (disabled)
+            {
+                logger.LogInformation("Schedule {Schedule} skipped: domain {Domain} is disabled", s.Name, domain.Key);
+            }
+            else if (!busy)
             {
                 var run = await runs.EnqueueAsync(s.Kind == RunKind.Monitor ? RunKind.Monitor : RunKind.Audit, RequestFor(s),
                     confirmApply: false, $"Zeitplan: {s.Name}", RunTrigger.Schedule, s.Id, ct);

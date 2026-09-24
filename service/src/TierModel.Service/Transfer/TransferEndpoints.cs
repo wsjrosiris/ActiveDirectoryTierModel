@@ -8,7 +8,8 @@ namespace TierModel.Service.Transfer;
 
 public record FilePreviewQuery(string? FileName);
 
-public record RemotePreviewRequest(Guid InstanceId, List<ReplacementRule>? Replacements);
+/// <param name="RemoteDomain">Domain of the other instance to import from (roadmap 17); null = its default domain.</param>
+public record RemotePreviewRequest(Guid InstanceId, List<ReplacementRule>? Replacements, string? RemoteDomain = null);
 
 public record ValidateSelectionRequest(List<string>? Keys);
 
@@ -80,7 +81,8 @@ public static class TransferEndpoints
             }
             try
             {
-                var source = await client.FetchAsync($"Instanz {instance.Name}", instance.Url, token, ctx.RequestAborted);
+                var label = string.IsNullOrWhiteSpace(r.RemoteDomain) ? $"Instanz {instance.Name}" : $"Instanz {instance.Name} (Domäne {r.RemoteDomain.Trim()})";
+                var source = await client.FetchAsync(label, instance.Url, token, ctx.RequestAborted, r.RemoteDomain);
                 return Results.Ok(await import.CreatePreviewAsync(source, "remote", rules, ctx.User.UserName(), ctx.RequestAborted));
             }
             catch (RemoteImportException ex)

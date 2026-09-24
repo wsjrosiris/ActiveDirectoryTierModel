@@ -19,6 +19,7 @@ public static class CefFormatter
         [SiemFields.Url] = ("request", null),
         [SiemFields.Id] = ("externalId", null),
         [SiemFields.DomainController] = ("dhost", null),
+        [SiemFields.Domain] = ("dntdom", null),
         [SiemFields.Group] = ("cs1", "Group"),
         [SiemFields.GroupSid] = ("cs2", "GroupSid"),
         [SiemFields.Rule] = ("cs3", "Rule"),

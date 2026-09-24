@@ -32,7 +32,7 @@ public class NotificationQueue
 public record NotificationMessage(NotificationEvent? Event, string Title, string Text, IReadOnlyList<(string Label, string Value)> Facts, string? Url, string Color);
 
 public class NotificationService(AppDbContext db, SettingsService settings, ChangeLogService changeLog, IHttpClientFactory httpFactory, SiemSender siem,
-    ILogger<NotificationService> logger)
+    ILogger<NotificationService> logger, Domains.DomainRegistry? domains = null)
 {
     public static readonly TimeSpan[] RetryDelays = [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)];
 
@@ -72,8 +72,9 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
         return parts.Count == 0 ? null : string.Join(", ", parts);
     }
 
+    /// <param name="domain">Domain of the run (roadmap 17): named in the facts, and in the title when several domains exist.</param>
     public static NotificationMessage BuildMessage(NotificationEvent e, Run run, string publicBaseUrl, DeployPlan? plan = null,
-        PrivilegedEvaluation? evaluation = null)
+        PrivilegedEvaluation? evaluation = null, Domain? domain = null, bool multipleDomains = false)
     {
         var what = RunService.RunTitle(run);
         var scope = run.Kind == RunKind.Monitor ? "Privilegierte Gruppen" : run.Scope?.ToString() ?? "–";
@@ -82,10 +83,14 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
         var facts = new List<(string, string)>
         {
             ("Lauf", $"#{run.Id} · {what}"),
+        };
+        if (domain is not null) facts.Add(("Domäne", Domains.DomainRules.Label(domain)));
+        facts.AddRange(new (string, string)[]
+        {
             ("Bereich", scope),
             ("Domänencontroller", run.PreferredDc),
             ("Angefordert von", run.RequestedBy),
-        };
+        });
         var (title, text, color) = e switch
         {
             NotificationEvent.Drift => ($"Drift erkannt: {run.DriftCount} Abweichung(en)",
@@ -112,6 +117,7 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
         if (run.FinishedAt is { } f) facts.Add(("Beendet", f.ToLocalTime().ToString("dd.MM.yyyy HH:mm")));
         var url = string.IsNullOrWhiteSpace(publicBaseUrl) ? null
             : e == NotificationEvent.PrivilegedChange ? $"{publicBaseUrl.TrimEnd('/')}/privilegiert" : $"{publicBaseUrl.TrimEnd('/')}/laeufe/{run.Id}";
+        if (multipleDomains && domain is not null) title = $"[{domain.DisplayName}] {title}";
         return new NotificationMessage(e, title, text, facts, url, color);
     }
 
@@ -154,6 +160,7 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
         if (e == NotificationEvent.PrivilegedChange)
             evaluation = PrivilegedEvaluation.Deserialize(await db.PrivilegedSnapshots.AsNoTracking().Where(p => p.RunId == runId).Select(p => p.Evaluation).FirstOrDefaultAsync(ct));
         var publicBaseUrl = (await settings.GetAsync(ct)).PublicBaseUrl;
+        var domain = domains?.Find(run.DomainId);
         // SIEM channels get structured events: one per membership change and new finding of a monitor run.
         IReadOnlyList<SiemEvent>? siemEvents = null;
         if (channels.Any(c => SiemChannelConfig.IsSiem(c.Type)))
@@ -162,12 +169,12 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
             {
                 var snapshotId = await db.PrivilegedSnapshots.AsNoTracking().Where(p => p.RunId == runId).Select(p => p.Id).FirstOrDefaultAsync(ct);
                 var previous = PrivilegedEvaluation.Deserialize(await db.PrivilegedSnapshots.AsNoTracking()
-                    .Where(p => p.DomainId == 1 && p.Id < snapshotId).OrderByDescending(p => p.Id).Select(p => p.Evaluation).FirstOrDefaultAsync(ct));
-                siemEvents = SiemEvents.ForMonitor(run, evaluation, previous, publicBaseUrl);
+                    .Where(p => p.DomainId == run.DomainId && p.Id < snapshotId).OrderByDescending(p => p.Id).Select(p => p.Evaluation).FirstOrDefaultAsync(ct));
+                siemEvents = SiemEvents.ForMonitor(run, evaluation, previous, publicBaseUrl, domain);
             }
-            else siemEvents = [SiemEvents.ForRun(e, run, publicBaseUrl)];
+            else siemEvents = [SiemEvents.ForRun(e, run, publicBaseUrl, domain)];
         }
-        await SendToAsync(channels, BuildMessage(e, run, publicBaseUrl, plan, evaluation), ct, siemEvents);
+        await SendToAsync(channels, BuildMessage(e, run, publicBaseUrl, plan, evaluation, domain, domains?.Multiple == true), ct, siemEvents);
     }
 
     /// <summary>Sends a ready-made message (events without a run) to every channel that wants its event.</summary>

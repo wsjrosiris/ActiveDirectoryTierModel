@@ -98,7 +98,7 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var next = await db.Runs.Where(r => r.Status == RunStatus.Queued).OrderBy(r => r.Id).Select(r => new { r.Id, r.Kind, r.Mode }).FirstOrDefaultAsync(ct);
+        var next = await db.Runs.Where(r => r.Status == RunStatus.Queued).OrderBy(r => r.Id).Select(r => new { r.Id, r.Kind, r.Mode, r.DomainId }).FirstOrDefaultAsync(ct);
         if (next is null) return null;
         var id = next.Id;
         if (next.Kind == RunKind.Deploy && next.Mode == RunMode.Apply)
@@ -106,7 +106,7 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
             // Last line of defence (roadmap 4): an apply never starts outside a maintenance window or inside a freeze,
             // e.g. when a freeze was added after the run was queued. It goes back to "Scheduled".
             var maintenance = scope.ServiceProvider.GetRequiredService<Maintenance.MaintenanceService>();
-            var (status, scheduledFor) = await maintenance.StartStatusAsync(DateTimeOffset.UtcNow, ct);
+            var (status, scheduledFor) = await maintenance.StartStatusAsync(DateTimeOffset.UtcNow, next.DomainId, ct);
             if (status == RunStatus.Scheduled)
             {
                 await db.Runs.Where(r => r.Id == id && r.Status == RunStatus.Queued).ExecuteUpdateAsync(u => u
@@ -130,6 +130,9 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var config = scope.ServiceProvider.GetRequiredService<ConfigService>();
         var run = await db.Runs.FirstAsync(r => r.Id == id, CancellationToken.None);
+        // Configuration, settings and change-log entries of this scope belong to the run's domain (roadmap 17).
+        var domain = scope.ServiceProvider.GetRequiredService<Domains.DomainContext>();
+        domain.Use(run.DomainId);
 
         using var cancel = queue.Register(id);
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(o.RunTimeoutMinutes));
@@ -143,6 +146,7 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
         try
         {
             log.System($"Lauf #{id} gestartet: {Describe(run)}");
+            log.System($"Domäne: {domain.Label} – die Skripte ermitteln die Domäne über den Domänencontroller {run.PreferredDc}.");
 
             // Runs approved under the four-eyes principle execute exactly the configuration that was reviewed.
             var pinned = run.ConfigVersions is { } pinnedJson ? JsonSerializer.Deserialize<Dictionary<string, int>>(pinnedJson) : null;
@@ -513,19 +517,20 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
         }
 
         var previous = await db.PrivilegedSnapshots.AsNoTracking()
-            .Where(s => s.DomainId == 1 && s.RunId != run.Id)
+            .Where(s => s.DomainId == run.DomainId && s.RunId != run.Id)
             .OrderByDescending(s => s.Id)
             .Select(s => new { s.Data, s.Evaluation })
             .FirstOrDefaultAsync();
         // Members with an active Just-in-Time grant at the time of the snapshot are expected (roadmap 6).
         var tier0 = Tier0Config.From(sections);
-        tier0.Jit.AddRange(await Jit.JitService.ExpectationsAsync(db, data.Metadata.Timestamp ?? DateTimeOffset.UtcNow));
+        tier0.Jit.AddRange(await Jit.JitService.ExpectationsAsync(db, data.Metadata.Timestamp ?? DateTimeOffset.UtcNow, run.DomainId));
         var evaluation = PrivilegedEvaluator.Evaluate(data, PrivilegedSnapshotReader.Deserialize(previous?.Data),
             PrivilegedEvaluation.Deserialize(previous?.Evaluation), tier0, thresholds, DateTimeOffset.UtcNow);
 
         db.PrivilegedSnapshots.Add(new PrivilegedSnapshot
         {
             RunId = run.Id,
+            DomainId = run.DomainId,
             TakenAt = data.Metadata.Timestamp ?? DateTimeOffset.UtcNow,
             Data = PrivilegedSnapshotReader.Serialize(data),
             Evaluation = evaluation.Serialize(),

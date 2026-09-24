@@ -40,6 +40,9 @@ public record AdMember(string Name, string SamAccountName, string ObjectClass, s
 
 public record AdObjectCounts(int Users, int Groups, int Computers, int Other);
 
+/// <summary>A group or user account found by a search (lookups for the forms).</summary>
+public record AdPrincipal(string Name, string SamAccountName, string Sid, string? DistinguishedName, string? Description);
+
 /// <summary>Reads the directory. Implementations must be read-only and bounded.</summary>
 public interface IDirectoryReader
 {
@@ -66,6 +69,15 @@ public interface IDirectoryReader
 
     /// <summary>Names for schema / extended-right GUIDs that are not in the guid mappings (lDAPDisplayName or rights name).</summary>
     Dictionary<string, string> ResolveGuids(IEnumerable<string> guids);
+
+    /// <summary>Domain, forest and domain controllers without the OU pass ("Verbindung prüfen", DC suggestions). Throws when unreachable.</summary>
+    AdDomainInfo DomainInfo();
+
+    /// <summary>Groups whose name starts with or contains <paramref name="query"/> (at least 2 characters).</summary>
+    List<AdPrincipal> SearchGroups(string query, int max);
+
+    /// <summary>User accounts whose sAMAccountName starts with or whose name contains <paramref name="query"/> (at least 2 characters).</summary>
+    List<AdPrincipal> SearchAccounts(string query, int max);
 }
 
 /// <summary>Used when the service does not run on a domain-joined Windows server.</summary>
@@ -79,6 +91,9 @@ public sealed class UnavailableDirectoryReader : IDirectoryReader
     public List<AdMember> GroupMembers(string groupDn, int max) => throw new DirectoryUnavailableException();
     public List<AdAce> Aces(string dn) => throw new DirectoryUnavailableException();
     public Dictionary<string, string> ResolveGuids(IEnumerable<string> guids) => [];
+    public AdDomainInfo DomainInfo() => throw new DirectoryUnavailableException();
+    public List<AdPrincipal> SearchGroups(string query, int max) => [];
+    public List<AdPrincipal> SearchAccounts(string query, int max) => [];
 }
 
 public class DirectoryUnavailableException() : Exception("Active Directory ist auf diesem Server nicht erreichbar.");

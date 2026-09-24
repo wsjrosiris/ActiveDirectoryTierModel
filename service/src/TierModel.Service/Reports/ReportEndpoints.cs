@@ -16,8 +16,9 @@ public record ReportTypeDto(string Type, string Title, string Description, bool 
 public enum ReportFrequency { Weekly, Monthly }
 
 /// <summary>A report sent by e-mail on a schedule (stored as a list in the settings, key "reportSchedules").</summary>
+/// <param name="DomainId">Domain the report covers (roadmap 17); null = the default domain.</param>
 public record ReportSchedule(Guid Id, string Name, string Type, ReportFrequency Frequency, int Day, string Time, List<string> Recipients, bool Enabled,
-    DateTimeOffset CreatedAt, DateTimeOffset? LastSentAt = null, string? LastError = null)
+    DateTimeOffset CreatedAt, DateTimeOffset? LastSentAt = null, string? LastError = null, int? DomainId = null)
 {
     /// <summary>Next delivery after <paramref name="after"/> in the server's time zone. Weekly: Day = 0 (Sunday) … 6; monthly: day 1–28.</summary>
     public DateTimeOffset NextAfter(DateTimeOffset after)
@@ -46,15 +47,16 @@ public record ReportSchedule(Guid Id, string Name, string Type, ReportFrequency 
 }
 
 public record ReportScheduleDto(Guid Id, string Name, string Type, ReportFrequency Frequency, int Day, string Time, List<string> Recipients, bool Enabled,
-    DateTimeOffset CreatedAt, DateTimeOffset? LastSentAt, string? LastError, DateTimeOffset? NextRunAt)
+    DateTimeOffset CreatedAt, DateTimeOffset? LastSentAt, string? LastError, DateTimeOffset? NextRunAt, int? DomainId)
 {
     public static ReportScheduleDto From(ReportSchedule s, DateTimeOffset now) => new(s.Id, s.Name, s.Type, s.Frequency, s.Day, s.Time, s.Recipients,
-        s.Enabled, s.CreatedAt, s.LastSentAt, s.LastError, s.Enabled ? Max(s.NextAfter(ReportSchedules.Reference(s)), now) : null);
+        s.Enabled, s.CreatedAt, s.LastSentAt, s.LastError, s.Enabled ? Max(s.NextAfter(ReportSchedules.Reference(s)), now) : null, s.DomainId);
 
     private static DateTimeOffset Max(DateTimeOffset a, DateTimeOffset b) => a > b ? a : b;
 }
 
-public record ReportScheduleInput(Guid? Id, string Name, string Type, ReportFrequency Frequency, int Day, string Time, List<string>? Recipients, bool Enabled);
+public record ReportScheduleInput(Guid? Id, string Name, string Type, ReportFrequency Frequency, int Day, string Time, List<string>? Recipients, bool Enabled,
+    int? DomainId = null);
 
 public static class ReportSchedules
 {
@@ -93,9 +95,11 @@ public static class ReportSchedules
         return errors;
     }
 
-    /// <summary>Builds the report of a schedule and sends it as PDF attachment through the SMTP server of the notifications.</summary>
-    public static async Task SendAsync(ReportSchedule s, ReportBuilder builder, SettingsService settings, DateTimeOffset now, CancellationToken ct)
+    /// <summary>Builds the report of a schedule (for its domain) and sends it as PDF attachment through the SMTP server of the notifications.</summary>
+    public static async Task SendAsync(ReportSchedule s, ReportBuilder builder, SettingsService settings, DateTimeOffset now, CancellationToken ct,
+        Domains.DomainContext? domain = null)
     {
+        if (domain is not null && s.DomainId is { } domainId) domain.Use(domainId);
         var smtp = await settings.GetSmtpAsync(ct);
         if (string.IsNullOrWhiteSpace(smtp.Host) || string.IsNullOrWhiteSpace(smtp.From))
             throw new InvalidOperationException("SMTP ist nicht eingerichtet (Server und Absender fehlen) – siehe Benachrichtigungen.");
@@ -106,7 +110,7 @@ public static class ReportSchedules
         var mail = new MimeMessage();
         mail.From.Add(MailboxAddress.Parse(smtp.From));
         foreach (var r in s.Recipients) mail.To.Add(MailboxAddress.Parse(r.Trim()));
-        mail.Subject = $"[TierModel] {doc.Title} – {HtmlReportRenderer.Range(doc)}";
+        mail.Subject = $"[TierModel] {doc.Title} – {HtmlReportRenderer.Range(doc)}" + (domain is not null && s.DomainId is not null ? $" – {domain.Current.DisplayName}" : "");
         var body = new BodyBuilder
         {
             TextBody = $"Im Anhang: {doc.Title} ({HtmlReportRenderer.Range(doc)}).\nGrundlage: {doc.Basis}\nInstanz: {doc.Instance}\n\nGesendet vom Zeitplan „{s.Name}“.",
@@ -154,11 +158,12 @@ public static class ReportEndpoints
     {
         var api = app.MapGroup("/api/reports").RequireAuthorization(nameof(Role.Viewer));
 
-        api.MapGet("/", async (AppDbContext db, CancellationToken ct) =>
+        api.MapGet("/", async (AppDbContext db, Domains.DomainContext domain, CancellationToken ct) =>
         {
-            var audit = await db.Runs.AsNoTracking().Where(r => r.Kind == RunKind.Audit && r.Status == RunStatus.Succeeded)
+            var domainId = domain.Id;
+            var audit = await db.Runs.AsNoTracking().Where(r => r.DomainId == domainId && r.Kind == RunKind.Audit && r.Status == RunStatus.Succeeded)
                 .OrderByDescending(r => r.Id).Select(r => new { r.Id, At = r.FinishedAt ?? r.CreatedAt }).FirstOrDefaultAsync(ct);
-            var snapshot = await db.PrivilegedSnapshots.AsNoTracking().Where(x => x.DomainId == 1).OrderByDescending(x => x.Id)
+            var snapshot = await db.PrivilegedSnapshots.AsNoTracking().Where(x => x.DomainId == domainId).OrderByDescending(x => x.Id)
                 .Select(x => new { x.RunId, x.TakenAt }).FirstOrDefaultAsync(ct);
             return new List<ReportTypeDto>
             {
@@ -179,12 +184,16 @@ public static class ReportEndpoints
             return (await ReportSchedules.LoadAsync(settings, ct)).Select(s => ReportScheduleDto.From(s, now));
         }).RequireAuthorization(nameof(Role.Admin));
 
-        api.MapPut("/schedules", async (List<ReportScheduleInput> input, HttpContext ctx, SettingsService settings, ChangeLogService log, AppDbContext db) =>
+        api.MapPut("/schedules", async (List<ReportScheduleInput> input, HttpContext ctx, SettingsService settings, ChangeLogService log, AppDbContext db,
+            Domains.DomainRegistry domains) =>
         {
             var errors = new Dictionary<string, string[]>();
             if (input.Count > 50) errors["schedules"] = ["Höchstens 50 Zeitpläne."];
             for (var i = 0; i < input.Count; i++)
+            {
                 foreach (var (k, v) in ReportSchedules.Validate(input[i])) errors[$"schedules[{i}].{k}"] = v;
+                if (input[i].DomainId is { } d && domains.Find(d) is null) errors[$"schedules[{i}].domainId"] = ["Unbekannte Domäne."];
+            }
             if (errors.Count > 0) return Results.ValidationProblem(errors);
 
             var existing = (await ReportSchedules.LoadAsync(settings)).ToDictionary(s => s.Id);
@@ -196,7 +205,7 @@ public static class ReportEndpoints
                 var changedTiming = old is null || old.Frequency != r.Frequency || old.Day != r.Day || old.Time != r.Time || (!old.Enabled && r.Enabled);
                 return new ReportSchedule(old?.Id ?? Guid.NewGuid(), r.Name.Trim(), r.Type, r.Frequency, r.Day, r.Time, recipients, r.Enabled,
                     // A new or re-timed schedule starts counting now, so it does not fire for a time slot in the past.
-                    changedTiming ? now : old!.CreatedAt, old?.LastSentAt, old?.LastError);
+                    changedTiming ? now : old!.CreatedAt, old?.LastSentAt, old?.LastError, r.DomainId);
             }).ToList();
             await ReportSchedules.SaveAsync(settings, list);
             log.Add(ctx.User.UserName(), "settings.report-schedules", "settings", null,
@@ -206,14 +215,15 @@ public static class ReportEndpoints
         }).RequireAuthorization(nameof(Role.Admin));
 
         api.MapPost("/schedules/{id:guid}/send", async (Guid id, HttpContext ctx, SettingsService settings, ReportBuilder builder, ChangeLogService log,
-            AppDbContext db, CancellationToken ct) =>
+            AppDbContext db, Domains.DomainContext domain, Domains.DomainRegistry domains, CancellationToken ct) =>
         {
             var list = await ReportSchedules.LoadAsync(settings, ct);
             var s = list.FirstOrDefault(x => x.Id == id);
             if (s is null) return Results.NotFound();
+            domain.Use(s.DomainId is { } sd ? domains.Find(sd) ?? domains.Default : domains.Default);
             try
             {
-                await ReportSchedules.SendAsync(s, builder, settings, DateTimeOffset.UtcNow, ct);
+                await ReportSchedules.SendAsync(s, builder, settings, DateTimeOffset.UtcNow, ct, domain);
                 log.Add(ctx.User.UserName(), "report.send", "settings", null, $"Bericht „{s.Name}“ an {string.Join(", ", s.Recipients)} gesendet");
                 await db.SaveChangesAsync(ct);
                 return Results.NoContent();
@@ -275,11 +285,14 @@ public class ReportScheduleWorker(IServiceScopeFactory scopes, ILogger<ReportSch
     {
         await using var scope = scopes.CreateAsyncScope();
         var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
+        var domain = scope.ServiceProvider.GetRequiredService<Domains.DomainContext>();
+        var domains = scope.ServiceProvider.GetRequiredService<Domains.DomainRegistry>();
         var due = (await ReportSchedules.LoadAsync(settings, ct)).Where(s => ReportSchedules.IsDue(s, now)).ToList();
         foreach (var s in due)
         {
             string? error = null;
-            try { await ReportSchedules.SendAsync(s, scope.ServiceProvider.GetRequiredService<ReportBuilder>(), settings, now, ct); }
+            domain.Use(s.DomainId is { } sd ? domains.Find(sd) ?? domains.Default : domains.Default);
+            try { await ReportSchedules.SendAsync(s, scope.ServiceProvider.GetRequiredService<ReportBuilder>(), settings, now, ct, domain); }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 error = ex.Message;

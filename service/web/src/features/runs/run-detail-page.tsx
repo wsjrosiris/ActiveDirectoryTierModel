@@ -26,6 +26,8 @@ import { ApprovalOutcome, ApprovalPanel } from './approval-panel'
 import { PlanApplyBar, PlanMissing, PlanView } from './plan-view'
 import { planTotal } from './plan-model'
 import { Component as NotFound } from '@/components/layout/not-found'
+import { OtherDomainNotice } from '@/features/domains/other-domain-notice'
+import { DomainBadge } from '@/features/domains/domain-switcher'
 
 export function Component() {
   const { id: idParam } = useParams()
@@ -114,6 +116,7 @@ export function Component() {
                   {r.kind === 'Deploy' && (
                     <Badge variant={r.mode === 'Apply' ? 'danger' : 'info'}>{r.mode === 'Apply' ? 'Anwenden' : 'WhatIf'}</Badge>
                   )}
+                  <DomainBadge id={r.domainId} />
                 </div>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted-foreground">
                   <span className="flex items-center gap-1">
@@ -153,6 +156,7 @@ export function Component() {
             )}
           </div>
 
+          <OtherDomainNotice domainId={r.domainId} what="Dieser Lauf" />
           {awaiting && <ApprovalPanel run={r} onShowConfig={() => setTab('config')} />}
           {scheduled && <ScheduledPanel run={r} />}
 

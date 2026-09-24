@@ -83,6 +83,8 @@ public static class SiemFields
     public const string Url = "url";
     public const string Id = "id";
     public const string DomainController = "dc";
+    /// <summary>DNS name (or key) of the managed domain (roadmap 17).</summary>
+    public const string Domain = "domain";
     public const string Via = "via";
     public const string Direct = "direct";
     public const string RunKind = "runKind";
@@ -138,7 +140,9 @@ public static class SiemEvents
     }
 
     /// <summary>A run event (drift, failure, applied, approval requested).</summary>
-    public static SiemEvent ForRun(NotificationEvent e, Run run, string publicBaseUrl)
+    private static string? DomainName(Data.Domain? d) => d is null ? null : string.IsNullOrWhiteSpace(d.DnsName) ? d.Key : d.DnsName;
+
+    public static SiemEvent ForRun(NotificationEvent e, Run run, string publicBaseUrl, Data.Domain? domain = null)
     {
         var (id, name, severity, message) = e switch
         {
@@ -154,7 +158,7 @@ public static class SiemEvents
         return new SiemEvent(id, name, severity, run.Kind.ToString(), run.FinishedAt ?? DateTimeOffset.UtcNow, message, Clean(
         [
             F(SiemFields.RunId, run.Id), F(SiemFields.RunKind, run.Kind), F(SiemFields.Status, run.Status),
-            F(SiemFields.Actor, run.RequestedBy), F(SiemFields.DomainController, run.PreferredDc),
+            F(SiemFields.Actor, run.RequestedBy), F(SiemFields.DomainController, run.PreferredDc), F(SiemFields.Domain, DomainName(domain)),
             F(SiemFields.Count, e == NotificationEvent.Drift ? run.DriftCount : null),
             F("approvedBy", run.ApprovedBy), F("scope", run.Scope), F("mode", run.Mode), F(SiemFields.Url, url),
         ]));
@@ -164,12 +168,12 @@ public static class SiemEvents
     /// One event per membership change and per new finding of a monitor run (unexpected member, high hygiene finding, attack path),
     /// using the same "new" rule as the notification (<see cref="PrivilegedEvaluator.Evaluate"/>).
     /// </summary>
-    public static List<SiemEvent> ForMonitor(Run run, PrivilegedEvaluation current, PrivilegedEvaluation? previous, string publicBaseUrl)
+    public static List<SiemEvent> ForMonitor(Run run, PrivilegedEvaluation current, PrivilegedEvaluation? previous, string publicBaseUrl, Data.Domain? domain = null)
     {
         var at = run.FinishedAt ?? DateTimeOffset.UtcNow;
         var url = string.IsNullOrWhiteSpace(publicBaseUrl) ? null : $"{publicBaseUrl.TrimEnd('/')}/privilegiert";
         var events = new List<SiemEvent>();
-        var common = new[] { F(SiemFields.RunId, run.Id), F(SiemFields.DomainController, run.PreferredDc), F(SiemFields.Url, url) };
+        var common = new[] { F(SiemFields.RunId, run.Id), F(SiemFields.DomainController, run.PreferredDc), F(SiemFields.Domain, DomainName(domain)), F(SiemFields.Url, url) };
 
         foreach (var c in current.Changes)
         {
@@ -231,8 +235,16 @@ public static class SiemEvents
     public static SiemEvent ForChange(ChangeEntry e) => new(ChangeLog, "Change log entry", ChangeSeverity(e.Action), "ChangeLog", e.At, e.Summary,
         Clean([
             F(SiemFields.Id, e.Id == 0 ? null : e.Id), F(SiemFields.Actor, e.Username), F(SiemFields.Action, e.Action),
-            F(SiemFields.EntityType, e.EntityType), F(SiemFields.EntityId, e.EntityId),
+            F(SiemFields.EntityType, e.EntityType), F(SiemFields.EntityId, e.EntityId), F(SiemFields.Domain, DomainOfDetails(e.Details)),
         ]));
+
+    /// <summary>Domain key stored in the details of domain-bound change-log entries.</summary>
+    private static string? DomainOfDetails(string? details)
+    {
+        if (string.IsNullOrEmpty(details) || !details.Contains("\"domain\"", StringComparison.Ordinal)) return null;
+        try { return System.Text.Json.Nodes.JsonNode.Parse(details)?["domain"] is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var s) ? s : null; }
+        catch (System.Text.Json.JsonException) { return null; }
+    }
 
     private static string Join(string title, string text) => string.IsNullOrWhiteSpace(text) ? title : $"{title}: {text.Replace('\n', ' ')}";
 

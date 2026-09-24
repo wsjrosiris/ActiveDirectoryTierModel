@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Pencil, PlugZap, Plus, Server, Trash2, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
+import { Combobox } from '@/components/ui/combobox'
 import { transferApi, type RemoteCheckResult, type RemoteInstance } from '@/api/transfer'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -35,7 +36,18 @@ export function CheckResult({ result, className }: { result: RemoteCheckResult |
 }
 
 /** Choice of a saved instance plus management (add / edit / remove) for administrators. */
-export function RemoteInstancePicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+export function RemoteInstancePicker({
+  value,
+  onChange,
+  remoteDomain = '',
+  onRemoteDomainChange,
+}: {
+  value: string
+  onChange: (id: string) => void
+  /** Domain of the other instance to import from (roadmap 17); '' = its default domain. */
+  remoteDomain?: string
+  onRemoteDomainChange?: (key: string) => void
+}) {
   const isAdmin = useCan('Admin')
   const q = useQuery(instancesQuery)
   const qc = useQueryClient()
@@ -139,6 +151,22 @@ export function RemoteInstancePicker({ value, onChange }: { value: string; onCha
                 </Button>
               </div>
               {check && <CheckResult result={check} />}
+              {onRemoteDomainChange && ((check?.domains?.length ?? 0) > 1 || remoteDomain) && (
+                <Field label="Domäne der Gegenstelle" htmlFor="imp-remote-domain" hint="Aus welcher Domäne der anderen Instanz die Konfiguration übernommen wird.">
+                  <Combobox
+                    id="imp-remote-domain"
+                    value={remoteDomain}
+                    onChange={onRemoteDomainChange}
+                    options={[
+                      { value: '', label: 'Standard-Domäne der Gegenstelle' },
+                      ...(check?.domains ?? []).map((d) => ({ value: d.key, label: d.displayName, hint: d.dnsName || d.key })),
+                    ]}
+                    placeholder="Standard-Domäne der Gegenstelle"
+                    searchPlaceholder="Domäne suchen …"
+                    allowCustom={false}
+                  />
+                </Field>
+              )}
             </div>
           )}
         </>

@@ -80,17 +80,39 @@ public static partial class LookupEndpoints
             return Results.Ok(result);
         });
 
-        g.MapGet("/domain-controllers", async (AppDbContext db, SettingsService settings) =>
+        // Domain controllers of the current domain (roadmap 17): live from its directory, plus the ones used recently.
+        g.MapGet("/domain-controllers", async (AppDbContext db, Domains.DomainContext domain, AdView.DirectoryService directories, CancellationToken ct) =>
         {
-            var recent = await db.Runs.AsNoTracking().OrderByDescending(r => r.Id).Select(r => r.PreferredDc).Take(200).ToListAsync();
-            var preferred = (await settings.GetAsync()).DefaultPreferredDc;
-            var recentDistinct = new[] { preferred }.Concat(recent).Where(x => !string.IsNullOrWhiteSpace(x))
+            var domainId = domain.Id;
+            var recent = await db.Runs.AsNoTracking().Where(r => r.DomainId == domainId).OrderByDescending(r => r.Id).Select(r => r.PreferredDc).Take(200).ToListAsync(ct);
+            var recentDistinct = new[] { domain.Current.PreferredDc }.Concat(recent).Where(x => !string.IsNullOrWhiteSpace(x))
                 .Distinct(StringComparer.OrdinalIgnoreCase).Take(10).ToList();
-            return new DomainControllersDto(ActiveDirectoryLookup.Available, ActiveDirectoryLookup.DomainControllers(), recentDistinct);
+            var (available, items) = await DomainControllersAsync(directories.For(domain.Current).Reader, ct);
+            return new DomainControllersDto(available, items, recentDistinct);
         });
 
-        g.MapGet("/ad-groups", (string? q) =>
-            new AdGroupsDto(ActiveDirectoryLookup.Available, ActiveDirectoryLookup.SearchGroups(q ?? "", 25)));
+        g.MapGet("/ad-groups", async (string? q, Domains.DomainContext domain, AdView.DirectoryService directories, CancellationToken ct) =>
+        {
+            var reader = directories.For(domain.Current).Reader;
+            if (!reader.Available) return new AdGroupsDto(false, []);
+            var items = await Task.Run(() => reader.SearchGroups(q ?? "", 25), ct);
+            return new AdGroupsDto(true, items.Select(g => new AdGroupDto(g.Name, g.SamAccountName, g.Sid, g.DistinguishedName, g.Description)).ToList());
+        });
+    }
+
+    /// <summary>DCs of a domain, or (false, []) when its directory cannot be read.</summary>
+    public static async Task<(bool Available, List<DomainControllerDto> Items)> DomainControllersAsync(AdView.IDirectoryReader reader, CancellationToken ct)
+    {
+        if (!reader.Available) return (false, []);
+        try
+        {
+            var info = await Task.Run(reader.DomainInfo, ct);
+            return (true, info.DomainControllers.Select(dc => new DomainControllerDto(dc.Name, dc.Site)).OrderBy(dc => dc.Name, StringComparer.OrdinalIgnoreCase).ToList());
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return (false, []);
+        }
     }
 
     private static TemplateFileDto Describe(string path)
@@ -98,65 +120,5 @@ public static partial class LookupEndpoints
         var info = new FileInfo(path);
         using var stream = File.OpenRead(path);
         return new TemplateFileDto(info.Name, Convert.ToHexString(MD5.HashData(stream)), info.Length, info.LastWriteTimeUtc);
-    }
-}
-
-/// <summary>Live directory lookups on a domain-joined Windows server; empty results elsewhere.</summary>
-public static class ActiveDirectoryLookup
-{
-    public static bool Available => OperatingSystem.IsWindows() && Domain() is not null;
-
-
-    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    private static System.DirectoryServices.ActiveDirectory.Domain? Domain()
-    {
-        try { return System.DirectoryServices.ActiveDirectory.Domain.GetComputerDomain(); }
-        catch (Exception) { return null; }
-    }
-
-    public static List<LookupEndpoints.DomainControllerDto> DomainControllers() =>
-        OperatingSystem.IsWindows() ? DomainControllersOnWindows() : [];
-
-    public static List<LookupEndpoints.AdGroupDto> SearchGroups(string query, int max) =>
-        OperatingSystem.IsWindows() ? SearchGroupsOnWindows(query, max) : [];
-
-    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    private static List<LookupEndpoints.DomainControllerDto> DomainControllersOnWindows()
-    {
-        if (Domain() is not { } domain) return [];
-        try
-        {
-            return domain.DomainControllers.Cast<System.DirectoryServices.ActiveDirectory.DomainController>()
-                .Select(dc => new LookupEndpoints.DomainControllerDto(dc.Name, dc.SiteName))
-                .OrderBy(dc => dc.Name, StringComparer.OrdinalIgnoreCase).ToList();
-        }
-        catch (Exception) { return []; }
-    }
-
-    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    private static List<LookupEndpoints.AdGroupDto> SearchGroupsOnWindows(string query, int max)
-    {
-        if (query.Trim().Length < 2 || Domain() is not { } domain) return [];
-        try
-        {
-            // LDAP filter escaping (RFC 4515) for the user's search text.
-            var q = string.Concat(query.Trim().Select(c => c switch
-            {
-                '\\' => "\\5c", '*' => "\\2a", '(' => "\\28", ')' => "\\29", '\0' => "\\00", _ => c.ToString(),
-            }));
-            using var root = domain.GetDirectoryEntry();
-            using var searcher = new System.DirectoryServices.DirectorySearcher(root,
-                $"(&(objectCategory=group)(|(cn={q}*)(sAMAccountName={q}*)(cn=*{q}*)))",
-                ["cn", "sAMAccountName", "objectSid", "distinguishedName", "description"]) { SizeLimit = max };
-            using var results = searcher.FindAll();
-            return results.Cast<System.DirectoryServices.SearchResult>().Select(r =>
-            {
-                var sid = new System.Security.Principal.SecurityIdentifier((byte[])r.Properties["objectSid"][0], 0).Value;
-                string? Prop(string name) => r.Properties[name] is { Count: > 0 } p ? p[0]?.ToString() : null;
-                var sam = Prop("sAMAccountName") ?? Prop("cn") ?? sid;
-                return new LookupEndpoints.AdGroupDto(Prop("cn") ?? sam, sam, sid, Prop("distinguishedName"), Prop("description"));
-            }).OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase).ToList();
-        }
-        catch (Exception) { return []; }
     }
 }

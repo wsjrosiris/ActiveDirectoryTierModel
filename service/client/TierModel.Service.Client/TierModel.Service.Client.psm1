@@ -1,8 +1,9 @@
 #Requires -Version 7.2
 Set-StrictMode -Version Latest
 
-# Connection of this session: base URI, token (SecureString), certificate check.
+# Connection of this session: base URI, token (SecureString), certificate check, domain (key or $null = default domain).
 $script:Connection = $null
+$script:DomainHeader = 'X-TierModel-Domain'
 
 $script:FinalStatuses = @('Succeeded', 'Failed', 'Cancelled', 'Rejected')
 $script:Scopes = @('FullDeployment', 'OuOnly', 'GroupOnly', 'UserOnly', 'GposOnly', 'OuAclsOnly', 'AdmxOnly', 'AuthSilosOnly')
@@ -43,7 +44,9 @@ function Invoke-TierModelApi {
         [Parameter(Mandatory)][string]$Path,
         [ValidateSet('GET', 'POST', 'PUT', 'DELETE')][string]$Method = 'GET',
         [object]$Body,
-        [hashtable]$Query
+        [hashtable]$Query,
+        # Managed domain (key); default: the domain of Connect-TierModelService -Domain, otherwise the service's default domain.
+        [string]$Domain
     )
     Assert-Connected
     $uri = $script:Connection.Uri + $Path
@@ -53,12 +56,15 @@ function Invoke-TierModelApi {
         }
         if ($pairs) { $uri += '?' + ($pairs -join '&') }
     }
+    $headers = @{ Accept = 'application/json' }
+    $effectiveDomain = if ($Domain) { $Domain } else { $script:Connection.Domain }
+    if ($effectiveDomain) { $headers[$script:DomainHeader] = $effectiveDomain }
     $params = @{
         Uri            = $uri
         Method         = $Method
         Authentication = 'Bearer'
         Token          = $script:Connection.Token
-        Headers        = @{ Accept = 'application/json' }
+        Headers        = $headers
         ErrorAction    = 'Stop'
     }
     if ($script:Connection.SkipCertificateCheck) { $params.SkipCertificateCheck = $true }
@@ -90,6 +96,15 @@ function ConvertTo-RunRequest {
     $r
 }
 
+function Resolve-PreferredDc {
+    # Without -PreferredDc: the default domain controller of the domain (its settings).
+    param([string]$PreferredDc, [string]$Domain)
+    if ($PreferredDc) { return $PreferredDc }
+    $settings = Invoke-TierModelApi -Path '/api/settings' -Domain $Domain
+    if (-not $settings.defaultPreferredDc) { throw 'Für diese Domäne ist kein Standard-Domänencontroller hinterlegt. Bitte -PreferredDc angeben.' }
+    $settings.defaultPreferredDc
+}
+
 function Add-RunType {
     param([Parameter(ValueFromPipeline)]$Run)
     process {
@@ -113,19 +128,25 @@ function Add-RunType {
     API-Token (tmk_…) als SecureString (empfohlen) oder als Zeichenkette.
 .PARAMETER SkipCertificateCheck
     Zertifikatsprüfung überspringen (nur für Tests mit selbstsignierten Zertifikaten).
+.PARAMETER Domain
+    Kurzname der verwalteten Domäne (z. B. fabrikam), mit der alle weiteren Befehle arbeiten. Ohne Angabe gilt die
+    Standard-Domäne des Dienstes. Einzelne Befehle können mit -Domain eine andere Domäne wählen.
 .EXAMPLE
     Connect-TierModelService -Uri https://tiermodel01.contoso.com:8443 -Token (Read-Host -AsSecureString 'Token')
 .EXAMPLE
+    Connect-TierModelService -Uri https://tiermodel01 -Token $token -Domain fabrikam
+.EXAMPLE
     Connect-TierModelService -Uri https://tiermodel01 -Token (Get-Secret TierModelToken)
 .OUTPUTS
-    Objekt mit Uri, Benutzer und Rolle.
+    Objekt mit Uri, Benutzer, Rolle und Domäne.
 #>
 function Connect-TierModelService {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Uri,
         [Parameter(Mandatory)][ValidateNotNull()][object]$Token,
-        [switch]$SkipCertificateCheck
+        [switch]$SkipCertificateCheck,
+        [ValidatePattern('^[A-Za-z0-9-]{1,32}$')][string]$Domain
     )
     $secure = if ($Token -is [securestring]) { $Token }
     elseif ($Token -is [string]) { ConvertTo-SecureString -String $Token -AsPlainText -Force }
@@ -149,6 +170,7 @@ function Connect-TierModelService {
         SkipCertificateCheck = [bool]$SkipCertificateCheck
         User                 = $null
         Role                 = $null
+        Domain               = $null
     }
     try {
         $me = Invoke-TierModelApi -Path '/api/auth/me'
@@ -161,13 +183,39 @@ function Connect-TierModelService {
         $script:Connection = $previous
         throw 'Der Dienst hat das Token nicht akzeptiert.'
     }
+    if ($Domain) {
+        $known = @(Invoke-TierModelApi -Path '/api/domains') | Where-Object { $_.key -eq $Domain }
+        if (-not $known) {
+            $script:Connection = $previous
+            throw "Die Domäne '$Domain' ist im Dienst nicht eingerichtet (Get-TierModelDomain listet die Domänen)."
+        }
+        $script:Connection.Domain = $known[0].key
+    }
     $script:Connection.User = $me.user.username
     $script:Connection.Role = $me.user.role
     [pscustomobject]@{
-        Uri  = $script:Connection.Uri
-        User = $me.user.username
-        Role = $me.user.role
+        Uri    = $script:Connection.Uri
+        User   = $me.user.username
+        Role   = $me.user.role
+        Domain = $script:Connection.Domain
     }
+}
+
+<#
+.SYNOPSIS
+    Listet die vom Dienst verwalteten Active-Directory-Domänen.
+.DESCRIPTION
+    Jede Domäne hat eine eigene Soll-Konfiguration, eigene Läufe, Zeitpläne und Überwachung. Der Kurzname (key)
+    wird bei Connect-TierModelService -Domain und bei den übrigen Befehlen mit -Domain angegeben.
+.EXAMPLE
+    Get-TierModelDomain | Format-Table key, displayName, dnsName, isDefault
+.OUTPUTS
+    Domänen mit id, key, displayName, dnsName, preferredDc, admlLanguage, enabled und isDefault.
+#>
+function Get-TierModelDomain {
+    [CmdletBinding()]
+    param()
+    Invoke-TierModelApi -Path '/api/domains'
 }
 
 <#
@@ -196,6 +244,8 @@ function Disconnect-TierModelService {
     z. B. Queued, Running, Succeeded, Failed, Scheduled, AwaitingApproval.
 .PARAMETER First
     Anzahl der Läufe (1–200, Standard 25).
+.PARAMETER Domain
+    Kurzname der Domäne, deren Läufe gelistet werden (Standard: Domäne der Verbindung). Ein Lauf mit -Id wird in jeder Domäne gefunden.
 .EXAMPLE
     Get-TierModelRun -Kind Audit -Status Failed
 .EXAMPLE
@@ -208,14 +258,15 @@ function Get-TierModelRun {
         [Parameter(ParameterSetName = 'List')][ValidateSet('Deploy', 'Audit', 'Monitor')][string]$Kind,
         [Parameter(ParameterSetName = 'List')]
         [ValidateSet('Queued', 'Running', 'Succeeded', 'Failed', 'Cancelled', 'AwaitingApproval', 'Rejected', 'Scheduled')][string]$Status,
-        [Parameter(ParameterSetName = 'List')][ValidateRange(1, 200)][int]$First = 25
+        [Parameter(ParameterSetName = 'List')][ValidateRange(1, 200)][int]$First = 25,
+        [Parameter(ParameterSetName = 'List')][string]$Domain
     )
     process {
         if ($PSCmdlet.ParameterSetName -eq 'Id') {
             Invoke-TierModelApi -Path "/api/runs/$Id" | Add-RunType
         }
         else {
-            $page = Invoke-TierModelApi -Path '/api/runs' -Query @{ kind = $Kind; status = $Status; pageSize = $First }
+            $page = Invoke-TierModelApi -Path '/api/runs' -Query @{ kind = $Kind; status = $Status; pageSize = $First } -Domain $Domain
             $page.items | Add-RunType
         }
     }
@@ -225,29 +276,35 @@ function Get-TierModelRun {
 .SYNOPSIS
     Startet ein Audit (Vergleich des AD mit der Soll-Konfiguration).
 .PARAMETER PreferredDc
-    Domain Controller (FQDN).
+    Domain Controller (FQDN); Standard: der Standard-Domänencontroller der Domäne.
 .PARAMETER Scope
     Bereich, z. B. FullDeployment, OuOnly, GroupOnly, GposOnly.
+.PARAMETER Domain
+    Kurzname der Domäne (Standard: Domäne der Verbindung).
 .PARAMETER IncludeMsa
     Add-on MSA (nur mit FullDeployment oder ohne Bereich). Entsprechend -IncludeGmsa, -IncludeDmsa, -IncludeWinLaps.
 .PARAMETER AdmlLanguage
     Sprache der ADML-Dateien (z. B. de-DE); Standard aus den Einstellungen.
 .EXAMPLE
     Start-TierModelAudit -PreferredDc dc01.contoso.local -Scope FullDeployment | Wait-TierModelRun
+.EXAMPLE
+    Start-TierModelAudit -Domain fabrikam | Wait-TierModelRun
 .OUTPUTS
     Der eingereihte Lauf.
 #>
 function Start-TierModelAudit {
     [CmdletBinding(SupportsShouldProcess)]
     param(
-        [Parameter(Mandatory)][string]$PreferredDc,
+        [string]$PreferredDc,
         [ValidateScript({ $_ -in $script:Scopes })][string]$Scope = 'FullDeployment',
         [switch]$IncludeMsa, [switch]$IncludeGmsa, [switch]$IncludeDmsa, [switch]$IncludeWinLaps,
-        [string]$AdmlLanguage
+        [string]$AdmlLanguage,
+        [string]$Domain
     )
-    $body = ConvertTo-RunRequest $PreferredDc $Scope $IncludeMsa $IncludeGmsa $IncludeDmsa $IncludeWinLaps $AdmlLanguage
-    if ($PSCmdlet.ShouldProcess($PreferredDc, "Audit ($Scope) starten")) {
-        Invoke-TierModelApi -Path '/api/runs/audit' -Method POST -Body $body | Add-RunType
+    $dc = Resolve-PreferredDc $PreferredDc $Domain
+    $body = ConvertTo-RunRequest $dc $Scope $IncludeMsa $IncludeGmsa $IncludeDmsa $IncludeWinLaps $AdmlLanguage
+    if ($PSCmdlet.ShouldProcess($dc, "Audit ($Scope) starten")) {
+        Invoke-TierModelApi -Path '/api/runs/audit' -Method POST -Body $body -Domain $Domain | Add-RunType
     }
 }
 
@@ -255,15 +312,18 @@ function Start-TierModelAudit {
 .SYNOPSIS
     Startet eine Überwachung der privilegierten Gruppen (Rolle Operator).
 .PARAMETER PreferredDc
-    Domain Controller (FQDN).
+    Domain Controller (FQDN); Standard: der Standard-Domänencontroller der Domäne.
+.PARAMETER Domain
+    Kurzname der Domäne (Standard: Domäne der Verbindung).
 .EXAMPLE
     Start-TierModelMonitor -PreferredDc dc01.contoso.local | Wait-TierModelRun
 #>
 function Start-TierModelMonitor {
     [CmdletBinding(SupportsShouldProcess)]
-    param([Parameter(Mandatory)][string]$PreferredDc)
-    if ($PSCmdlet.ShouldProcess($PreferredDc, 'Überwachung der privilegierten Gruppen starten')) {
-        Invoke-TierModelApi -Path '/api/runs/monitor' -Method POST -Body @{ preferredDc = $PreferredDc } | Add-RunType
+    param([string]$PreferredDc, [string]$Domain)
+    $dc = Resolve-PreferredDc $PreferredDc $Domain
+    if ($PSCmdlet.ShouldProcess($dc, 'Überwachung der privilegierten Gruppen starten')) {
+        Invoke-TierModelApi -Path '/api/runs/monitor' -Method POST -Body @{ preferredDc = $dc } -Domain $Domain | Add-RunType
     }
 }
 
@@ -281,7 +341,9 @@ function Start-TierModelMonitor {
 .PARAMETER Apply
     Geprüfte Planung anwenden.
 .PARAMETER PlanRunId
-    Nummer des erfolgreichen Planungslaufs, der angewendet werden soll.
+    Nummer des erfolgreichen Planungslaufs, der angewendet werden soll. Angewendet wird in der Domäne der Planung.
+.PARAMETER Domain
+    Kurzname der Domäne für den Planungslauf (Standard: Domäne der Verbindung).
 .EXAMPLE
     $plan = Start-TierModelDeploy -Plan -PreferredDc dc01.contoso.local -Scope GroupOnly | Wait-TierModelRun
     Start-TierModelDeploy -Apply -PlanRunId $plan.id -Confirm:$false
@@ -290,21 +352,23 @@ function Start-TierModelDeploy {
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'Plan')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'Plan')][switch]$Plan,
-        [Parameter(Mandatory, ParameterSetName = 'Plan')][string]$PreferredDc,
+        [Parameter(ParameterSetName = 'Plan')][string]$PreferredDc,
         [Parameter(ParameterSetName = 'Plan')][ValidateScript({ $_ -in $script:Scopes })][string]$Scope = 'FullDeployment',
         [Parameter(ParameterSetName = 'Plan')][switch]$IncludeMsa,
         [Parameter(ParameterSetName = 'Plan')][switch]$IncludeGmsa,
         [Parameter(ParameterSetName = 'Plan')][switch]$IncludeDmsa,
         [Parameter(ParameterSetName = 'Plan')][switch]$IncludeWinLaps,
         [Parameter(ParameterSetName = 'Plan')][string]$AdmlLanguage,
+        [Parameter(ParameterSetName = 'Plan')][string]$Domain,
         [Parameter(Mandatory, ParameterSetName = 'Apply')][switch]$Apply,
         [Parameter(Mandatory, ParameterSetName = 'Apply')][long]$PlanRunId
     )
     if ($PSCmdlet.ParameterSetName -eq 'Plan') {
-        $body = ConvertTo-RunRequest $PreferredDc $Scope $IncludeMsa $IncludeGmsa $IncludeDmsa $IncludeWinLaps $AdmlLanguage
+        $dc = Resolve-PreferredDc $PreferredDc $Domain
+        $body = ConvertTo-RunRequest $dc $Scope $IncludeMsa $IncludeGmsa $IncludeDmsa $IncludeWinLaps $AdmlLanguage
         $body.confirmApply = $false
         # A planning run changes nothing: no confirmation needed.
-        return Invoke-TierModelApi -Path '/api/runs/deploy' -Method POST -Body $body | Add-RunType
+        return Invoke-TierModelApi -Path '/api/runs/deploy' -Method POST -Body $body -Domain $Domain | Add-RunType
     }
 
     $planRun = Invoke-TierModelApi -Path "/api/runs/$PlanRunId"
@@ -314,9 +378,11 @@ function Start-TierModelDeploy {
     $body = ConvertTo-RunRequest $planRun.preferredDc $planRun.scope ('Msa' -in $includes) ('Gmsa' -in $includes) ('Dmsa' -in $includes) ('WinLaps' -in $includes) $planRun.admlLanguage
     $body.confirmApply = $true
     $body.planRunId = $PlanRunId
-    $what = "Planung #$PlanRunId über $($planRun.preferredDc) ($($planRun.scope))"
+    # The apply belongs to the domain of the plan (the service rejects plans of other domains).
+    $planDomain = if ($planRun.PSObject.Properties['domain'] -and $planRun.domain) { $planRun.domain.key } else { $null }
+    $what = "Planung #$PlanRunId über $($planRun.preferredDc) ($($planRun.scope))" + $(if ($planDomain) { ", Domäne $planDomain" } else { '' })
     if ($PSCmdlet.ShouldProcess($what, 'Änderungen im Active Directory anwenden')) {
-        Invoke-TierModelApi -Path '/api/runs/deploy' -Method POST -Body $body | Add-RunType
+        Invoke-TierModelApi -Path '/api/runs/deploy' -Method POST -Body $body -Domain $planDomain | Add-RunType
     }
 }
 
@@ -406,25 +472,31 @@ function Get-TierModelRunLog {
 <#
 .SYNOPSIS
     Übersicht der privilegierten Gruppen aus der letzten Überwachung (Mitglieder, Hygiene, Angriffspfade).
+.PARAMETER Domain
+    Kurzname der Domäne (Standard: Domäne der Verbindung).
 .EXAMPLE
     (Get-TierModelPrivileged).groups | Select-Object name, memberCount
 #>
 function Get-TierModelPrivileged {
     [CmdletBinding()]
-    param()
-    Invoke-TierModelApi -Path '/api/privileged'
+    param([string]$Domain)
+    Invoke-TierModelApi -Path '/api/privileged' -Domain $Domain
 }
 
 <#
 .SYNOPSIS
     Compliance-Wert mit Aufschlüsselung und Verlauf.
+.PARAMETER Domain
+    Kurzname der Domäne (Standard: Domäne der Verbindung).
 .EXAMPLE
-    (Get-TierModelCompliance).score
+    (Get-TierModelCompliance).current
+.EXAMPLE
+    Get-TierModelDomain | ForEach-Object { [pscustomobject]@{ Domain = $_.key; Tier0 = (Get-TierModelCompliance -Domain $_.key).current[0].score } }
 #>
 function Get-TierModelCompliance {
     [CmdletBinding()]
-    param()
-    Invoke-TierModelApi -Path '/api/compliance'
+    param([string]$Domain)
+    Invoke-TierModelApi -Path '/api/compliance' -Domain $Domain
 }
 
 <#
@@ -432,6 +504,8 @@ function Get-TierModelCompliance {
     Liest eine Sektion der Soll-Konfiguration (z. B. ous, groups, users, acls, gpos).
 .PARAMETER Key
     Schlüssel der Sektion.
+.PARAMETER Domain
+    Kurzname der Domäne (Standard: Domäne der Verbindung).
 .EXAMPLE
     (Get-TierModelConfigSection -Key groups).Content.groups | Select-Object name, tier
 .OUTPUTS
@@ -439,8 +513,8 @@ function Get-TierModelCompliance {
 #>
 function Get-TierModelConfigSection {
     [CmdletBinding()]
-    param([Parameter(Mandatory, Position = 0)][ValidatePattern('^[A-Za-z0-9_-]{1,64}$')][string]$Key)
-    $s = Invoke-TierModelApi -Path "/api/config/sections/$Key"
+    param([Parameter(Mandatory, Position = 0)][ValidatePattern('^[A-Za-z0-9_-]{1,64}$')][string]$Key, [string]$Domain)
+    $s = Invoke-TierModelApi -Path "/api/config/sections/$Key" -Domain $Domain
     [pscustomobject]@{
         Key       = $Key
         Version   = $s.version
@@ -453,5 +527,5 @@ function Get-TierModelConfigSection {
 Export-ModuleMember -Function @(
     'Connect-TierModelService', 'Disconnect-TierModelService', 'Get-TierModelRun', 'Start-TierModelAudit', 'Start-TierModelMonitor',
     'Start-TierModelDeploy', 'Wait-TierModelRun', 'Get-TierModelRunLog', 'Get-TierModelPrivileged', 'Get-TierModelCompliance',
-    'Get-TierModelConfigSection'
+    'Get-TierModelConfigSection', 'Get-TierModelDomain'
 )

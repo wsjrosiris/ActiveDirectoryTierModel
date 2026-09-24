@@ -80,11 +80,17 @@ public static class SetupEndpoints
 
     private record CompletedValue(bool Completed, string By, DateTimeOffset At, bool Skipped);
 
-    public static async Task<SetupStateDto> StateAsync(AppDbContext db, SettingsService settings, DirectoryService directory, CancellationToken ct)
+    /// <summary>Settings key of the completion flag; the first domain keeps the key from before roadmap 17.</summary>
+    public static string CompletedKeyFor(int domainId) => domainId == 1 ? CompletedKey : $"{CompletedKey}:{domainId}";
+
+    /// <summary>Setup state of the current domain: every domain runs through the wizard once (roadmap 17).</summary>
+    public static async Task<SetupStateDto> StateAsync(AppDbContext db, SettingsService settings, DirectoryService directories, Domains.DomainContext domain, CancellationToken ct)
     {
+        var directory = directories.For(domain.Current);
+        var domainId = domain.Id;
         // The sample configuration is untouched while every version was written by the import ("system").
-        var userVersions = await db.ConfigVersions.CountAsync(v => v.CreatedBy != "system", ct);
-        var raw = await settings.GetValueAsync(CompletedKey, ct);
+        var userVersions = await db.ConfigVersions.CountAsync(v => v.DomainId == domainId && v.CreatedBy != "system", ct);
+        var raw = await settings.GetValueAsync(CompletedKeyFor(domainId), ct);
         CompletedValue? completed = null;
         if (raw is not null)
             try { completed = System.Text.Json.JsonSerializer.Deserialize<CompletedValue>(raw, System.Text.Json.JsonSerializerOptions.Web); }
@@ -98,7 +104,8 @@ public static class SetupEndpoints
     {
         var g = app.MapGroup("/api/setup").RequireAuthorization(nameof(Role.Admin));
 
-        g.MapGet("/state", (AppDbContext db, SettingsService settings, DirectoryService directory, CancellationToken ct) => StateAsync(db, settings, directory, ct));
+        g.MapGet("/state", (AppDbContext db, SettingsService settings, DirectoryService directories, Domains.DomainContext domain, CancellationToken ct) =>
+            StateAsync(db, settings, directories, domain, ct));
 
         g.MapPost("/gpo-prefix/preview", async (PrefixPreviewRequest r, ConfigService config, CancellationToken ct) =>
         {
@@ -112,10 +119,10 @@ public static class SetupEndpoints
             return Results.Ok(new PrefixPreviewDto(current, prefix, renames, renames.Count(x => x.Section == "gpos" && x.Field == "name")));
         });
 
-        g.MapPost("/complete", async (CompleteRequest? r, HttpContext ctx, SettingsService settings, ChangeLogService log, AppDbContext db) =>
+        g.MapPost("/complete", async (CompleteRequest? r, HttpContext ctx, SettingsService settings, ChangeLogService log, AppDbContext db, Domains.DomainContext domain) =>
         {
             var value = new CompletedValue(true, ctx.User.UserName(), DateTimeOffset.UtcNow, r?.Skipped == true);
-            await settings.SetValueAsync(CompletedKey, System.Text.Json.JsonSerializer.Serialize(value, System.Text.Json.JsonSerializerOptions.Web));
+            await settings.SetValueAsync(CompletedKeyFor(domain.Id), System.Text.Json.JsonSerializer.Serialize(value, System.Text.Json.JsonSerializerOptions.Web));
             log.Add(ctx.User.UserName(), "setup.complete", "settings", null, r?.Skipped == true ? "Einrichtungsassistent übersprungen" : "Einrichtung abgeschlossen");
             await db.SaveChangesAsync();
             return Results.NoContent();

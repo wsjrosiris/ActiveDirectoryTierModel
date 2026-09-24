@@ -17,7 +17,10 @@ import {
   KeySquare,
   ShieldCheck,
   ShieldAlert,
+  Network,
 } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { useDomains } from '@/features/domains/domain-context'
 import { opsApi } from '@/api/ops'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip } from '@/components/ui/tooltip'
@@ -45,6 +48,7 @@ const typeIcon: Record<string, React.ReactNode> = {
   auth: <KeyRound />,
   maintenance: <CalendarRange />,
   token: <KeySquare />,
+  domain: <Network />,
 }
 
 const typeTone: Record<string, string> = {
@@ -57,6 +61,7 @@ const typeTone: Record<string, string> = {
   auth: 'bg-muted text-muted-foreground',
   maintenance: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
   token: 'bg-orange-500/10 text-orange-700 dark:text-orange-300',
+  domain: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300',
 }
 
 function dayKey(iso: string) {
@@ -66,11 +71,14 @@ function dayKey(iso: string) {
 export function Component() {
   const [params, setParams] = useSearchParams()
   const entityType = params.get('typ') ?? ''
+  const { multiple, current } = useDomains()
+  // Several domains: entries of the selected domain plus instance-wide ones (roadmap 17).
+  const currentOnly = multiple && params.get('domaene') === 'aktuell'
   const [page, setPage] = React.useState(1)
-  React.useEffect(() => setPage(1), [entityType])
+  React.useEffect(() => setPage(1), [entityType, currentOnly])
   const q = useQuery({
-    queryKey: ['changelog', { entityType, page }],
-    queryFn: () => api.changelog.list({ entityType, page, pageSize: PAGE_SIZE }),
+    queryKey: ['changelog', { entityType, page, currentOnly }],
+    queryFn: () => api.changelog.list({ entityType, page, pageSize: PAGE_SIZE, currentDomain: currentOnly }),
     placeholderData: keepPreviousData,
   })
   const items = q.data?.items ?? []
@@ -95,6 +103,21 @@ export function Component() {
         description="Wer hat wann was geändert – Konfiguration, Läufe, Benutzer und Anmeldungen."
         actions={<ChainBadge />}
       />
+      {multiple && current && (
+        <label htmlFor="cl-domain" className="mb-3 flex w-fit items-center gap-2.5 text-[13px]">
+          <Switch
+            id="cl-domain"
+            checked={currentOnly}
+            onCheckedChange={(v) => {
+              const p = new URLSearchParams(params)
+              if (v) p.set('domaene', 'aktuell')
+              else p.delete('domaene')
+              setParams(p, { replace: true })
+            }}
+          />
+          <span>Nur Domäne {current.displayName} <span className="text-muted-foreground">(und domänenübergreifende Einträge)</span></span>
+        </label>
+      )}
       <div className="mb-4 overflow-x-auto">
         <Segmented<string>
           aria-label="Typ"
@@ -183,6 +206,7 @@ function Entry({ c }: { c: ChangeEntry }) {
           </p>
           <p className="truncate text-xs text-muted-foreground" title={c.summary}>{c.summary}</p>
         </div>
+        <EntryDomain c={c} />
         <span className="hidden shrink-0 text-xs text-muted-foreground sm:block" title={formatDateTime(c.at)}>
           {new Date(c.at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} · {formatRelative(c.at)}
         </span>
@@ -194,6 +218,20 @@ function Entry({ c }: { c: ChangeEntry }) {
         </div>
       )}
     </div>
+  )
+}
+
+/** Domain of a domain-bound entry (stored in its details), shown when several domains exist. */
+function EntryDomain({ c }: { c: ChangeEntry }) {
+  const { multiple, domains } = useDomains()
+  const key = c.details && typeof c.details === 'object' && typeof c.details.domain === 'string' ? (c.details.domain as string) : null
+  if (!multiple || !key || c.entityType === 'domain') return null
+  const d = domains.find((x) => x.key === key)
+  return (
+    <span className="hidden max-w-36 shrink-0 items-center gap-1 truncate rounded-md border bg-muted/50 px-1.5 py-0.5 text-[11px] text-muted-foreground md:inline-flex" title={d?.dnsName}>
+      <Network className="size-3 shrink-0" />
+      <span className="truncate">{d?.displayName ?? key}</span>
+    </span>
   )
 }
 

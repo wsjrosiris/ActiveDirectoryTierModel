@@ -51,6 +51,7 @@ public class HealthService(
     SettingsService settings,
     NotificationQueue notifications,
     ILogger<HealthService> logger,
+    Domains.DomainRegistry domains,
     GitSync.GitSyncService? git = null)
 {
     public const string Ok = "ok", Warn = "warn", Error = "error";
@@ -72,6 +73,7 @@ public class HealthService(
         items.Add(await Safe("database", "Datenbank", () => DatabaseAsync(ct)));
         items.Add(await Safe("queue", "Warteschlange", () => QueueAsync(ct)));
         items.Add(await Safe("lastRuns", "Letzte erfolgreiche Läufe", () => LastRunsAsync(ct)));
+        if (domains.Multiple) items.Add(await Safe("domains", "Domänen", () => DomainsAsync(ct)));
         items.Add(WorkPath());
         items.Add(await PowerShellAsync(ct));
         items.Add(Framework());
@@ -247,6 +249,30 @@ public class HealthService(
             new("Warten auf Freigabe", awaiting.ToString()),
             new("Ältester wartender Lauf", age is null ? "–" : $"seit {FormatDuration(age.Value)}"),
         ]);
+    }
+
+    /// <summary>Several domains (roadmap 17): the last successful audit per enabled domain.</summary>
+    private async Task<HealthItemDto> DomainsAsync(CancellationToken ct)
+    {
+        var facts = new List<HealthFactDto>();
+        var stale = 0;
+        foreach (var d in domains.All)
+        {
+            if (!d.Enabled)
+            {
+                facts.Add(new(d.DisplayName, "deaktiviert"));
+                continue;
+            }
+            var id = d.Id;
+            var audit = await db.Runs.Where(r => r.DomainId == id && r.Kind == RunKind.Audit && r.Status == RunStatus.Succeeded).OrderByDescending(r => r.Id)
+                .Select(r => r.FinishedAt).FirstOrDefaultAsync(ct);
+            if (audit is null || DateTimeOffset.UtcNow - audit > TimeSpan.FromDays(7)) stale++;
+            facts.Add(new(d.DisplayName, $"{(d.PreferredDc.Length == 0 ? "kein DC" : d.PreferredDc)} · letztes Audit {(audit is { } a ? Format(a) : "noch keins")}"));
+        }
+        var enabled = domains.All.Count(d => d.Enabled);
+        return new HealthItemDto("domains", "Domänen", stale > 0 ? Warn : Ok,
+            stale > 0 ? $"{stale} von {enabled} aktiven Domänen ohne erfolgreiches Audit in den letzten 7 Tagen." : $"{enabled} aktive Domänen, alle mit aktuellem Audit.",
+            facts);
     }
 
     private async Task<HealthItemDto> LastRunsAsync(CancellationToken ct)

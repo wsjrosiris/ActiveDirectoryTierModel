@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Page, PageHeader } from '@/components/shared/page-header'
 import { RequireAuth } from '@/features/auth/auth'
+import { useDomains } from '@/features/domains/domain-context'
 import { settingsQuery } from '@/features/runs/run-request-form'
 import { languageError, useDomainControllerOptions, useLanguageOptions } from '@/features/config/lookups'
 import { GitSettingsCard } from './git-settings-card'
@@ -30,6 +31,7 @@ function SettingsPage() {
   const dcOptions = useDomainControllerOptions()
   const languageOptions = useLanguageOptions()
   const qc = useQueryClient()
+  const domains = useDomains()
   const [form, setForm] = React.useState<Settings | null>(null)
   React.useEffect(() => {
     if (q.data) setForm(q.data)
@@ -39,6 +41,7 @@ function SettingsPage() {
     // PUT sends every field except the two read-only paths.
     mutationFn: ({ frameworkPath: _f, pwshPath: _p, ...rest }: Settings) => api.settings.update(rest satisfies SettingsUpdate),
     onSuccess: (s) => {
+      qc.invalidateQueries({ queryKey: ['domains'] })
       qc.setQueryData(settingsQuery.queryKey, s)
       toast.success('Einstellungen gespeichert')
     },
@@ -71,7 +74,12 @@ function SettingsPage() {
             <CardHeader>
               <div>
                 <CardTitle>Läufe</CardTitle>
-                <CardDescription>Werden in Deploy- und Audit-Formularen vorausgefüllt.</CardDescription>
+                <CardDescription>
+                  Werden in Deploy- und Audit-Formularen vorausgefüllt.
+                  {domains.multiple && domains.current && (
+                    <> Gilt für die Domäne <span className="font-medium text-foreground">{domains.current.displayName}</span> – die übrigen Einstellungen für alle Domänen.</>
+                  )}
+                </CardDescription>
               </div>
             </CardHeader>
             <CardContent className="grid gap-5">

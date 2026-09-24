@@ -22,10 +22,15 @@ public static class RunEndpoints
 
     public record ScheduleDto(long Id, string Name, RunKind Kind, string Cron, string TimeZone, bool Enabled, string PreferredDc, DeployScope? Scope,
         bool IncludeMsa, bool IncludeGmsa, bool IncludeDmsa, bool IncludeWinLaps, string? AdmlLanguage,
-        DateTimeOffset? NextRunAt, DateTimeOffset? LastRunAt, long? LastRunId, string CreatedBy, DateTimeOffset CreatedAt)
+        DateTimeOffset? NextRunAt, DateTimeOffset? LastRunAt, long? LastRunId, string CreatedBy, DateTimeOffset CreatedAt, int DomainId)
     {
         public static ScheduleDto From(Schedule s) => new(s.Id, s.Name, s.Kind, s.Cron, s.TimeZone, s.Enabled, s.PreferredDc, s.Scope,
-            s.IncludeMsa, s.IncludeGmsa, s.IncludeDmsa, s.IncludeWinLaps, s.AdmlLanguage, s.NextRunAt, s.LastRunAt, s.LastRunId, s.CreatedBy, s.CreatedAt);
+            s.IncludeMsa, s.IncludeGmsa, s.IncludeDmsa, s.IncludeWinLaps, s.AdmlLanguage, s.NextRunAt, s.LastRunAt, s.LastRunId, s.CreatedBy, s.CreatedAt, s.DomainId);
+    }
+
+    public record DomainInfoDto(int Id, string Key, string DisplayName, string DnsName)
+    {
+        public static DomainInfoDto From(Domain d) => new(d.Id, d.Key, d.DisplayName, d.DnsName);
     }
 
     public record RemediationRequest(string Area);
@@ -34,11 +39,13 @@ public static class RunEndpoints
     {
         var runs = app.MapGroup("/api/runs").RequireAuthorization(nameof(Role.Viewer));
 
-        runs.MapGet("/", async (AppDbContext db, RunKind? kind, RunStatus? status, int? page, int? pageSize) =>
+        // Lists show the runs of the current domain; a run's detail and actions work by id in any domain (ids are global).
+        runs.MapGet("/", async (AppDbContext db, RunKind? kind, RunStatus? status, int? page, int? pageSize, Domains.DomainContext domain) =>
         {
             var size = Math.Clamp(pageSize ?? 25, 1, 200);
             var p = Math.Max(page ?? 1, 1);
-            var q = db.Runs.AsNoTracking();
+            var domainId = domain.Id;
+            var q = db.Runs.AsNoTracking().Where(r => r.DomainId == domainId);
             if (kind is not null) q = q.Where(r => r.Kind == kind);
             if (status is not null) q = q.Where(r => r.Status == status);
             var total = await q.CountAsync();
@@ -58,7 +65,7 @@ public static class RunEndpoints
                 (plan, var planError) = await service.CheckPlanForApplyAsync(r);
                 if (planError is not null) return Results.ValidationProblem(new Dictionary<string, string[]> { ["planRunId"] = [planError] });
                 // Freeze periods (roadmap 4): rejected right away; outside a maintenance window the run is scheduled.
-                if (await maintenance.CheckApplyRequestAsync(DateTimeOffset.UtcNow) is { } freezeError)
+                if (await maintenance.CheckApplyRequestAsync(DateTimeOffset.UtcNow, service.DomainId) is { } freezeError)
                     return Results.ValidationProblem(new Dictionary<string, string[]> { ["maintenance"] = [freezeError] }, title: "Anwenden derzeit gesperrt");
             }
             var run = await service.EnqueueAsync(RunKind.Deploy, r.ToRunRequest(), r.ConfirmApply, ctx.User.UserName(), planRun: plan);
@@ -84,10 +91,11 @@ public static class RunEndpoints
         }).RequireAuthorization(nameof(Role.Operator));
 
         // Remediation by click (roadmap 5): a planning run for one area of an audit's findings, with the audit's DC and language.
-        runs.MapPost("/{id:long}/remediate", async (long id, RemediationRequest r, HttpContext ctx, AppDbContext db, RunService service) =>
+        runs.MapPost("/{id:long}/remediate", async (long id, RemediationRequest r, HttpContext ctx, AppDbContext db, RunService service, Domains.DomainContext domain) =>
         {
             var audit = await db.Runs.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
             if (audit is null) return Results.NotFound();
+            domain.Use(audit.DomainId);   // the planning run belongs to the audit's domain
             if (audit.Kind != RunKind.Audit)
                 return Results.Problem(title: "Nur für Audits möglich", detail: "Eine Planung zur Behebung kann nur aus den Befunden eines Audits gestartet werden.", statusCode: 409);
             if (Remediation.For(r?.Area, audit.PreferredDc, audit.AdmlLanguage) is not { } request)
@@ -98,11 +106,12 @@ public static class RunEndpoints
             return Results.Accepted($"/api/runs/{run.Id}", RunSummaryDto.From(run));
         }).RequireAuthorization(nameof(Role.Operator));
 
-        runs.MapGet("/{id:long}", async (long id, AppDbContext db, RunService service, CancellationToken ct) =>
+        runs.MapGet("/{id:long}", async (long id, AppDbContext db, RunService service, Domains.DomainRegistry domains, CancellationToken ct) =>
         {
             var run = await db.Runs.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id, ct);
             if (run is null) return Results.NotFound();
             var dto = (JsonObject)JsonSerializer.SerializeToNode(RunSummaryDto.From(run), JsonDefaults.Options)!;
+            dto["domain"] = domains.Find(run.DomainId) is { } d ? JsonSerializer.SerializeToNode(DomainInfoDto.From(d), JsonDefaults.Options) : null;
             dto["summary"] = run.Summary is null ? null : JsonNode.Parse(run.Summary);
             dto["findings"] = run.Findings is null ? new JsonArray() : JsonNode.Parse(run.Findings);
             dto["configVersions"] = run.ConfigVersions is null ? new JsonObject() : JsonNode.Parse(run.ConfigVersions);
@@ -162,14 +171,18 @@ public static class RunEndpoints
 
         var schedules = app.MapGroup("/api/schedules").RequireAuthorization(nameof(Role.Viewer));
 
-        schedules.MapGet("/", async (AppDbContext db) =>
-            (await db.Schedules.AsNoTracking().OrderBy(s => s.Name).ToListAsync()).Select(ScheduleDto.From));
+        schedules.MapGet("/", async (AppDbContext db, Domains.DomainContext domain) =>
+        {
+            var domainId = domain.Id;
+            return (await db.Schedules.AsNoTracking().Where(s => s.DomainId == domainId).OrderBy(s => s.Name).ToListAsync()).Select(ScheduleDto.From);
+        });
 
-        schedules.MapPost("/", async (ScheduleRequest r, HttpContext ctx, AppDbContext db, ChangeLogService log) =>
+        schedules.MapPost("/", async (ScheduleRequest r, HttpContext ctx, AppDbContext db, ChangeLogService log, Domains.DomainContext domain) =>
         {
             if (ValidateSchedule(r) is { } problem) return problem;
             var s = new Schedule
             {
+                DomainId = domain.Id,
                 Kind = r.EffectiveKind,
                 Name = r.Name.Trim(), Cron = r.Cron.Trim(), TimeZone = r.TimeZone, PreferredDc = r.PreferredDc.Trim(),
                 CreatedBy = ctx.User.UserName(), CreatedAt = DateTimeOffset.UtcNow,
@@ -182,10 +195,11 @@ public static class RunEndpoints
             return Results.Ok(ScheduleDto.From(s));
         }).RequireAuthorization(nameof(Role.Operator));
 
-        schedules.MapPut("/{id:long}", async (long id, ScheduleRequest r, HttpContext ctx, AppDbContext db, ChangeLogService log) =>
+        schedules.MapPut("/{id:long}", async (long id, ScheduleRequest r, HttpContext ctx, AppDbContext db, ChangeLogService log, Domains.DomainContext domain) =>
         {
             var s = await db.Schedules.FindAsync(id);
             if (s is null) return Results.NotFound();
+            domain.Use(s.DomainId);
             r = r with { Kind = r.Kind ?? s.Kind };   // clients that do not know the kind keep it
             if (ValidateSchedule(r) is { } problem) return problem;
             Apply(s, r);
@@ -194,20 +208,22 @@ public static class RunEndpoints
             return Results.Ok(ScheduleDto.From(s));
         }).RequireAuthorization(nameof(Role.Operator));
 
-        schedules.MapDelete("/{id:long}", async (long id, HttpContext ctx, AppDbContext db, ChangeLogService log) =>
+        schedules.MapDelete("/{id:long}", async (long id, HttpContext ctx, AppDbContext db, ChangeLogService log, Domains.DomainContext domain) =>
         {
             var s = await db.Schedules.FindAsync(id);
             if (s is null) return Results.NotFound();
+            domain.Use(s.DomainId);
             db.Schedules.Remove(s);
             log.Add(ctx.User.UserName(), "schedule.delete", "schedule", id.ToString(), $"Zeitplan '{s.Name}' gelöscht");
             await db.SaveChangesAsync();
             return Results.NoContent();
         }).RequireAuthorization(nameof(Role.Operator));
 
-        schedules.MapPost("/{id:long}/run", async (long id, HttpContext ctx, AppDbContext db, RunService service) =>
+        schedules.MapPost("/{id:long}/run", async (long id, HttpContext ctx, AppDbContext db, RunService service, Domains.DomainContext domain) =>
         {
             var s = await db.Schedules.FindAsync(id);
             if (s is null) return Results.NotFound();
+            domain.Use(s.DomainId);
             var run = await service.EnqueueAsync(s.Kind, ScheduleWorker.RequestFor(s), false, ctx.User.UserName(), RunTrigger.Manual, s.Id);
             s.LastRunId = run.Id;
             s.LastRunAt = DateTimeOffset.UtcNow;

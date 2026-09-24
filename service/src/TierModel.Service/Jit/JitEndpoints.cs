@@ -66,17 +66,21 @@ public static class JitEndpoints
         // ---- administration of the JIT groups
         var groups = api.MapGroup("/groups").RequireAuthorization(nameof(Role.Admin));
 
-        groups.MapGet("/", async (AppDbContext db, CancellationToken ct) =>
-            Results.Json((await db.JitGroups.AsNoTracking().OrderBy(g => g.Tier).ThenBy(g => g.DisplayName).ToListAsync(ct)).Select(JitGroupDto.From),
-                JsonDefaults.Options));
+        // JIT groups of the current domain (roadmap 17).
+        groups.MapGet("/", async (AppDbContext db, Domains.DomainContext domain, CancellationToken ct) =>
+        {
+            var domainId = domain.Id;
+            return Results.Json((await db.JitGroups.AsNoTracking().Where(g => g.DomainId == domainId).OrderBy(g => g.Tier).ThenBy(g => g.DisplayName).ToListAsync(ct))
+                .Select(JitGroupDto.From), JsonDefaults.Options);
+        });
 
-        groups.MapPost("/", async (JitGroupInput r, HttpContext ctx, AppDbContext db, JitService jit, ChangeLogService log, CancellationToken ct) =>
+        groups.MapPost("/", async (JitGroupInput r, HttpContext ctx, AppDbContext db, JitService jit, ChangeLogService log, Domains.DomainContext domain, CancellationToken ct) =>
         {
             var errors = jit.ValidateGroup(r);
             if (errors.Count > 0) return Results.ValidationProblem(errors);
-            var g = new JitGroup { Group = "", DisplayName = "", CreatedBy = ctx.User.UserName(), CreatedAt = DateTimeOffset.UtcNow };
+            var g = new JitGroup { DomainId = domain.Id, Group = "", DisplayName = "", CreatedBy = ctx.User.UserName(), CreatedAt = DateTimeOffset.UtcNow };
             JitService.Apply(g, r);
-            if (await db.JitGroups.AnyAsync(x => x.Group == g.Group, ct))
+            if (await db.JitGroups.AnyAsync(x => x.DomainId == g.DomainId && x.Group == g.Group, ct))
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["group"] = ["Diese Gruppe ist bereits als JIT-Gruppe eingerichtet."] });
             db.JitGroups.Add(g);
             await db.SaveChangesAsync(ct);
@@ -85,14 +89,16 @@ public static class JitEndpoints
             return Results.Json(JitGroupDto.From(g), JsonDefaults.Options);
         });
 
-        groups.MapPut("/{id:long}", async (long id, JitGroupInput r, HttpContext ctx, AppDbContext db, JitService jit, ChangeLogService log, CancellationToken ct) =>
+        groups.MapPut("/{id:long}", async (long id, JitGroupInput r, HttpContext ctx, AppDbContext db, JitService jit, ChangeLogService log,
+            Domains.DomainContext domain, CancellationToken ct) =>
         {
             var g = await db.JitGroups.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (g is null) return Results.NotFound();
+            domain.Use(g.DomainId);
             var errors = jit.ValidateGroup(r);
             if (errors.Count > 0) return Results.ValidationProblem(errors);
             var identity = JitService.NormalizeIdentity(r.Group);
-            if (await db.JitGroups.AnyAsync(x => x.Id != id && x.Group == identity, ct))
+            if (await db.JitGroups.AnyAsync(x => x.Id != id && x.DomainId == g.DomainId && x.Group == identity, ct))
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["group"] = ["Diese Gruppe ist bereits als JIT-Gruppe eingerichtet."] });
             if (!string.Equals(identity, g.Group, StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(r.GroupSid)) g.GroupSid = null;
             JitService.Apply(g, r);
@@ -102,10 +108,11 @@ public static class JitEndpoints
             return Results.Json(JitGroupDto.From(g), JsonDefaults.Options);
         });
 
-        groups.MapDelete("/{id:long}", async (long id, HttpContext ctx, AppDbContext db, ChangeLogService log, CancellationToken ct) =>
+        groups.MapDelete("/{id:long}", async (long id, HttpContext ctx, AppDbContext db, ChangeLogService log, Domains.DomainContext domain, CancellationToken ct) =>
         {
             var g = await db.JitGroups.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (g is null) return Results.NotFound();
+            domain.Use(g.DomainId);
             if (await db.JitRequests.AnyAsync(r => r.JitGroupId == id && (r.Status == JitStatus.Pending || r.Status == JitStatus.Approved || r.Status == JitStatus.Active), ct))
                 return Results.Problem(title: "Die Gruppe hat offene oder aktive Anträge", detail: "Bitte zuerst die Anträge abschließen oder die Gruppe deaktivieren.", statusCode: 409);
             db.JitGroups.Remove(g);

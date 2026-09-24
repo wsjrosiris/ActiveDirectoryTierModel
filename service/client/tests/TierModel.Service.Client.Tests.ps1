@@ -16,7 +16,8 @@ Describe 'Module manifest' {
         $m.ExportedFunctions.Keys | Should -Contain 'Connect-TierModelService'
         $m.ExportedFunctions.Keys | Should -Contain 'Wait-TierModelRun'
         $m.ExportedFunctions.Keys | Should -Not -Contain 'Invoke-TierModelApi'
-        $m.ExportedFunctions.Count | Should -Be 11
+        $m.ExportedFunctions.Keys | Should -Contain 'Get-TierModelDomain'
+        $m.ExportedFunctions.Count | Should -Be 12
     }
 
     It 'has comment-based help for every command' {
@@ -192,5 +193,65 @@ Describe 'Commands' {
         (Get-TierModelCompliance).score | Should -Be 87
         (Get-TierModelPrivileged).groups | Should -HaveCount 0
         { Get-TierModelConfigSection -Key '../users' } | Should -Throw
+    }
+}
+
+Describe 'Several domains' {
+    BeforeEach {
+        Disconnect-TierModelService
+        Mock -ModuleName TierModel.Service.Client Invoke-RestMethod -ParameterFilter { $Uri -like '*/api/auth/me' } {
+            [pscustomobject]@{ user = [pscustomobject]@{ username = 'ops'; role = 'Operator' } }
+        }
+        Mock -ModuleName TierModel.Service.Client Invoke-RestMethod -ParameterFilter { $Uri -like '*/api/domains' } {
+            @([pscustomobject]@{ id = 1; key = 'contoso'; isDefault = $true }, [pscustomobject]@{ id = 2; key = 'fabrikam'; isDefault = $false })
+        }
+    }
+
+    It 'sends no domain header without -Domain (default domain of the service)' {
+        (Connect-TierModelService -Uri 'https://tm' -Token $script:ValidToken).Domain | Should -BeNullOrEmpty
+        Mock -ModuleName TierModel.Service.Client Invoke-RestMethod -ParameterFilter { $Uri -like '*/api/runs*' } { [pscustomobject]@{ items = @(); total = 0 } }
+        Get-TierModelRun | Out-Null
+        Should -Invoke -ModuleName TierModel.Service.Client Invoke-RestMethod -ParameterFilter { $Uri -like '*/api/runs*' -and -not $Headers.ContainsKey('X-TierModel-Domain') }
+    }
+
+    It 'checks the domain on connect and sends it with every request' {
+        (Connect-TierModelService -Uri 'https://tm' -Token $script:ValidToken -Domain FABRIKAM).Domain | Should -Be 'fabrikam'
+        Mock -ModuleName TierModel.Service.Client Invoke-RestMethod -ParameterFilter { $Uri -like '*/api/compliance' } { [pscustomobject]@{ current = @() } }
+        Get-TierModelCompliance | Out-Null
+        Should -Invoke -ModuleName TierModel.Service.Client Invoke-RestMethod -ParameterFilter { $Uri -like '*/api/compliance' -and $Headers['X-TierModel-Domain'] -eq 'fabrikam' }
+        Get-TierModelCompliance -Domain contoso | Out-Null
+        Should -Invoke -ModuleName TierModel.Service.Client Invoke-RestMethod -ParameterFilter { $Uri -like '*/api/compliance' -and $Headers['X-TierModel-Domain'] -eq 'contoso' }
+    }
+
+    It 'rejects an unknown domain and stays disconnected' {
+        { Connect-TierModelService -Uri 'https://tm' -Token $script:ValidToken -Domain northwind } | Should -Throw '*nicht eingerichtet*'
+        { Get-TierModelRun } | Should -Throw '*Keine Verbindung*'
+    }
+
+    It 'lists the domains' {
+        Connect-TierModelService -Uri 'https://tm' -Token $script:ValidToken | Out-Null
+        (Get-TierModelDomain).key | Should -Be @('contoso', 'fabrikam')
+    }
+
+    It 'uses the domain controller of the domain when none is given' {
+        Connect-TierModelService -Uri 'https://tm' -Token $script:ValidToken | Out-Null
+        Mock -ModuleName TierModel.Service.Client Invoke-RestMethod -ParameterFilter { $Uri -like '*/api/settings' } { [pscustomobject]@{ defaultPreferredDc = 'dc01.fabrikam.com' } }
+        Mock -ModuleName TierModel.Service.Client Invoke-RestMethod -ParameterFilter { $Uri -like '*/api/runs/audit' } { [pscustomobject]@{ id = 21; status = 'Queued' } }
+        (Start-TierModelAudit -Domain fabrikam -Confirm:$false).id | Should -Be 21
+        Should -Invoke -ModuleName TierModel.Service.Client Invoke-RestMethod -ParameterFilter { $Uri -like '*/api/settings' -and $Headers['X-TierModel-Domain'] -eq 'fabrikam' }
+        Should -Invoke -ModuleName TierModel.Service.Client Invoke-RestMethod -ParameterFilter {
+            $Uri -like '*/api/runs/audit' -and $Headers['X-TierModel-Domain'] -eq 'fabrikam' -and ($Body | ConvertFrom-Json).preferredDc -eq 'dc01.fabrikam.com'
+        }
+    }
+
+    It 'applies a plan in the domain of the planning run' {
+        Connect-TierModelService -Uri 'https://tm' -Token $script:ValidToken | Out-Null
+        Mock -ModuleName TierModel.Service.Client Invoke-RestMethod -ParameterFilter { $Uri -like '*/api/runs/30' } {
+            [pscustomobject]@{ id = 30; kind = 'Deploy'; mode = 'Plan'; status = 'Succeeded'; preferredDc = 'dc01.fabrikam.com'; scope = 'OuOnly'; includes = @();
+                admlLanguage = 'en-US'; domainId = 2; domain = [pscustomobject]@{ id = 2; key = 'fabrikam' } }
+        }
+        Mock -ModuleName TierModel.Service.Client Invoke-RestMethod -ParameterFilter { $Method -eq 'POST' } { [pscustomobject]@{ id = 31; status = 'Queued' } }
+        Start-TierModelDeploy -Apply -PlanRunId 30 -Confirm:$false | Out-Null
+        Should -Invoke -ModuleName TierModel.Service.Client Invoke-RestMethod -ParameterFilter { $Method -eq 'POST' -and $Headers['X-TierModel-Domain'] -eq 'fabrikam' }
     }
 }

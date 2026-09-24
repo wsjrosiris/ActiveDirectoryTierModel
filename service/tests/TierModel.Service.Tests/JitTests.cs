@@ -317,7 +317,7 @@ public class JitApiTests(ApiFixture fixture)
             Assert.StartsWith("S-1-5-21-", stored.GroupSid);
             // The group now knows its SID for the monitoring match, and the grant is expected right now.
             Assert.Equal(stored.GroupSid, (await db.JitGroups.AsNoTracking().SingleAsync(g => g.Id == groupId)).GroupSid);
-            Assert.Contains(await JitService.ExpectationsAsync(db, DateTimeOffset.UtcNow), e => e.MemberSid == stored.MemberSid && e.GroupSid == stored.GroupSid);
+            Assert.Contains(await JitService.ExpectationsAsync(db, DateTimeOffset.UtcNow, 1), e => e.MemberSid == stored.MemberSid && e.GroupSid == stored.GroupSid);
         }
         finally
         {
@@ -486,8 +486,8 @@ public class JitApiTests(ApiFixture fixture)
         Assert.Equal(JitStatus.Rejected, overdue.Status);
         Assert.True(await db.ChangeLog.AnyAsync(c => c.Action == "jit.expire" && c.EntityId == elapsed.Id.ToString()));
         // An expired grant is still expected for snapshots taken while it was active, but not afterwards.
-        Assert.Contains(await JitService.ExpectationsAsync(db, DateTimeOffset.UtcNow.AddMinutes(-10)), e => e.MemberAccount == "t0-fritz");
-        Assert.DoesNotContain(await JitService.ExpectationsAsync(db, DateTimeOffset.UtcNow), e => e.MemberAccount == "t0-fritz");
+        Assert.Contains(await JitService.ExpectationsAsync(db, DateTimeOffset.UtcNow.AddMinutes(-10), 1), e => e.MemberAccount == "t0-fritz");
+        Assert.DoesNotContain(await JitService.ExpectationsAsync(db, DateTimeOffset.UtcNow, 1), e => e.MemberAccount == "t0-fritz");
 
         // Approved request whose run was cancelled before it started → Failed.
         var cancelledRun = new Run { Kind = RunKind.Jit, JitAction = JitAction.Grant, Status = RunStatus.Cancelled, PreferredDc = Dc, AdmlLanguage = "en-US",

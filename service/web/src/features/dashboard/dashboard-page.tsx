@@ -36,6 +36,8 @@ import { cn, formatDuration, formatNumber, formatRelative } from '@/lib/utils'
 
 import { ComplianceTiles } from './compliance-tiles'
 import { SetupCard } from '@/features/setup/setup-card'
+import { useDomains } from '@/features/domains/domain-context'
+import { DomainsOverviewCard } from '@/features/domains/domains-overview'
 
 const DriftChart = React.lazy(() => import('./drift-chart'))
 
@@ -45,12 +47,23 @@ export function Component() {
   const canEdit = useCan('Editor')
   const hour = new Date().getHours()
   const greeting = hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Guten Tag' : 'Guten Abend'
+  const { multiple, current } = useDomains()
 
   return (
     <Page wide>
       <PageHeader
         title={`${greeting}, ${user.displayName?.split(' ')[0] || user.username}`}
-        description="Überblick über Soll-Konfiguration, Drift und laufende Vorgänge."
+        description={
+          multiple && current ? (
+            <>
+              Überblick über Soll-Konfiguration, Drift und laufende Vorgänge der Domäne{' '}
+              <span className="font-medium text-foreground" data-testid="dashboard-domain">{current.displayName}</span>
+              {current.dnsName && current.dnsName !== current.displayName ? ` (${current.dnsName})` : ''}.
+            </>
+          ) : (
+            'Überblick über Soll-Konfiguration, Drift und laufende Vorgänge.'
+          )
+        }
         actions={
           canEdit && (
             <>
@@ -66,6 +79,8 @@ export function Component() {
       />
 
       <SetupCard />
+
+      <DomainsOverviewCard />
 
       {!!data?.pendingApprovals?.length && <PendingApprovalsCard runs={data.pendingApprovals} />}
 

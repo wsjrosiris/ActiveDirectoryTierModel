@@ -68,6 +68,8 @@ export interface RemoteCheckResult {
   ok: boolean
   message: string
   sectionCount: number | null
+  /** Domains of the other instance (roadmap 17); empty for older instances. */
+  domains?: { key: string; displayName: string; dnsName: string; isDefault: boolean }[] | null
 }
 
 export type GitState = 'disabled' | 'never' | 'ok' | 'pending' | 'busy' | 'error' | 'conflict'
@@ -122,7 +124,8 @@ export const transferApi = {
       method: 'POST',
       raw: new Blob([file], { type: 'application/zip' }),
     }),
-  pullRemote: (instanceId: string, replacements: ReplacementRule[]) => post<ImportPreview>('/api/config/import/remote', { instanceId, replacements }),
+  pullRemote: (instanceId: string, replacements: ReplacementRule[], remoteDomain?: string) =>
+    post<ImportPreview>('/api/config/import/remote', { instanceId, replacements, remoteDomain: remoteDomain || null }),
   preview: (id: string) => request<ImportPreview>(`/api/config/import/${enc(id)}`),
   replacements: (id: string, replacements: ReplacementRule[]) => post<ImportPreview>(`/api/config/import/${enc(id)}/replacements`, { replacements }),
   validate: (id: string, keys: string[]) => post<ImportIssue[]>(`/api/config/import/${enc(id)}/validate`, { keys }),

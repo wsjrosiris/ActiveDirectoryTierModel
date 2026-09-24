@@ -9,24 +9,52 @@ using System.Text.RegularExpressions;
 namespace TierModel.Service.AdView;
 
 /// <summary>
-/// Reads the computer's domain with System.DirectoryServices as the service account (read-only, bounded searches).
-/// Only explicit ACEs are returned; entries of the schema's default security descriptor for OUs are flagged.
+/// Reads a domain with System.DirectoryServices as the service account (read-only, bounded searches): the computer's
+/// domain, or (roadmap 17) the domain of a managed domain entry through its preferred DC or DNS name — the service account
+/// needs read access there (trust). Only explicit ACEs are returned; entries of the schema's default security descriptor
+/// for OUs are flagged.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed partial class WindowsDirectoryReader : IDirectoryReader
 {
     private readonly Dictionary<string, string> _sidNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _lock = new();
+    /// <summary>Server part of LDAP paths ("dc01.contoso.com/" or "contoso.com/"); empty for the computer's domain.</summary>
+    private readonly string _server;
+    private readonly DirectoryTarget _target;
+
+    public WindowsDirectoryReader() : this(new DirectoryTarget("", "")) { }
+
+    public WindowsDirectoryReader(DirectoryTarget target)
+    {
+        _target = target;
+        var host = !string.IsNullOrWhiteSpace(target.PreferredDc) ? target.PreferredDc.Trim() : target.DnsName.Trim();
+        _server = host.Length == 0 ? "" : host + "/";
+    }
 
     public string Source => "Active Directory";
 
     public bool Available => ComputerDomain() is not null;
 
-    private static System.DirectoryServices.ActiveDirectory.Domain? ComputerDomain()
+    private System.DirectoryServices.ActiveDirectory.Domain? ComputerDomain()
     {
-        try { return System.DirectoryServices.ActiveDirectory.Domain.GetComputerDomain(); }
+        try { return OpenDomain(); }
         catch (Exception) { return null; }
     }
+
+    private System.DirectoryServices.ActiveDirectory.Domain OpenDomain()
+    {
+        if (!string.IsNullOrWhiteSpace(_target.PreferredDc))
+            return System.DirectoryServices.ActiveDirectory.Domain.GetDomain(new DirectoryContext(DirectoryContextType.DirectoryServer, _target.PreferredDc.Trim()));
+        if (!string.IsNullOrWhiteSpace(_target.DnsName))
+            return System.DirectoryServices.ActiveDirectory.Domain.GetDomain(new DirectoryContext(DirectoryContextType.Domain, _target.DnsName.Trim()));
+        return System.DirectoryServices.ActiveDirectory.Domain.GetComputerDomain();
+    }
+
+    /// <summary>LDAP path on the reader's server.</summary>
+    private string Path(string dn) => "LDAP://" + _server + dn.Replace("/", "\\/");
+
+    private string RootDsePath => "LDAP://" + _server + "RootDSE";
 
     [GeneratedRegex(@"\[LDAP://(?:cn|CN)=(\{[0-9A-Fa-f-]{36}\})[^;\]]*;(\d+)\]")]
     private static partial Regex GpLinkEntry();
@@ -40,16 +68,16 @@ public sealed partial class WindowsDirectoryReader : IDirectoryReader
         '\\' => "\\5c", '*' => "\\2a", '(' => "\\28", ')' => "\\29", '\0' => "\\00", _ => c.ToString(),
     }));
 
-    private static AdDomainInfo ReadDomain(System.DirectoryServices.ActiveDirectory.Domain domain)
+    private AdDomainInfo ReadDomain(System.DirectoryServices.ActiveDirectory.Domain domain)
     {
         using var root = domain.GetDirectoryEntry();
         var dn = root.Properties["distinguishedName"].Value?.ToString() ?? "";
         var netbios = domain.Name.Split('.')[0].ToUpperInvariant();
         try
         {
-            using var rootDse = new DirectoryEntry("LDAP://RootDSE");
+            using var rootDse = new DirectoryEntry(RootDsePath);
             var configNc = rootDse.Properties["configurationNamingContext"].Value?.ToString();
-            using var partitions = new DirectoryEntry(LdapPath($"CN=Partitions,{configNc}"));
+            using var partitions = new DirectoryEntry(Path($"CN=Partitions,{configNc}"));
             using var searcher = new DirectorySearcher(partitions, $"(&(objectClass=crossRef)(nCName={EscapeFilter(dn)}))", ["nETBIOSName"], SearchScope.OneLevel);
             if (searcher.FindOne()?.Properties["nETBIOSName"] is { Count: > 0 } p) netbios = p[0]!.ToString()!;
         }
@@ -105,7 +133,7 @@ public sealed partial class WindowsDirectoryReader : IDirectoryReader
 
     private AdOu ReadRoot(AdDomainInfo info, Dictionary<string, string> gpoNames)
     {
-        using var entry = new DirectoryEntry(LdapPath(info.DistinguishedName));
+        using var entry = new DirectoryEntry(Path(info.DistinguishedName));
         entry.Options!.SecurityMasks = SecurityMasks.Dacl;
         entry.RefreshCache(["gPLink", "gPOptions", "name"]);
         var sd = entry.ObjectSecurity.GetSecurityDescriptorBinaryForm();
@@ -136,12 +164,12 @@ public sealed partial class WindowsDirectoryReader : IDirectoryReader
         return entries.Select((e, i) => new AdGpoLink(gpoNames.GetValueOrDefault(e.Guid) ?? e.Guid, e.Guid, i + 1, (e.Options & 1) == 0, (e.Options & 2) == 2)).ToList();
     }
 
-    private static Dictionary<string, string> ReadGpoNames(string domainDn)
+    private Dictionary<string, string> ReadGpoNames(string domainDn)
     {
         var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            using var policies = new DirectoryEntry(LdapPath($"CN=Policies,CN=System,{domainDn}"));
+            using var policies = new DirectoryEntry(Path($"CN=Policies,CN=System,{domainDn}"));
             using var searcher = new DirectorySearcher(policies, "(objectClass=groupPolicyContainer)", ["cn", "displayName"], SearchScope.OneLevel) { PageSize = 500, SizeLimit = 5000 };
             using var results = searcher.FindAll();
             foreach (SearchResult r in results)
@@ -152,13 +180,13 @@ public sealed partial class WindowsDirectoryReader : IDirectoryReader
         return names;
     }
 
-    private static List<(string Sid, int Rights, string Type, Guid Obj, Guid Inh, string Inheritance)> ReadDefaultOuAces()
+    private List<(string Sid, int Rights, string Type, Guid Obj, Guid Inh, string Inheritance)> ReadDefaultOuAces()
     {
         try
         {
-            using var rootDse = new DirectoryEntry("LDAP://RootDSE");
+            using var rootDse = new DirectoryEntry(RootDsePath);
             var schemaNc = rootDse.Properties["schemaNamingContext"].Value?.ToString();
-            using var schema = new DirectoryEntry(LdapPath(schemaNc!));
+            using var schema = new DirectoryEntry(Path(schemaNc!));
             using var searcher = new DirectorySearcher(schema, "(lDAPDisplayName=organizationalUnit)", ["defaultSecurityDescriptor"], SearchScope.OneLevel);
             if (searcher.FindOne()?.Properties["defaultSecurityDescriptor"] is not { Count: > 0 } p) return [];
             var security = new ActiveDirectorySecurity();
@@ -206,7 +234,7 @@ public sealed partial class WindowsDirectoryReader : IDirectoryReader
 
     public AdObjectCounts CountChildren(string ouDn)
     {
-        using var entry = new DirectoryEntry(LdapPath(ouDn));
+        using var entry = new DirectoryEntry(Path(ouDn));
         int Count(string filter)
         {
             using var s = new DirectorySearcher(entry, filter, ["distinguishedName"], SearchScope.OneLevel) { PageSize = 500, SizeLimit = 20000 };
@@ -222,7 +250,7 @@ public sealed partial class WindowsDirectoryReader : IDirectoryReader
 
     public string? ObjectClass(string dn)
     {
-        var path = LdapPath(dn);
+        var path = Path(dn);
         if (!DirectoryEntry.Exists(path)) return null;
         using var entry = new DirectoryEntry(path);
         return entry.Properties["objectClass"] is { Count: > 0 } c ? c[c.Count - 1]?.ToString() : null;
@@ -230,14 +258,14 @@ public sealed partial class WindowsDirectoryReader : IDirectoryReader
 
     public List<AdMember> GroupMembers(string groupDn, int max)
     {
-        using var group = new DirectoryEntry(LdapPath(groupDn));
+        using var group = new DirectoryEntry(Path(groupDn));
         var result = new List<AdMember>();
         foreach (var m in group.Properties["member"].Cast<object>().Take(max))
         {
             var dn = m.ToString()!;
             try
             {
-                using var e = new DirectoryEntry(LdapPath(dn));
+                using var e = new DirectoryEntry(Path(dn));
                 var classes = e.Properties["objectClass"];
                 var cls = classes.Count > 0 ? classes[classes.Count - 1]!.ToString()! : "object";
                 bool? enabled = e.Properties["userAccountControl"].Value is int uac ? (uac & 2) == 0 : null;
@@ -253,7 +281,7 @@ public sealed partial class WindowsDirectoryReader : IDirectoryReader
 
     public List<AdAce> Aces(string dn)
     {
-        using var entry = new DirectoryEntry(LdapPath(dn));
+        using var entry = new DirectoryEntry(Path(dn));
         entry.Options!.SecurityMasks = SecurityMasks.Dacl;
         return ParseAces(entry.ObjectSecurity.GetSecurityDescriptorBinaryForm(), ReadDefaultOuAces());
     }
@@ -263,11 +291,11 @@ public sealed partial class WindowsDirectoryReader : IDirectoryReader
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            using var rootDse = new DirectoryEntry("LDAP://RootDSE");
+            using var rootDse = new DirectoryEntry(RootDsePath);
             var schemaNc = rootDse.Properties["schemaNamingContext"].Value?.ToString();
             var configNc = rootDse.Properties["configurationNamingContext"].Value?.ToString();
-            using var schema = new DirectoryEntry(LdapPath(schemaNc!));
-            using var rights = new DirectoryEntry(LdapPath($"CN=Extended-Rights,{configNc}"));
+            using var schema = new DirectoryEntry(Path(schemaNc!));
+            using var rights = new DirectoryEntry(Path($"CN=Extended-Rights,{configNc}"));
             foreach (var g in guids.Distinct(StringComparer.OrdinalIgnoreCase).Take(100))
             {
                 if (!Guid.TryParse(g, out var guid)) continue;
@@ -282,6 +310,37 @@ public sealed partial class WindowsDirectoryReader : IDirectoryReader
         return result;
     }
 
-    /// <summary>Domain information without the OU pass (setup wizard).</summary>
-    public AdDomainInfo? DomainInfo() => ComputerDomain() is { } d ? ReadDomain(d) : null;
+    /// <summary>Domain information without the OU pass (setup wizard, "Verbindung prüfen"). Throws when the domain cannot be reached.</summary>
+    public AdDomainInfo DomainInfo()
+    {
+        using var d = OpenDomain();
+        return ReadDomain(d);
+    }
+
+    public List<AdPrincipal> SearchGroups(string query, int max) =>
+        Search(query, max, q => $"(&(objectCategory=group)(|(cn={q}*)(sAMAccountName={q}*)(cn=*{q}*)))");
+
+    public List<AdPrincipal> SearchAccounts(string query, int max) =>
+        Search(query, max, q => $"(&(objectCategory=person)(objectClass=user)(|(sAMAccountName={q}*)(displayName=*{q}*)(cn=*{q}*)))");
+
+    private List<AdPrincipal> Search(string query, int max, Func<string, string> filter)
+    {
+        if (query.Trim().Length < 2) return [];
+        try
+        {
+            using var domain = OpenDomain();
+            using var root = domain.GetDirectoryEntry();
+            using var searcher = new DirectorySearcher(root, filter(EscapeFilter(query.Trim())),
+                ["cn", "displayName", "sAMAccountName", "objectSid", "distinguishedName", "description"]) { SizeLimit = max };
+            using var results = searcher.FindAll();
+            return results.Cast<SearchResult>().Select(r =>
+            {
+                var sid = r.Properties["objectSid"] is { Count: > 0 } s ? new SecurityIdentifier((byte[])s[0]!, 0).Value : "";
+                string? Prop(string name) => r.Properties[name] is { Count: > 0 } p ? p[0]?.ToString() : null;
+                var sam = Prop("sAMAccountName") ?? Prop("cn") ?? sid;
+                return new AdPrincipal(Prop("displayName") ?? Prop("cn") ?? sam, sam, sid, Prop("distinguishedName"), Prop("description"));
+            }).Where(p => p.SamAccountName.Length > 0).OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+        catch (Exception) { return []; }
+    }
 }

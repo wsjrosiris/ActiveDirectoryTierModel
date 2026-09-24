@@ -58,6 +58,7 @@ import type {
   WindowsAuthSettings,
   WindowsAuthUpdate,
 } from './types'
+import { DOMAIN_HEADER, getDomainKey, withDomain } from '@/lib/domain'
 
 export class ApiError extends Error {
   readonly status: number
@@ -133,6 +134,8 @@ export interface RequestOptions {
   noRedirect?: boolean
   /** Raw request body (e.g. an uploaded file) sent with its own content type instead of JSON. */
   raw?: Blob
+  /** Managed domain for this request instead of the selected one (e.g. applying a plan of another domain). */
+  domain?: string | null
 }
 
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
@@ -140,6 +143,9 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
   if (opts.raw) headers['Content-Type'] = opts.raw.type || 'application/octet-stream'
+  // Domain-bound data of the selected domain (roadmap 17); without the header the service uses its default domain.
+  const domain = opts.domain !== undefined ? opts.domain : getDomainKey()
+  if (domain) headers[DOMAIN_HEADER] = domain
   if (UNSAFE.has(method)) {
     const token = readCookie('XSRF-TOKEN')
     if (token) headers['X-XSRF-TOKEN'] = token
@@ -224,7 +230,9 @@ export const api = {
   lookup: {
     gpoBackups: () => get<GpoBackup[]>('/api/lookup/gpo-backups'),
     templateFiles: () => get<TemplateFiles>('/api/lookup/template-files'),
-    domainControllers: () => get<DomainControllers>('/api/lookup/domain-controllers'),
+    /** DCs of the selected domain, or of <domain> (domain form). */
+    domainControllers: (domain?: unknown) =>
+      request<DomainControllers>('/api/lookup/domain-controllers', typeof domain === 'string' ? { domain } : {}),
     adGroups: (q: string, signal?: AbortSignal) => request<AdGroups>(`/api/lookup/ad-groups?q=${enc(q)}`, { signal }),
   },
   config: {
@@ -239,12 +247,17 @@ export const api = {
     restore: (key: string, version: number, body: RestoreRequest) =>
       post<Section>(`/api/config/sections/${enc(key)}/versions/${version}/restore`, body),
     validate: () => get<ValidationIssue[]>('/api/config/validate'),
-    exportUrl: '/api/config/export',
+    /** Browser download: names the selected domain in the query string. */
+    get exportUrl() {
+      return withDomain('/api/config/export')
+    },
   },
   runs: {
     list: (p: { kind?: RunKind | ''; status?: RunStatus | ''; page?: number; pageSize?: number }) =>
       get<Paged<RunSummary>>(`/api/runs${qs({ kind: p.kind, status: p.status, page: p.page ?? 1, pageSize: p.pageSize ?? 25 })}`),
-    deploy: (body: DeployRequest) => post<RunSummary>('/api/runs/deploy', body),
+    /** <domain>: e.g. applying a plan in the plan's domain, whatever domain is selected. */
+    deploy: (body: DeployRequest, domain?: unknown) =>
+      request<RunSummary>('/api/runs/deploy', typeof domain === 'string' ? { method: 'POST', body, domain } : { method: 'POST', body }),
     audit: (body: RunRequest) => post<RunSummary>('/api/runs/audit', body),
     monitor: (preferredDc: string) => post<RunSummary>('/api/runs/monitor', { preferredDc }),
     /** Planning run for one area of an audit's findings (Operator). */
@@ -280,8 +293,10 @@ export const api = {
     run: (id: number) => post<RunSummary>(`/api/schedules/${id}/run`),
   },
   changelog: {
-    list: (p: { entityType?: string; page?: number; pageSize?: number }) =>
-      get<Paged<ChangeEntry>>(`/api/changelog${qs({ entityType: p.entityType, page: p.page ?? 1, pageSize: p.pageSize ?? 50 })}`),
+    list: (p: { entityType?: string; page?: number; pageSize?: number; currentDomain?: boolean }) =>
+      get<Paged<ChangeEntry>>(
+        `/api/changelog${qs({ entityType: p.entityType, page: p.page ?? 1, pageSize: p.pageSize ?? 50, currentDomain: p.currentDomain ? 'true' : undefined })}`,
+      ),
   },
   dashboard: () => get<Dashboard>('/api/dashboard'),
   privileged: {
@@ -321,7 +336,7 @@ export const api = {
     types: () => get<ReportTypeInfo[]>('/api/reports'),
     /** Document URL (iframe preview or download). from/to: yyyy-MM-dd. */
     url: (type: ReportType, p: { from?: string; to?: string; format: 'pdf' | 'html'; download?: boolean }) =>
-      `/api/reports/${enc(type)}${qs({ from: p.from, to: p.to, format: p.format, download: p.download === undefined ? undefined : String(p.download) })}`,
+      withDomain(`/api/reports/${enc(type)}${qs({ from: p.from, to: p.to, format: p.format, download: p.download === undefined ? undefined : String(p.download) })}`),
     schedules: () => get<ReportSchedule[]>('/api/reports/schedules'),
     updateSchedules: (body: ReportScheduleInput[]) => put<ReportSchedule[]>('/api/reports/schedules', body),
     sendSchedule: (id: string) => post<void>(`/api/reports/schedules/${enc(id)}/send`),

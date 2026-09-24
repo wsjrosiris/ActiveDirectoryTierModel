@@ -1,6 +1,7 @@
 import { QueryCache, QueryClient, MutationCache } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
+import { domainQueryKeyHash } from '@/lib/domain'
 
 export function errorMessage(e: unknown): string {
   if (e instanceof ApiError) return e.userMessage
@@ -11,6 +12,8 @@ export function errorMessage(e: unknown): string {
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      // One cache per managed domain (roadmap 17): the selected domain is part of every query hash.
+      queryKeyHashFn: domainQueryKeyHash,
       staleTime: 15_000,
       refetchOnWindowFocus: true,
       retry: (count, err) => {

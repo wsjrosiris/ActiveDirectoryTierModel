@@ -26,9 +26,9 @@ public sealed class GitSyncTests : IDisposable
         try { GitRepositorySync.DeleteDirectory(_root); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
-    private GitRepositorySync Open(string name = "clone", string path = "config")
+    private GitRepositorySync Open(string name = "clone", string path = "config", string[]? domainRoots = null)
     {
-        var sync = new GitRepositorySync(Path.Combine(_root, name), new GitRemoteOptions(_url, "main", null, null, AllowFileUrls: true), path);
+        var sync = new GitRepositorySync(Path.Combine(_root, name), new GitRemoteOptions(_url, "main", null, null, AllowFileUrls: true), path, domainRoots);
         sync.Open();
         return sync;
     }
@@ -166,6 +166,39 @@ public sealed class GitSyncTests : IDisposable
         using var sync = Open("fresh");
         Assert.Equal(RemoteHead().Sha, sync.LocalTip()!.Sha);
         Assert.Equal("hallo", sync.ReadFile("README.md"));
+    }
+
+    [Fact]
+    public void Further_domains_live_in_their_own_folder_which_belongs_to_the_service()
+    {
+        using (var first = Open(domainRoots: ["fabrikam"]))
+        {
+            Assert.Equal("fabrikam/config/a.json", first.FilePath("a.json", "fabrikam"));
+            Assert.Equal("fabrikam/versions.json", first.VersionsPathFor("fabrikam"));
+            Assert.Equal("config/a.json", first.FilePath("a.json", null));
+            first.Commit([new GitFile(first.FilePath("a.json", null), "{\"d\":1}"), new GitFile(first.FilePath("a.json", "fabrikam"), "{\"d\":2}")],
+                Sig("a", "a@x"), Sig("a", "a@x"), "both");
+            Assert.Equal(GitPushOutcome.Pushed, first.Push().Outcome);
+        }
+        // Somebody edits a file outside our paths: integrated, both domains' commits replayed.
+        ForeignPush("README.md", "Doku");
+        using (var sync = Open(domainRoots: ["fabrikam"]))
+        {
+            sync.Commit([new GitFile(sync.FilePath("a.json", "fabrikam"), "{\"d\":3}")], Sig("b", "b@x"), Sig("b", "b@x"), "fabrikam only");
+            Assert.Equal(GitPushOutcome.Pushed, sync.Push().Outcome);
+        }
+        var head = RemoteHead();
+        Assert.Equal("{\"d\":3}", ((Blob)head["fabrikam/config/a.json"].Target).GetContentText());
+        Assert.Equal("{\"d\":1}", ((Blob)head["config/a.json"].Target).GetContentText());
+        Assert.Equal("Doku", ((Blob)head["README.md"].Target).GetContentText());
+
+        // A change in the folder of a further domain is a conflict like one in the first domain's path.
+        ForeignPush("fabrikam/config/a.json", "{\"d\":\"fremd\"}");
+        using (var sync = Open(domainRoots: ["fabrikam"]))
+        {
+            sync.Commit([new GitFile(sync.FilePath("a.json", null), "{\"d\":4}")], Sig("b", "b@x"), Sig("b", "b@x"), "first domain");
+            Assert.Equal(GitPushOutcome.Conflict, sync.Push().Outcome);
+        }
     }
 
     [Theory]

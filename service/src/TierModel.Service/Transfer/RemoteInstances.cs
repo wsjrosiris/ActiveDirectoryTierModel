@@ -19,7 +19,10 @@ public record RemoteInstanceDto(Guid Id, string Name, string Url, string TokenHi
 
 public record RemoteInstanceInput(string? Name, string? Url, string? Token);
 
-public record RemoteCheckResult(bool Ok, string Message, int? SectionCount);
+/// <param name="Domains">Domains of the other instance (roadmap 17); empty for instances without several domains.</param>
+public record RemoteCheckResult(bool Ok, string Message, int? SectionCount, List<RemoteDomain>? Domains = null);
+
+public record RemoteDomain(string Key, string DisplayName, string DnsName, bool IsDefault);
 
 public class RemoteImportException(string message) : Exception(message);
 
@@ -48,12 +51,14 @@ public class RemoteConfigClient(IHttpClientFactory httpFactory)
 
     public static string TokenHint(string token) => token.Length > 12 ? token[..12] + "…" : "…";
 
-    public async Task<RemoteCheckResult> CheckAsync(string url, string token, CancellationToken ct)
+    public async Task<RemoteCheckResult> CheckAsync(string url, string token, CancellationToken ct, string? remoteDomain = null)
     {
         try
         {
-            var list = await GetSectionListAsync(url, token, ct);
-            return new RemoteCheckResult(true, $"Verbindung erfolgreich – {list.Count} Bereiche lesbar.", list.Count);
+            var list = await GetSectionListAsync(url, token, ct, remoteDomain);
+            var domains = await GetDomainsAsync(url, token, ct);
+            return new RemoteCheckResult(true, $"Verbindung erfolgreich – {list.Count} Bereiche lesbar"
+                + (domains.Count > 1 ? $", {domains.Count} Domänen." : "."), list.Count, domains);
         }
         catch (RemoteImportException ex)
         {
@@ -62,9 +67,10 @@ public class RemoteConfigClient(IHttpClientFactory httpFactory)
     }
 
     /// <summary>Reads every section of the remote instance. Sections the remote has but this version does not know are reported as unknown.</summary>
-    public async Task<ImportSource> FetchAsync(string name, string url, string token, CancellationToken ct)
+    /// <param name="remoteDomain">Key of a domain of the other instance (header X-TierModel-Domain); null = its default domain.</param>
+    public async Task<ImportSource> FetchAsync(string name, string url, string token, CancellationToken ct, string? remoteDomain = null)
     {
-        var list = await GetSectionListAsync(url, token, ct);
+        var list = await GetSectionListAsync(url, token, ct, remoteDomain);
         var sections = new Dictionary<string, string>();
         var versions = new Dictionary<string, int>();
         var unknown = new List<string>();
@@ -77,7 +83,7 @@ public class RemoteConfigClient(IHttpClientFactory httpFactory)
                 unknown.Add(key);
                 continue;
             }
-            var node = await GetJsonAsync(url, token, $"/api/config/sections/{Uri.EscapeDataString(def.Key)}", ct);
+            var node = await GetJsonAsync(url, token, $"/api/config/sections/{Uri.EscapeDataString(def.Key)}", ct, remoteDomain);
             var content = node?["content"];
             if (content is not JsonObject)
             {
@@ -92,9 +98,24 @@ public class RemoteConfigClient(IHttpClientFactory httpFactory)
         return new ImportSource(name, sections, versions, unknown, invalid, notices);
     }
 
-    private async Task<List<(string Key, int Version)>> GetSectionListAsync(string url, string token, CancellationToken ct)
+    /// <summary>Domains of the other instance; empty when it has no /api/domains (older version).</summary>
+    private async Task<List<RemoteDomain>> GetDomainsAsync(string url, string token, CancellationToken ct)
     {
-        var node = await GetJsonAsync(url, token, "/api/config/sections", ct);
+        try
+        {
+            if (await GetJsonAsync(url, token, "/api/domains", ct) is not JsonArray arr) return [];
+            return arr.OfType<JsonObject>().Select(o => new RemoteDomain(o["key"]?.ToString() ?? "", o["displayName"]?.ToString() ?? "", o["dnsName"]?.ToString() ?? "",
+                o["isDefault"] is JsonValue v && v.TryGetValue<bool>(out var b) && b)).Where(d => d.Key.Length > 0).Take(100).ToList();
+        }
+        catch (RemoteImportException)
+        {
+            return [];
+        }
+    }
+
+    private async Task<List<(string Key, int Version)>> GetSectionListAsync(string url, string token, CancellationToken ct, string? remoteDomain = null)
+    {
+        var node = await GetJsonAsync(url, token, "/api/config/sections", ct, remoteDomain);
         if (node is not JsonArray arr) throw new RemoteImportException("Die Gegenstelle ist keine TierModel-Instanz (unerwartete Antwort).");
         if (arr.Count > MaxSections) throw new RemoteImportException("Die Gegenstelle meldet zu viele Bereiche.");
         return arr.OfType<JsonObject>()
@@ -103,10 +124,11 @@ public class RemoteConfigClient(IHttpClientFactory httpFactory)
             .ToList();
     }
 
-    private async Task<JsonNode?> GetJsonAsync(string baseUrl, string token, string path, CancellationToken ct)
+    private async Task<JsonNode?> GetJsonAsync(string baseUrl, string token, string path, CancellationToken ct, string? remoteDomain = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, NormalizeUrl(baseUrl) + path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (!string.IsNullOrWhiteSpace(remoteDomain)) request.Headers.Add(Domains.DomainRules.Header, remoteDomain.Trim());
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         HttpResponseMessage response;
         try
@@ -131,6 +153,8 @@ public class RemoteConfigClient(IHttpClientFactory httpFactory)
                     throw new RemoteImportException("Das API-Token hat keine Leseberechtigung für die Konfiguration.");
                 case HttpStatusCode.NotFound:
                     throw new RemoteImportException("Die Adresse ist keine TierModel-Instanz (404).");
+                case HttpStatusCode.BadRequest when !string.IsNullOrWhiteSpace(remoteDomain):
+                    throw new RemoteImportException($"Die Gegenstelle kennt die Domäne „{remoteDomain}“ nicht.");
             }
             if (!response.IsSuccessStatusCode)
                 throw new RemoteImportException($"Die Gegenstelle antwortete mit Fehler {(int)response.StatusCode}.");

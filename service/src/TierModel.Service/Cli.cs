@@ -41,6 +41,7 @@ public static partial class Cli
         {
             var db = sp.GetRequiredService<AppDbContext>();
             await db.Database.MigrateAsync();
+            await sp.GetRequiredService<TierModel.Service.Domains.DomainRegistry>().InitializeAsync(db, sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<TierModelOptions>>().Value);
             await sp.GetRequiredService<ConfigService>().SeedAsync();
             if (args[0] == "migrate")
             {

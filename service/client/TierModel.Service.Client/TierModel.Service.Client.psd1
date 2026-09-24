@@ -19,7 +19,8 @@
         'Get-TierModelRunLog',
         'Get-TierModelPrivileged',
         'Get-TierModelCompliance',
-        'Get-TierModelConfigSection'
+        'Get-TierModelConfigSection',
+        'Get-TierModelDomain'
     )
     CmdletsToExport      = @()
     VariablesToExport    = @()

@@ -2,6 +2,8 @@
  * (save dialog / versions) and the change log. Unknown keys are humanized from camelCase. */
 
 export const fieldLabels: Record<string, string> = {
+  domain: 'Domäne',
+  previousKey: 'Vorheriger Kurzname',
   // general
   name: 'Name',
   displayName: 'Anzeigename',

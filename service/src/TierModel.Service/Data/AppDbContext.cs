@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace TierModel.Service.Data;
 
-public class AppDbContext(DbContextOptions<AppDbContext> options, Domains.DomainContext? domainContext = null) : DbContext(options)
+public class AppDbContext(DbContextOptions<AppDbContext> options, TierModel.Service.Domains.DomainContext? domainContext = null) : DbContext(options)
 {
     public DbSet<Domain> Domains => Set<Domain>();
     public DbSet<AppUser> Users => Set<AppUser>();

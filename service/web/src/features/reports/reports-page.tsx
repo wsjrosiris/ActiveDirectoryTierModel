@@ -22,6 +22,7 @@ import {
 import { toast } from 'sonner'
 import { api, ApiError } from '@/api/client'
 import type { ReportFrequency, ReportSchedule, ReportScheduleInput, ReportType, ReportTypeInfo } from '@/api/types'
+import { useDomains } from '@/features/domains/domain-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -245,7 +246,7 @@ function describe(s: Pick<ReportSchedule, 'frequency' | 'day' | 'time'>) {
 }
 
 function toInput(s: ReportSchedule): ReportScheduleInput {
-  return { id: s.id, name: s.name, type: s.type, frequency: s.frequency, day: s.day, time: s.time, recipients: s.recipients, enabled: s.enabled }
+  return { id: s.id, name: s.name, type: s.type, frequency: s.frequency, day: s.day, time: s.time, recipients: s.recipients, enabled: s.enabled, domainId: s.domainId ?? null }
 }
 
 function Schedules({ types }: { types: ReportTypeInfo[] }) {
@@ -300,6 +301,7 @@ function Schedules({ types }: { types: ReportTypeInfo[] }) {
                     {s.name}
                     <Badge variant="outline">{typeTitles[s.type]}</Badge>
                     {!s.enabled && <Badge variant="muted">Pausiert</Badge>}
+                    <ScheduleDomainBadge id={s.domainId} />
                   </span>
                   <span className="text-xs text-muted-foreground">{describe(s)}</span>
                   <span className="truncate text-xs text-muted-foreground" title={s.recipients.join(', ')}>An {s.recipients.join(', ')}</span>
@@ -416,6 +418,7 @@ function ScheduleSheet({
             <Field label="Bericht" htmlFor="rs-type">
               <Combobox id="rs-type" value={form.type} onChange={(v) => setForm({ ...form, type: v as ReportType })} options={typeOptions} allowCustom={false} hideValue searchPlaceholder="Bericht suchen …" />
             </Field>
+            <ScheduleDomainField value={form.domainId ?? null} onChange={(v) => setForm({ ...form, domainId: v })} />
             <div className="grid gap-1.5">
               <p className="text-[13px] font-medium">Häufigkeit</p>
               <Segmented<ReportFrequency>
@@ -466,4 +469,23 @@ function ScheduleSheet({
       </SheetContent>
     </Sheet>
   )
+}
+
+/** Domain a scheduled report covers (roadmap 17); only when several domains exist. */
+function ScheduleDomainField({ value, onChange }: { value: number | null; onChange: (v: number | null) => void }) {
+  const { domains } = useDomains()
+  if (domains.length < 2) return null
+  const options = [{ value: '', label: 'Standard-Domäne' }, ...domains.map((d) => ({ value: String(d.id), label: d.displayName, hint: d.dnsName || d.key }))]
+  return (
+    <Field label="Domäne" htmlFor="rs-domain" hint="Der Bericht zeigt Audits, Läufe und Überwachung dieser Domäne.">
+      <Combobox id="rs-domain" value={value === null ? '' : String(value)} onChange={(v) => onChange(v ? Number(v) : null)} options={options} allowCustom={false} hideValue placeholder="Standard-Domäne" searchPlaceholder="Domäne suchen …" />
+    </Field>
+  )
+}
+
+function ScheduleDomainBadge({ id }: { id: number | null | undefined }) {
+  const { domains, byId } = useDomains()
+  if (domains.length < 2) return null
+  const d = id ? byId(id) : domains.find((x) => x.isDefault)
+  return d ? <Badge variant="muted">{d.displayName}</Badge> : null
 }

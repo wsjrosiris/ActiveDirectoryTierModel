@@ -7,7 +7,8 @@ using TierModel.Service.Config;
 namespace TierModel.Service.AdView;
 
 /// <summary>
-/// Development and test stand-in (TierModel:FakeDirectory=true): a deterministic domain contoso.local built from the
+/// Development and test stand-in (TierModel:FakeDirectory=true): a deterministic domain (contoso.local, or the DNS name of the
+/// managed domain, roadmap 17) built from the
 /// framework's shipped configuration files, with four deliberate differences so the comparison has something to show:
 /// the OU "Tier 2 PAW Devices" is missing, "Legacy Servers" exists only in AD, "CONTOSO\Helpdesk" has an extra ACE on
 /// "Tier 0 Member Servers" and the GPO "Legacy Drive Mappings" is additionally linked to "Tier 1 Member Servers".
@@ -22,27 +23,78 @@ public sealed class FakeDirectoryReader : IDirectoryReader
     public const string ExtraLinkOuDn = "OU=Tier 1 Member Servers," + DomainDn;
     public const string ExtraLinkGpo = "Legacy Drive Mappings";
 
+    public const string DefaultDnsName = "contoso.local";
+
     private readonly string _configDir;
     private readonly Lazy<Model> _model;
+    private readonly string _dns;
+    private readonly string _dn;
+    private readonly string _netbios;
+    private readonly string? _unreachable;
 
     public FakeDirectoryReader(IOptions<TierModelOptions> options) : this(Path.Combine(options.Value.FrameworkPath, "config")) { }
 
-    public FakeDirectoryReader(string configDir)
+    /// <param name="dnsName">Domain to simulate. A name ending in ".invalid" or a DC name containing "unreachable" simulates an unreachable domain.</param>
+    public FakeDirectoryReader(string configDir, string? dnsName = null, string? preferredDc = null)
     {
         _configDir = configDir;
+        _dns = string.IsNullOrWhiteSpace(dnsName) ? Domains.DomainRules.DnsFromDc(preferredDc) ?? DefaultDnsName : dnsName.Trim().ToLowerInvariant();
+        _dn = Domains.DomainRules.DistinguishedName(_dns);
+        _netbios = _dns.Split('.')[0].ToUpperInvariant();
+        if (_dns.EndsWith(".invalid", StringComparison.Ordinal) || preferredDc?.Contains("unreachable", StringComparison.OrdinalIgnoreCase) == true)
+            _unreachable = $"Der Server {(string.IsNullOrWhiteSpace(preferredDc) ? _dns : preferredDc)} ist nicht erreichbar (Testdaten).";
         _model = new Lazy<Model>(Build);
     }
 
     public string Source => "Testdaten";
     public bool Available => true;
 
+    /// <summary>DN of the simulated domain (DC=contoso,DC=local by default).</summary>
+    public string DistinguishedName => _dn;
+
+    private void EnsureReachable()
+    {
+        if (_unreachable is not null) throw new InvalidOperationException(_unreachable);
+    }
+
     private sealed record Model(AdSnapshot Snapshot, Dictionary<string, string> Classes, Dictionary<string, List<AdMember>> Members, Dictionary<string, string> FakeGuids);
 
-    public static AdDomainInfo Domain => new("contoso.local", DomainDn, "CONTOSO", "Windows2016Domain", "Windows2016Forest", "contoso.local",
-        [new("dc01.contoso.local", "Default-First-Site-Name", true), new("dc02.contoso.local", "Default-First-Site-Name", true), new("dc03.contoso.local", "Aussenstelle-Nord", false)]);
+    public AdDomainInfo DomainInfo()
+    {
+        EnsureReachable();
+        return new(_dns, _dn, _netbios, "Windows2016Domain", "Windows2016Forest", _dns,
+            [new($"dc01.{_dns}", "Default-First-Site-Name", true), new($"dc02.{_dns}", "Default-First-Site-Name", true), new($"dc03.{_dns}", "Aussenstelle-Nord", false)]);
+    }
+
+    public List<AdPrincipal> SearchGroups(string query, int max)
+    {
+        var q = query.Trim();
+        if (q.Length < 2) return [];
+        EnsureReachable();
+        return _model.Value.Classes.Where(c => c.Value == "group")
+            .Select(c => (Dn: c.Key, Name: c.Key.Split(',')[0][3..]))
+            .Where(g => g.Name.Contains(q, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase).Take(max)
+            .Select(g => new AdPrincipal(g.Name, g.Name.Replace(" ", ""), FakeSid(g.Dn), g.Dn, "Gruppe (Testdaten)")).ToList();
+    }
+
+    public List<AdPrincipal> SearchAccounts(string query, int max)
+    {
+        var q = query.Trim();
+        if (q.Length < 2) return [];
+        EnsureReachable();
+        return _model.Value.Members.Values.SelectMany(m => m).Where(m => m.ObjectClass == "user")
+            .DistinctBy(m => m.SamAccountName, StringComparer.OrdinalIgnoreCase)
+            .Where(m => m.SamAccountName.StartsWith(q, StringComparison.OrdinalIgnoreCase) || m.Name.Contains(q, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(m => m.SamAccountName, StringComparer.OrdinalIgnoreCase).Take(max)
+            .Select(m => new AdPrincipal(m.Name, m.SamAccountName, FakeSid(m.DistinguishedName), m.DistinguishedName, null)).ToList();
+    }
+
+    private string FakeSid(string dn) => $"S-1-5-21-{1000000000 + Hash(_dns) * 7919 % 99999999}-1177238915-682003330-{3000 + Hash(dn) % 5000}";
 
     public AdSnapshot ReadSnapshot(int maxOus)
     {
+        EnsureReachable();
         var s = _model.Value.Snapshot;
         return s.Ous.Count > maxOus ? s with { Ous = s.Ous.Take(maxOus).ToList(), Truncated = true } : s;
     }
@@ -77,10 +129,10 @@ public sealed class FakeDirectoryReader : IDirectoryReader
 
     private static int Hash(string s) => BitConverter.ToUInt16(SHA256.HashData(Encoding.UTF8.GetBytes(s.ToLowerInvariant())), 0);
 
-    private static List<AdAce> DefaultAces() =>
+    private List<AdAce> DefaultAces() =>
     [
         new(@"NT AUTHORITY\SYSTEM", "S-1-5-18", ["GenericAll"], "Allow", null, null, "None", true),
-        new(@"CONTOSO\Domain Admins", "S-1-5-21-1004336348-1177238915-682003330-512", ["GenericAll"], "Allow", null, null, "None", true),
+        new($@"{_netbios}\Domain Admins", "S-1-5-21-1004336348-1177238915-682003330-512", ["GenericAll"], "Allow", null, null, "None", true),
         new(@"NT AUTHORITY\Authenticated Users", "S-1-5-11", ["GenericRead"], "Allow", null, null, "None", true),
     ];
 
@@ -108,6 +160,11 @@ public sealed class FakeDirectoryReader : IDirectoryReader
         }
 
         // Explicit ACEs per OU from all delegation sections, as the framework would have set them.
+        var DomainDn = _dn;
+        var ExtraOuDn = "OU=Legacy Servers," + _dn;
+        var ExtraAceOuDn = "OU=Tier 0 Member Servers," + _dn;
+        var ExtraLinkOuDn = "OU=Tier 1 Member Servers," + _dn;
+        var ExtraAcePrincipal = $@"{_netbios}\Helpdesk";
         var aces = new Dictionary<string, List<AdAce>>();
         foreach (var file in new[] { "tiermodel-acls.json", "tiermodel-msa.json", "tiermodel-gmsa.json", "tiermodel-dmsa.json" })
             foreach (var a in (Load(file)?["aclDelegations"] as JsonArray ?? []).OfType<JsonObject>())
@@ -116,7 +173,7 @@ public sealed class FakeDirectoryReader : IDirectoryReader
                 var dn = DirectoryComparer.NormalizeDn(DirectoryComparer.Resolve(target, DomainDn));
                 var rights = a["activedirectoryrights"] is JsonArray r ? r.Select(x => x?.ToString() ?? "").ToList() : [];
                 if (!aces.TryGetValue(dn, out var list)) aces[dn] = list = [];
-                list.Add(new($@"CONTOSO\{principal}", null, rights, Str(a, "accesscontroltype") ?? "Allow", GuidFor(Str(a, "objecttype")),
+                list.Add(new($@"{_netbios}\{principal}", null, rights, Str(a, "accesscontroltype") ?? "Allow", GuidFor(Str(a, "objecttype")),
                     GuidFor(Str(a, "inheritedObjectType") ?? Str(a, "inheritedobjecttype")), Str(a, "activeDirectorysecurityinheritance") ?? "None", false));
             }
 
@@ -169,11 +226,11 @@ public sealed class FakeDirectoryReader : IDirectoryReader
             links.GetValueOrDefault(DirectoryComparer.NormalizeDn(dcOu)) ?? [], AcesFor(dcOu, true)));
         result.Add(new AdOu(ExtraOuDn, "Legacy Servers", DomainDn, false, false, "Alte Server aus der Migration 2019",
             [new AdGpoLink(ExtraLinkGpo, "{6AC1786C-016F-11D2-945F-00C04FB984F9}", 1, true, false)],
-            [.. DefaultAces(), new(@"CONTOSO\Server-Admins-Alt", "S-1-5-21-1004336348-1177238915-682003330-1320", ["GenericAll"], "Allow", null, null, "All", false)]));
+            [.. DefaultAces(), new($@"{_netbios}\Server-Admins-Alt", "S-1-5-21-1004336348-1177238915-682003330-1320", ["GenericAll"], "Allow", null, null, "All", false)]));
         result.Add(new AdOu($"OU=Archiv,{ExtraOuDn}", "Archiv", ExtraOuDn, false, false, null, [], DefaultAces()));
         foreach (var ou in result) classes[DirectoryComparer.NormalizeDn(ou.Dn)] = "organizationalUnit";
 
-        var root = new AdOu(DomainDn, "contoso.local", "", false, false, null, links.GetValueOrDefault(DirectoryComparer.NormalizeDn(DomainDn)) ?? [], AcesFor(DomainDn, false));
+        var root = new AdOu(DomainDn, _dns, "", false, false, null, links.GetValueOrDefault(DirectoryComparer.NormalizeDn(DomainDn)) ?? [], AcesFor(DomainDn, false));
 
         // Groups of the configuration with a few members each.
         var members = new Dictionary<string, List<AdMember>>();
@@ -196,6 +253,6 @@ public sealed class FakeDirectoryReader : IDirectoryReader
             members[DirectoryComparer.NormalizeDn(dn)] = list;
         }
 
-        return new Model(new AdSnapshot(Domain, root, result, false), classes, members, fakeGuids);
+        return new Model(new AdSnapshot(DomainInfo(), root, result, false), classes, members, fakeGuids);
     }
 }

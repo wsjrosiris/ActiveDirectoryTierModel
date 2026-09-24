@@ -14,9 +14,11 @@ export interface MaintenanceWindow {
   enabled: boolean
   createdBy: string
   createdAt: string
+  /** Domains the window applies to; empty = all (roadmap 17). */
+  domainIds?: number[]
 }
 
-export type MaintenanceWindowInput = Pick<MaintenanceWindow, 'name' | 'days' | 'from' | 'to' | 'timeZone' | 'enabled'>
+export type MaintenanceWindowInput = Pick<MaintenanceWindow, 'name' | 'days' | 'from' | 'to' | 'timeZone' | 'enabled' | 'domainIds'>
 
 export interface FreezePeriod {
   id: number
@@ -28,9 +30,11 @@ export interface FreezePeriod {
   past: boolean
   createdBy: string
   createdAt: string
+  /** Domains the freeze applies to; empty = all (roadmap 17). */
+  domainIds?: number[]
 }
 
-export type FreezePeriodInput = Pick<FreezePeriod, 'from' | 'to' | 'reason' | 'enabled'>
+export type FreezePeriodInput = Pick<FreezePeriod, 'from' | 'to' | 'reason' | 'enabled' | 'domainIds'>
 
 export interface FreezeInfo {
   id: number

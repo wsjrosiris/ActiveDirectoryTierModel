@@ -60,6 +60,7 @@ function ImportPage() {
   const [source, setSource] = React.useState<Source>('file')
   const [file, setFile] = React.useState<File | null>(null)
   const [instanceId, setInstanceId] = React.useState('')
+  const [remoteDomain, setRemoteDomain] = React.useState('')
   const [preview, setPreview] = React.useState<ImportPreview | null>(null)
   const [selected, setSelected] = React.useState<Set<string>>(new Set())
   const [comment, setComment] = React.useState('')
@@ -75,7 +76,7 @@ function ImportPage() {
 
   const load = useMutation({
     meta: { silent: true },
-    mutationFn: () => (source === 'file' ? transferApi.uploadZip(file!) : transferApi.pullRemote(instanceId, [])),
+    mutationFn: () => (source === 'file' ? transferApi.uploadZip(file!) : transferApi.pullRemote(instanceId, [], remoteDomain)),
     onSuccess: (p) => {
       adopt(p)
       requestAnimationFrame(() => topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
@@ -164,7 +165,7 @@ function ImportPage() {
                 { value: 'remote', label: 'Andere Instanz', icon: <Server /> },
               ]}
             />
-            {source === 'file' ? <DropZone file={file} onFile={setFile} /> : <RemoteInstancePicker value={instanceId} onChange={setInstanceId} />}
+            {source === 'file' ? <DropZone file={file} onFile={setFile} /> : <RemoteInstancePicker value={instanceId} onChange={(id) => { setInstanceId(id); setRemoteDomain('') }} remoteDomain={remoteDomain} onRemoteDomainChange={setRemoteDomain} />}
             <div className="flex justify-end">
               <Button onClick={() => load.mutate()} loading={load.isPending} disabled={source === 'file' ? !file : !instanceId}>
                 Vorschau erstellen {!load.isPending && <ArrowRight />}

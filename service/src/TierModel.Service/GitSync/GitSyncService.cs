@@ -23,7 +23,8 @@ public record GitSyncState(DateTimeOffset? LastSyncAt = null, string? LastCommit
 
 public enum GitSyncKind { Section, Full, TakeRemote }
 
-public record GitSyncRequest(GitSyncKind Kind, string? SectionKey = null, int Version = 0, string? RequestedBy = null);
+/// <param name="DomainId">Domain of a section version (roadmap 17).</param>
+public record GitSyncRequest(GitSyncKind Kind, string? SectionKey = null, int Version = 0, string? RequestedBy = null, int DomainId = 1);
 
 /// <summary>Bounded queue between config saves and the Git worker. Enqueue never blocks; on overflow the worker does a full sync instead.</summary>
 public class GitSyncQueue
@@ -35,9 +36,9 @@ public class GitSyncQueue
     });
     private int _overflow;
 
-    public void Enqueue(string sectionKey, int version)
+    public void Enqueue(string sectionKey, int version, int domainId = 1)
     {
-        if (!_channel.Writer.TryWrite(new GitSyncRequest(GitSyncKind.Section, sectionKey, version))) Interlocked.Exchange(ref _overflow, 1);
+        if (!_channel.Writer.TryWrite(new GitSyncRequest(GitSyncKind.Section, sectionKey, version, DomainId: domainId))) Interlocked.Exchange(ref _overflow, 1);
     }
 
     public void Enqueue(GitSyncRequest request)
@@ -73,10 +74,24 @@ public record GitStatusDto(string State, DateTimeOffset? LastSyncAt, string? Las
 public record GitSettingsInput(bool Enabled, string? RepositoryUrl, string? Branch, string? Username, string? Password, bool? ClearPassword,
     string? AuthorName, string? AuthorEmail, string? PathInRepo, bool PushOnSave);
 
-/// <summary>Git mirror of the configuration (roadmap 16): settings, state and the actual sync steps executed by <see cref="GitSyncWorker"/>.</summary>
+/// <summary>
+/// Git mirror of the configuration (roadmap 16): settings, state and the actual sync steps executed by <see cref="GitSyncWorker"/>.
+/// Several domains (roadmap 17): the first domain (Id 1) keeps the layout from before (&lt;path&gt;/…, versions.json), every further
+/// domain is mirrored below a folder named after its key (&lt;key&gt;/&lt;path&gt;/…, &lt;key&gt;/versions.json). Existing repositories stay valid.
+/// </summary>
 public class GitSyncService(AppDbContext db, SettingsService settings, GitSyncQueue queue, GitSyncStatus status, IOptions<TierModelOptions> options,
-    IHostEnvironment env, ILogger<GitSyncService> logger)
+    IHostEnvironment env, ILogger<GitSyncService> logger, Domains.DomainRegistry domains)
 {
+    /// <summary>Top-level folder of a domain in the repository; null for the first domain.</summary>
+    public static string? RootOf(Domain d) => d.Id == 1 ? null : d.Key;
+
+    /// <summary>Further domains whose folder would collide with the configured path are not mirrored.</summary>
+    private IEnumerable<Domain> MirroredDomains(GitSettings s)
+    {
+        var first = (GitRepositorySync.NormalizeRepoPath(s.PathInRepo) ?? "config").Split('/')[0];
+        return domains.All.Where(d => d.Id == 1 || !string.Equals(d.Key, first, StringComparison.Ordinal));
+    }
+
     public const string SettingsKey = "git";
     public const string StateKey = "gitState";
 
@@ -144,7 +159,8 @@ public class GitSyncService(AppDbContext db, SettingsService settings, GitSyncQu
     private GitRepositorySync OpenRepository(GitSettings s)
     {
         var password = s.PasswordProtected is null ? null : settings.Secrets.Unprotect(s.PasswordProtected);
-        var repo = new GitRepositorySync(LocalPath, new GitRemoteOptions(s.RepositoryUrl, s.Branch, s.Username, password, AllowFileUrls), s.PathInRepo);
+        var repo = new GitRepositorySync(LocalPath, new GitRemoteOptions(s.RepositoryUrl, s.Branch, s.Username, password, AllowFileUrls), s.PathInRepo,
+            MirroredDomains(s).Select(RootOf).OfType<string>());
         try
         {
             repo.Open();
@@ -253,41 +269,50 @@ public class GitSyncService(AppDbContext db, SettingsService settings, GitSyncQu
     {
         var def = ConfigCatalog.Find(item.SectionKey ?? "");
         if (def is null) return;
-        var v = await db.ConfigVersions.AsNoTracking().FirstOrDefaultAsync(x => x.SectionKey == def.Key && x.Version == item.Version, ct);
+        var domain = MirroredDomains(s).FirstOrDefault(d => d.Id == item.DomainId);
+        if (domain is null) return;
+        var root = RootOf(domain);
+        var v = await db.ConfigVersions.AsNoTracking().FirstOrDefaultAsync(x => x.DomainId == domain.Id && x.SectionKey == def.Key && x.Version == item.Version, ct);
         if (v is null) return;
-        var versions = ReadVersions(repo) ?? await CurrentVersionsAsync(ct);
+        var versions = ReadVersions(repo, root) ?? await CurrentVersionsAsync(domain.Id, ct);
         versions[def.Key] = v.Version;
-        var files = new List<GitFile> { new(repo.FilePath(def.FileName), v.Content), new(repo.VersionsPath, VersionsJson(versions)) };
+        var files = new List<GitFile> { new(repo.FilePath(def.FileName, root), v.Content), new(repo.VersionsPathFor(root), VersionsJson(versions)) };
         var author = await AuthorAsync(v.CreatedBy, s, v.CreatedAt, ct);
         var message = CommitMessage(string.IsNullOrWhiteSpace(v.Comment) ? $"{def.Title}: Version {v.Version}" : v.Comment!,
-            [("TierModel-Section", def.Key), ("TierModel-Version", v.Version.ToString()), ("TierModel-Instance", instance)]);
+            [("TierModel-Section", def.Key), ("TierModel-Version", v.Version.ToString()), ("TierModel-Domain", domains.Multiple ? domain.Key : ""),
+             ("TierModel-Instance", instance)]);
         repo.Commit(files, author, Committer(s), message);
     }
 
     private async Task CommitAllAsync(GitRepositorySync repo, GitSettings s, string instance, string subject, CancellationToken ct)
     {
         var snapshot = await db.ConfigSections.AsNoTracking()
-            .Join(db.ConfigVersions.AsNoTracking(), c => new { c.Key, V = c.CurrentVersion }, v => new { Key = v.SectionKey, V = v.Version }, (c, v) => new { c.Key, v.Version, v.Content })
+            .Join(db.ConfigVersions.AsNoTracking(), c => new { c.DomainId, c.Key, V = c.CurrentVersion }, v => new { v.DomainId, Key = v.SectionKey, V = v.Version },
+                (c, v) => new { c.DomainId, c.Key, v.Version, v.Content })
             .ToListAsync(ct);
         var files = new List<GitFile>();
-        var versions = new Dictionary<string, int>();
-        foreach (var def in ConfigCatalog.Sections)
+        foreach (var domain in MirroredDomains(s))
         {
-            var row = snapshot.FirstOrDefault(r => r.Key == def.Key);
-            if (row is null) continue;
-            files.Add(new(repo.FilePath(def.FileName), row.Content));
-            versions[def.Key] = row.Version;
+            var root = RootOf(domain);
+            var versions = new Dictionary<string, int>();
+            foreach (var def in ConfigCatalog.Sections)
+            {
+                var row = snapshot.FirstOrDefault(r => r.DomainId == domain.Id && r.Key == def.Key);
+                if (row is null) continue;
+                files.Add(new(repo.FilePath(def.FileName, root), row.Content));
+                versions[def.Key] = row.Version;
+            }
+            if (versions.Count > 0) files.Add(new(repo.VersionsPathFor(root), VersionsJson(versions)));
         }
-        files.Add(new(repo.VersionsPath, VersionsJson(versions)));
         var message = CommitMessage(subject, [("TierModel-Instance", instance)]);
         repo.Commit(files, Committer(s), Committer(s), message);
     }
 
-    private static Dictionary<string, int>? ReadVersions(GitRepositorySync repo)
+    private static Dictionary<string, int>? ReadVersions(GitRepositorySync repo, string? root)
     {
         try
         {
-            if (repo.ReadFile(repo.VersionsPath) is not { } text || JsonNode.Parse(text) is not JsonObject o) return null;
+            if (repo.ReadFile(repo.VersionsPathFor(root)) is not { } text || JsonNode.Parse(text) is not JsonObject o) return null;
             var d = new Dictionary<string, int>();
             foreach (var (k, v) in o)
                 if (v is JsonValue jv && jv.TryGetValue<int>(out var n)) d[k] = n;
@@ -299,8 +324,8 @@ public class GitSyncService(AppDbContext db, SettingsService settings, GitSyncQu
         }
     }
 
-    private async Task<Dictionary<string, int>> CurrentVersionsAsync(CancellationToken ct) =>
-        await db.ConfigSections.AsNoTracking().ToDictionaryAsync(c => c.Key, c => c.CurrentVersion, ct);
+    private async Task<Dictionary<string, int>> CurrentVersionsAsync(int domainId, CancellationToken ct) =>
+        await db.ConfigSections.AsNoTracking().Where(c => c.DomainId == domainId).ToDictionaryAsync(c => c.Key, c => c.CurrentVersion, ct);
 
     /// <summary>Same layout as versions.json in the export ZIP, in catalog order.</summary>
     public static string VersionsJson(IReadOnlyDictionary<string, int> versions)

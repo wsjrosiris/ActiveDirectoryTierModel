@@ -180,6 +180,8 @@ export interface RunSummary {
   /** Kind 'Jit': grant, revoke or prerequisite check, and the JIT request it belongs to. */
   jitAction?: 'Grant' | 'Revoke' | 'Check' | null
   jitRequestId?: number | null
+  /** Managed domain the run belongs to (roadmap 17). */
+  domainId?: number
 }
 
 export interface ApproveRequest {
@@ -211,6 +213,8 @@ export interface RunDetail extends RunSummary {
   plan: DeployPlan | null
   /** Deploy/Plan runs: whether this plan can be applied now. */
   planApplicability: PlanApplicability | null
+  /** The run's domain (ids are global; the detail works in every domain). */
+  domain?: { id: number; key: string; displayName: string; dnsName: string } | null
 }
 
 // ---------- Planung ----------
@@ -317,11 +321,12 @@ export interface Schedule extends RunRequest {
   lastRunId: number | null
   createdBy: string
   createdAt: string
+  domainId?: number
 }
 
 export type ScheduleInput = Omit<
   Schedule,
-  'id' | 'nextRunAt' | 'lastRunAt' | 'lastRunId' | 'createdBy' | 'createdAt'
+  'id' | 'nextRunAt' | 'lastRunAt' | 'lastRunId' | 'createdBy' | 'createdAt' | 'domainId'
 >
 
 // ---------- Änderungsprotokoll ----------
@@ -351,6 +356,8 @@ export interface Dashboard {
   /** All runs with status 'AwaitingApproval', oldest first. */
   pendingApprovals: RunSummary[]
   validation: { errors: number; warnings: number }
+  /** The domain the dashboard shows (roadmap 17); the queue is shared by all domains. */
+  domain?: { id: number; key: string; displayName: string; dnsName: string }
 }
 
 // ---------- Einstellungen ----------
@@ -890,6 +897,8 @@ export interface ReportSchedule {
   lastSentAt: string | null
   lastError: string | null
   nextRunAt: string | null
+  /** Domain the report covers; null = default domain. */
+  domainId?: number | null
 }
 
 export interface ReportScheduleInput {
@@ -901,4 +910,5 @@ export interface ReportScheduleInput {
   time: string
   recipients: string[]
   enabled: boolean
+  domainId?: number | null
 }

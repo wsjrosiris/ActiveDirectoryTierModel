@@ -3,6 +3,7 @@ import { FullPageSpinner } from '@/components/layout/full-page-spinner'
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { RequireAuth } from '@/features/auth/auth'
 import { AppLayout } from '@/components/layout/app-layout'
+import { DomainProvider } from '@/features/domains/domain-context'
 import { RouteError } from '@/components/layout/route-error'
 
 // Lazy route helper: every page module exports `Component`.
@@ -27,7 +28,9 @@ const routes: RouteObject[] = [
     path: '/',
     element: (
       <RequireAuth>
-        <AppLayout />
+        <DomainProvider>
+          <AppLayout />
+        </DomainProvider>
       </RequireAuth>
     ),
     errorElement: <RouteError />,
@@ -61,6 +64,7 @@ const routes: RouteObject[] = [
         { path: 'admin/benachrichtigungen', ...page(() => import('@/features/admin/notifications-page')) },
         { path: 'admin/systemzustand', ...page(() => import('@/features/admin/health-page')) },
         { path: 'admin/wartungsfenster', ...page(() => import('@/features/admin/maintenance-page')) },
+        { path: 'admin/domaenen', ...page(() => import('@/features/domains/domains-page')) },
         { path: 'api-tokens', ...page(() => import('@/features/auth/api-tokens-page')) },
         { path: '*', ...page(() => import('@/components/layout/not-found')) },
       ] },

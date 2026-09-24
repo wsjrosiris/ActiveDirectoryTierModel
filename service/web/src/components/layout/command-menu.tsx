@@ -21,10 +21,10 @@ import {
   ScrollText,
   ShieldUser,
   Server,
-  UserPlus,
-} from 'lucide-react'
+  UserPlus, Network } from 'lucide-react'
 import { Dialog as D } from 'radix-ui'
 import { api } from '@/api/client'
+import { useOptionalDomains } from '@/features/domains/domain-context'
 import { useCan, useLogout, useMe } from '@/features/auth/auth'
 import { sectionQuery } from '@/features/config/queries'
 import { hasRole } from '@/lib/roles'
@@ -227,6 +227,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     fn()
   }
   const pages = [...mainNav, ...adminNav].filter((p) => !p.role || hasRole(me?.user?.role, p.role))
+  const domains = useOptionalDomains()
 
   return (
     <Shell open={open} onOpenChange={onOpenChange} label="Befehlspalette">
@@ -272,6 +273,21 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               <LogOut /> Abmelden
             </Command.Item>
           </Command.Group>
+          {domains?.multiple && (
+            <Command.Group heading="Domäne wechseln" className={groupCls}>
+              {domains.enabled.filter((d) => d.key !== domains.current?.key).map((d) => (
+                <Command.Item
+                  key={d.key}
+                  className={itemCls}
+                  onSelect={() => run(() => void domains.switchTo(d.key))}
+                  value={`domäne wechseln ${d.displayName} ${d.dnsName} ${d.key}`}
+                >
+                  <Network /> {d.displayName}
+                  {d.dnsName && <span className="ml-1 truncate text-xs text-muted-foreground">{d.dnsName}</span>}
+                </Command.Item>
+              ))}
+            </Command.Group>
+          )}
           {canEdit && (
             <Command.Group heading="Assistenten" className={groupCls}>
               <Command.Item className={itemCls} onSelect={() => run(() => navigate('/konfiguration/ous?assistent=server'))} value="assistent neuen server-bereich aufnehmen ou gruppe gpo">

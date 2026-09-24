@@ -44,6 +44,7 @@ export const entityTypeLabels: Record<string, string> = {
   auth: 'Anmeldung',
   maintenance: 'Wartungsfenster',
   token: 'API-Token',
+  domain: 'Domäne',
 }
 
 export const actionLabels: Record<string, string> = {
@@ -87,6 +88,9 @@ export const actionLabels: Record<string, string> = {
   'schedule.delete': 'Zeitplan gelöscht',
   'schedule.run': 'Zeitplan ausgeführt',
   'settings.update': 'Einstellungen geändert',
+  'domain.create': 'Domäne angelegt',
+  'domain.update': 'Domäne geändert',
+  'domain.delete': 'Domäne gelöscht',
   'settings.windows-auth': 'Windows-Anmeldung geändert',
   'notification.create': 'Benachrichtigungskanal angelegt',
   'notification.update': 'Benachrichtigungskanal geändert',

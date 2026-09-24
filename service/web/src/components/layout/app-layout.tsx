@@ -39,6 +39,8 @@ import { Kbd } from '@/components/ui/kbd'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Tooltip } from '@/components/ui/tooltip'
 import { Wordmark } from './logo'
+import { useDomains } from '@/features/domains/domain-context'
+import { DomainSwitcher } from '@/features/domains/domain-switcher'
 import { adminNav, mainNav, type NavItem } from './nav'
 import { CommandPalette, GlobalSearch } from './command-menu'
 
@@ -56,6 +58,8 @@ export function AppLayout() {
   const [searchOpen, setSearchOpen] = React.useState(false)
   const [paletteOpen, setPaletteOpen] = React.useState(false)
   const location = useLocation()
+  // Pages are mounted per domain: switching the domain starts every page fresh with the other domain's data.
+  const { current } = useDomains()
 
   React.useEffect(() => setMobileOpen(false), [location.pathname])
 
@@ -110,7 +114,7 @@ export function AppLayout() {
           onPalette={() => setPaletteOpen(true)}
         />
         <main id="main" className="flex-1">
-          <Outlet />
+          <Outlet key={current?.key ?? ''} />
         </main>
       </div>
 
@@ -250,12 +254,13 @@ function Topbar({
   const pending = hasRole(user.role, 'Operator') ? (data?.pendingApprovals?.length ?? 0) : 0
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:px-6">
+    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b sm:gap-3 bg-background/80 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:px-6">
       {showMenu && (
         <Button variant="ghost" size="icon-sm" onClick={onMenu} aria-label="Navigation öffnen">
           <Menu />
         </Button>
       )}
+      <DomainSwitcher />
       <button
         type="button"
         onClick={onSearch}

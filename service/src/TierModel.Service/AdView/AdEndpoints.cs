@@ -18,7 +18,7 @@ public static class AdEndpoints
 
     public const int MaxMembers = 500;
 
-    private static string UnavailableMessage(DirectoryService d) =>
+    private static string UnavailableMessage(DomainDirectory d) =>
         d.Source == "Testdaten" ? "Testdaten sind nicht verfügbar." :
         OperatingSystem.IsWindows()
             ? "Der Server ist keiner Domäne beigetreten oder das Dienstkonto kann das Active Directory nicht lesen."
@@ -26,10 +26,12 @@ public static class AdEndpoints
 
     public static void MapAdEndpoints(this IEndpointRouteBuilder app)
     {
+        // The directory of the current domain (roadmap 17): its preferred DC or DNS name.
         var g = app.MapGroup("/api/ad").RequireAuthorization(nameof(Role.Viewer));
 
-        g.MapGet("/tree", async (bool? refresh, DirectoryService directory, ConfigService config, CancellationToken ct) =>
+        g.MapGet("/tree", async (bool? refresh, DirectoryService directories, Domains.DomainContext domain, ConfigService config, CancellationToken ct) =>
         {
+            var directory = directories.For(domain.Current);
             if (!directory.Available) return new AdTreeDto(false, directory.Source, UnavailableMessage(directory), null, null, false, []);
             try
             {
@@ -42,8 +44,9 @@ public static class AdEndpoints
             }
         });
 
-        g.MapGet("/object", async (string? dn, DirectoryService directory, ConfigService config, CancellationToken ct) =>
+        g.MapGet("/object", async (string? dn, DirectoryService directories, Domains.DomainContext domain, ConfigService config, CancellationToken ct) =>
         {
+            var directory = directories.For(domain.Current);
             if (string.IsNullOrWhiteSpace(dn) || dn.Length > 2048 || dn.Contains('\0'))
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["dn"] = ["Bitte einen gültigen Distinguished Name angeben."] });
             dn = dn.Trim();
@@ -88,8 +91,9 @@ public static class AdEndpoints
             }
         });
 
-        g.MapGet("/compare", async (bool? refresh, DirectoryService directory, ConfigService config, CancellationToken ct) =>
+        g.MapGet("/compare", async (bool? refresh, DirectoryService directories, Domains.DomainContext domain, ConfigService config, CancellationToken ct) =>
         {
+            var directory = directories.For(domain.Current);
             if (!directory.Available) return new AdCompareDto(false, directory.Source, UnavailableMessage(directory), null, null, null);
             try
             {

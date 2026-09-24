@@ -363,7 +363,7 @@ export function PlanApplyBar({ run }: { run: RunDetail }) {
             className="w-full sm:w-auto"
             disabled={!!reason || changes === 0}
             loading={apply.isPending}
-            onClick={() => apply.start(requestFromRun(run), run.id, changes)}
+            onClick={() => apply.start(requestFromRun(run), run.id, changes, run.domain?.key)}
           >
             {!apply.isPending && (apply.needsApproval ? <UsersRound /> : <Zap />)}
             {apply.needsApproval ? 'Diesen Plan zur Freigabe einreichen …' : 'Diesen Plan anwenden …'}

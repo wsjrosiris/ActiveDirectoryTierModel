@@ -26,15 +26,26 @@ public sealed partial class GitRepositorySync : IDisposable
     private readonly string _path;
     private readonly GitRemoteOptions _o;
     private readonly string _configDir;
+    private readonly List<string> _domainRoots;
     private Repository? _repo;
 
     /// <param name="configDir">Folder inside the repository for the section files, e.g. "config"; versions.json sits next to it.</param>
-    public GitRepositorySync(string localPath, GitRemoteOptions options, string configDir)
+    /// <param name="domainRoots">
+    /// Top-level folders of further managed domains (roadmap 17): each holds the same layout (&lt;root&gt;/config/…, &lt;root&gt;/versions.json)
+    /// and belongs to the service like the first domain's paths.
+    /// </param>
+    public GitRepositorySync(string localPath, GitRemoteOptions options, string configDir, IEnumerable<string>? domainRoots = null)
     {
         _path = localPath;
         _o = options;
         _configDir = NormalizeRepoPath(configDir) ?? throw new GitSyncException("Ungültiger Pfad im Repository.");
+        _domainRoots = (domainRoots ?? []).Where(r => NormalizeRepoPath(r) is { } n && !n.Contains('/')).Distinct(StringComparer.Ordinal).ToList();
     }
+
+    /// <summary>Section file of a domain: the first domain (root null) at the configured path, further domains below their folder.</summary>
+    public string FilePath(string fileName, string? root) => root is null ? FilePath(fileName) : $"{root}/{FilePath(fileName)}";
+
+    public string VersionsPathFor(string? root) => root is null ? VersionsPath : $"{root}/{VersionsPath}";
 
     public string ConfigDir => _configDir;
 
@@ -194,6 +205,7 @@ public sealed partial class GitRepositorySync : IDisposable
             var td = TreeDefinition.From(parent.Tree);
             ReplacePath(td, c.Tree, _configDir);
             ReplacePath(td, c.Tree, VersionsPath);
+            foreach (var root in _domainRoots) ReplacePath(td, c.Tree, root);
             var tree = Repo.ObjectDatabase.CreateTree(td);
             parent = Repo.ObjectDatabase.CreateCommit(c.Author, c.Committer, c.Message, tree, [parent], prettifyMessage: false);
         }
@@ -214,7 +226,8 @@ public sealed partial class GitRepositorySync : IDisposable
     }
 
     private bool IsOurs(string? path) =>
-        path is not null && (path == VersionsPath || path == _configDir || path.StartsWith(_configDir + "/", StringComparison.Ordinal));
+        path is not null && (path == VersionsPath || path == _configDir || path.StartsWith(_configDir + "/", StringComparison.Ordinal)
+            || _domainRoots.Any(r => path == r || path.StartsWith(r + "/", StringComparison.Ordinal)));
 
     private void ResetHard(Commit target)
     {
