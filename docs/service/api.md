@@ -5,6 +5,10 @@ RFC 7807 ProblemDetails (`{ title, detail, status, errors? }`).
 
 ## Sicherheit
 
+**API-Tokens:** Skripte melden sich mit `Authorization: Bearer tmk_…` an (Benutzermenü › API-Tokens). Mit Token ist
+kein CSRF-Token nötig; Token in URL oder Cookie werden abgelehnt. `/api/tokens` ist nur mit Browser-Sitzung
+nutzbar (`GET`, `POST { name, role, expiresInDays }` → Token einmalig, `POST /api/tokens/{id}/revoke`).
+
 - Anmeldung per Cookie (`TierModel.Auth`, HttpOnly, Secure, SameSite=Strict).
 - CSRF: `GET /api/auth/me` setzt das lesbare Cookie `XSRF-TOKEN`. Jeder
   `POST`/`PUT`/`DELETE` muss den Wert im Header `X-XSRF-TOKEN` mitschicken,
@@ -216,6 +220,25 @@ Nur auf einem Windows-Server in der Domäne; sonst `available: false`. Ergebniss
 | POST | `/api/setup/gpo-prefix/preview` | `{ prefix }` → Liste der GPO-Umbenennungen |
 | POST | `/api/setup/complete` | Einrichtung abgeschlossen bzw. übersprungen |
 
+## Wartungsfenster (Lesen: alle, Schreiben: Admin)
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| GET | `/api/maintenance` | Fenster (Name, Wochentage, von/bis, Zeitzone, aktiv) und Sperrzeiten (von/bis, Grund, aktiv) |
+| GET | `/api/maintenance/status` | ob *Anwenden* jetzt erlaubt ist, nächstes Fenster, aktive Sperrzeit |
+| POST/PUT/DELETE | `/api/maintenance/windows[/{id}]`, `/api/maintenance/freezes[/{id}]` | Pflege |
+
+`RunStatus` kennt zusätzlich `Scheduled` mit `scheduledFor` (Start zu Beginn des nächsten Fensters).
+
+## Berichte (alle angemeldeten Benutzer)
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| GET | `/api/reports` | verfügbare Berichte |
+| GET | `/api/reports/{soll-ist\|aenderungen\|privilegiert}?from&to&format=pdf\|html` | Bericht als PDF oder HTML |
+| GET/PUT | `/api/reports/schedules` (Admin) | E-Mail-Versand wöchentlich/monatlich |
+| POST | `/api/reports/schedules/{id}/send` (Admin) | sofort senden |
+
 ## Zeitpläne (geplante Audits)
 
 ```ts
@@ -313,7 +336,7 @@ Bei Mitgliedschaft in mehreren zugeordneten Gruppen gilt die höchste Rolle.
 ## Benachrichtigungen (Admin)
 
 ```ts
-type ChannelType = 'Email' | 'Teams' | 'Webhook'
+type ChannelType = 'Email' | 'Teams' | 'Webhook' | 'Syslog' | 'LogAnalytics'   // Syslog/LogAnalytics: Felder je Typ, Geheimnisse nur schreibend
 interface NotificationChannel {
   id: number; name: string; type: ChannelType; enabled: boolean
   target: string       // Email: Empfänger, durch Komma getrennt · Teams/Webhook: URL (in Antworten gekürzt: nur Schema+Host+"…")
@@ -355,6 +378,8 @@ Damit keine Werte aus dem Gedächtnis getippt oder als JSON eingegeben werden m�
 ## Sonstiges
 
 - `GET /healthz`: 200 wenn die Datenbank erreichbar ist.
+- `GET /api/changelog/verify` (Admin): prüft die Hash-Kette des Änderungsprotokolls (`ok`, erster fehlerhafter Eintrag, Anzahl, letzter Hash); `GET /api/changelog/chain`: zwischengespeichertes Ergebnis (10 min) für die Anzeige.
+- Entra ID: `GET /api/auth/entra?returnUrl=` startet die Anmeldung (Rückruf `/signin-oidc`); `GET/PUT /api/settings/entra-auth`, `POST /api/settings/entra-auth/check` (Admin); `/api/auth/options` enthält `entraAuth`.
 - `GET /api/health/details` (Admin): `{ status, checkedAt, version, items: { key, title, status: 'ok' | 'warn' | 'error', message, facts: { label, value }[] }[] }`
   – Anwendung, Zertifikat, Datenbank, Warteschlange, letzte Läufe, Arbeitsverzeichnis, PowerShell, Framework,
   Hintergrunddienste, Schlüsselspeicher.

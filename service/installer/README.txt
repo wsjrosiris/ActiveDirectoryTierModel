@@ -17,6 +17,10 @@ Der Assistent erledigt:
 Aktualisieren:   Neues Paket entpacken, Setup.cmd starten, "Aktualisieren" wählen.
 Deinstallieren:  Setup.cmd starten, "Deinstallieren" wählen (Datenbank bleibt erhalten).
 
+PowerShell-Client: Das Modul client\TierModel.Service.Client (Connect-TierModelService, Start-TierModelAudit,
+Wait-TierModelRun, ...) auf Admin-Rechnern in einen Ordner aus $env:PSModulePath kopieren. Anmeldung mit einem
+API-Token aus der Oberfläche (Benutzermenü › API-Tokens).
+
 Wichtig: Der Server führt Änderungen am Active Directory mit den Rechten des Dienstkontos aus
 und ist deshalb wie ein Tier-0-System zu behandeln (Zugriff, Patches, Überwachung).
 

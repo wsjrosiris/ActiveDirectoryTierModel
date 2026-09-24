@@ -293,7 +293,7 @@ function Schedules({ types }: { types: ReportTypeInfo[] }) {
         ) : (
           <ul className="grid gap-2">
             {list.map((s) => (
-              <li key={s.id} className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3.5 py-3', !s.enabled && 'bg-muted/30')}>
+              <li key={s.id} className={cn('flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-2 rounded-lg border px-3.5 py-3', !s.enabled && 'bg-muted/30')}>
                 <span className={cn('grid size-9 shrink-0 place-content-center rounded-lg [&_svg]:size-[18px]', s.enabled ? typeTones[s.type] : 'bg-muted text-muted-foreground')}>{typeIcons[s.type]}</span>
                 <div className="grid min-w-0 flex-1 gap-0.5">
                   <span className="flex flex-wrap items-center gap-2 text-[13px] font-medium">
@@ -304,7 +304,7 @@ function Schedules({ types }: { types: ReportTypeInfo[] }) {
                   <span className="text-xs text-muted-foreground">{describe(s)}</span>
                   <span className="truncate text-xs text-muted-foreground" title={s.recipients.join(', ')}>An {s.recipients.join(', ')}</span>
                 </div>
-                <div className="grid gap-0.5 text-xs text-muted-foreground sm:text-right">
+                <div className="order-last grid w-full gap-0.5 pl-[3.25rem] text-xs text-muted-foreground sm:order-none sm:w-auto sm:pl-0 sm:text-right">
                   {s.lastError ? (
                     <Tooltip content={s.lastError}>
                       <span className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400"><XCircle className="size-3.5" /> Letzter Versand fehlgeschlagen</span>

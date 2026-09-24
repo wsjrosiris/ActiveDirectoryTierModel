@@ -311,6 +311,7 @@ Die Liste zeigt alle Deploys und Audits mit Status, Auslöser, Dauer und Ergebni
 | Fehlgeschlagen | Skript mit Fehlercode beendet, Validierungsfehler, Zeitüberschreitung oder Dienst-Neustart |
 | Abgebrochen | durch einen Operator abgebrochen oder vom Antragsteller zurückgezogen |
 | Abgelehnt | Freigabe verweigert oder Frist abgelaufen |
+| Geplant | Anwenden wartet auf das nächste Wartungsfenster |
 
 Die Detailseite eines Laufs enthält:
 
@@ -351,6 +352,7 @@ wählen, bei welchen Ereignissen er benachrichtigt wird:
 | Fehler | ein Lauf ist fehlgeschlagen |
 | Anwenden | ein Deploy hat Änderungen im AD angewendet |
 | Freigabe | ein Deploy wartet auf Freigabe |
+| (Syslog / Log Analytics) | zusätzlich: alle Einträge des Änderungsprotokolls und jeder neue Überwachungsbefund, siehe [SIEM](betrieb.md#siem-anbindung) |
 | Zertifikat | das HTTPS-Zertifikat läuft in weniger als 30 Tagen ab (täglich geprüft) |
 | Privilegierte Zugriffe | Mitglieder geschützter Gruppen geändert, neues nicht erwartetes Mitglied oder neuer Befund mit hohem Schweregrad |
 
@@ -378,6 +380,19 @@ wählen, bei welchen Ereignissen er benachrichtigt wird:
 *Einrichtung abschließen* an: 1. Domäne und Domain Controller, 2. Struktur und GPO-Präfix (Vorschau der
 Umbenennungen), 3. vorhandene OUs aus dem AD übernehmen, 4. erste Planung starten. *Überspringen* blendet den
 Hinweis dauerhaft aus.
+
+**Wartungsfenster**: *Anwenden* ist nur innerhalb der Fenster erlaubt (Wochentage, Uhrzeit von–bis, Zeitzone; ein
+Fenster über Mitternacht ist möglich). Solange kein Fenster aktiv ist, gibt es keine Einschränkung. Außerhalb eines
+Fensters wird ein Deploy als **Geplant für …** eingereiht und startet automatisch zu Beginn des nächsten Fensters
+(abbrechbar). **Sperrzeiten** (z. B. Jahresabschluss) lehnen *Anwenden* ab; geplante Läufe rücken hinter die
+Sperrzeit. Planungen, Audits und Überwachung sind nie eingeschränkt. Die Deploy-Seite zeigt das nächste Fenster bzw.
+eine aktive Sperrzeit an.
+
+**Berichte**: *Soll/Ist* (letztes Audit), *Änderungen im Zeitraum* (Konfigurationsversionen, Läufe, Freigaben,
+Änderungsprotokoll) und *Privilegierte Zugriffe* (letzte Überwachung, Compliance-Wert) als Vorschau oder PDF.
+Administratoren können Berichte wöchentlich oder monatlich per E-Mail versenden lassen.
+
+**Entra-ID-Anmeldung**: siehe [Betrieb › Entra ID](betrieb.md#entra-id-anmeldung-einrichten).
 
 **Systemzustand**: Ampel über alle Prüfpunkte – Anwendung (Version, Laufzeit), HTTPS-Zertifikat (Ablauf),
 Datenbank (Größe, Migrationen), Warteschlange, letzte erfolgreiche Läufe, freier Platz im Arbeitsverzeichnis,

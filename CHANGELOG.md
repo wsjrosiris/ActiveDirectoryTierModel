@@ -46,6 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Service: **desired / actual / compare** view for OUs (`/api/ad/*`, Windows; fake directory in development).
 - Service: **wizards** for a new server area, a new admin account and a new delegation (one undo step, tier checks).
 - Service: **setup wizard** on first start (domain and DC, GPO prefix preview, adopt existing OUs, first plan).
+- Service: **maintenance windows and freeze periods** for applies (run status `Scheduled`).
+- Service: **API tokens** (Bearer, hashed, role-capped, rate-limited) and the PowerShell module
+  `TierModel.Service.Client` in the release package.
+- Service: **tamper-evident change log** (SHA-256 chain, verification on the system status page).
+- Service: **SIEM** channels Syslog (RFC 5424, CEF, UDP/TCP/TLS) and Azure Monitor Log Analytics; change-log forwarding.
+- Service: **Entra ID sign-in** (OIDC with PKCE, roles by group object IDs or app roles).
+- Service: **reports** (desired/actual, changes in a period, privileged access) as PDF or HTML, e-mail schedules.
 - Service: **compliance score** per tier on the dashboard with 30-day history and breakdown.
 - Roadmap for the next features (`docs/service/roadmap.md`).
 

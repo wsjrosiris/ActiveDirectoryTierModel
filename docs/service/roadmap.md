@@ -264,4 +264,11 @@ Geführte Dialoge, die mehrere Bereiche in **einem** Entwurf ändern (bestehende
 | 11 Assistenten | umgesetzt |
 | 12 Einrichtungsassistent | umgesetzt |
 | 14 Ist-Ansicht des AD | umgesetzt für OUs (ACL-/GPO-Bereiche ohne Vergleichsmarken) |
-| Phase 4–5 | geplant |
+| 4 Wartungsfenster und Sperrzeiten | umgesetzt |
+| 18 API-Tokens und PowerShell-Modul | umgesetzt |
+| 19 SIEM (Syslog/CEF, Log Analytics) | umgesetzt |
+| 20 Entra-ID-Anmeldung | umgesetzt (ohne echten Mandanten getestet) |
+| 22 Berichte (PDF/HTML, E-Mail-Versand) | umgesetzt |
+| 23 Manipulationssicheres Änderungsprotokoll | umgesetzt |
+| 25 Oberfläche auf Englisch | geplant |
+| Phase 5 | geplant |

@@ -138,6 +138,69 @@ Gesamtzustand des Dienstes zeigt *Administration › Systemzustand*.
 Der Dienst braucht für E-Mail Zugang zum SMTP-Server und für Teams/Webhooks ausgehenden HTTPS-Zugang (ggf. über den
 System-Proxy).
 
+## SIEM-Anbindung
+
+Unter *Benachrichtigungen* zwei weitere Kanalarten:
+
+- **Syslog**: RFC 5424 über UDP, TCP oder TCP mit TLS (Zertifikatsprüfung abschaltbar, nur für Tests); Format CEF
+  (für `CommonSecurityLog` in Sentinel) oder RFC 5424 mit strukturierten Daten (SD-ID `tiermodel@32473` – die
+  Enterprise-Nummer 32473 ist die Dokumentationsnummer der IANA; bei Bedarf eigene verwenden).
+- **Log Analytics**: Logs Ingestion API von Azure Monitor – Mandant, Client-ID, Client-Secret, DCE-Endpunkt,
+  DCR-ID (immutable) und Stream. Tabelle z. B. `TierModel_CL` mit den Spalten `TimeGenerated, EventId, EventName,
+  Severity:int, Category, Message, Computer, Actor, Account, AccountSid, GroupName, Action, RunId:long, Url,
+  Fields:dynamic`.
+
+Neben den bekannten Ereignissen lassen sich **alle Einträge des Änderungsprotokolls** weiterleiten; außerdem wird
+jeder neue Befund der Überwachung (Mitglied hinzugefügt/entfernt, nicht erwartetes Mitglied, Hygiene, Angriffspfad)
+als eigenes Ereignis gesendet. Die Weiterleitung blockiert keine Anfrage; läuft die Warteschlange (5000 Ereignisse)
+über, zeigt der Kanal die Zahl verworfener Ereignisse (seit dem letzten Dienststart).
+
+Zuordnung zu den Sentinel-Regeln unter `optional/TIerModel-Sentinel`:
+
+| Ereignis (CEF `DeviceEventClassID` / `EventId`) | Felder | Regel |
+|---|---|---|
+| TM-301 Mitglied hinzugefügt, TM-310 nicht erwartetes Mitglied | `cs1` Gruppe, `duser`/`duid` Konto, `cs2` Gruppen-SID | TM001.1, TM016.1, TM017.1 – TM-310 ist ein Verstoß, TM-301 allein erwartet |
+| TM-330 Angriffspfad | `duser` Principal, `cs4` Objekt-DN, `cs5` Rechte | TM006.1, TM009.1, TM015.1 |
+| TM-202 Deploy angewendet, TM-400 `run.approve`/`run.deploy` | `suser`, `approvedBy`, `cn1` Lauf | TM002–TM005, TM007, TM008, TM012, TM014: Änderungen während eines freigegebenen Deploys unterdrücken oder annotieren |
+| TM-200 Drift | `cn2` Anzahl, `cn1` Lauf | TM005, TM012, TM013 (nicht freigegebene GPO-/OU-Änderungen) |
+| TM-302 Mitglied entfernt, TM-320 Hygiene, TM-201/203/204, TM-400 `auth.*` | – | noch ohne Regel |
+
+```kusto
+CommonSecurityLog
+| where DeviceVendor == "TierModel" and DeviceEventClassID == "TM-310"
+| project TimeGenerated, Group = DeviceCustomString1, Account = DestinationUserName,
+          Sid = DestinationUserId, RunId = DeviceCustomNumber1
+```
+
+## Entra-ID-Anmeldung einrichten
+
+1. In Entra ID eine App-Registrierung (Web) anlegen; Umleitungs-URI `https://<öffentliche Adresse>/signin-oidc`
+   (wird auf der Einstellungsseite zum Kopieren angezeigt).
+2. Ein Client-Secret erzeugen; unter *Token-Konfiguration* den Gruppen-Anspruch (`groups`) hinzufügen oder
+   App-Rollen definieren und zuweisen.
+3. *Administration › Entra-ID-Anmeldung*: Mandanten-ID, Client-ID, Secret und je Rolle die Gruppen-Objekt-IDs bzw.
+   App-Rollen eintragen, **Konfiguration prüfen**, aktivieren.
+
+Auf der Anmeldeseite erscheint dann **Mit Microsoft anmelden**. Konten werden bei der ersten Anmeldung angelegt;
+ohne passende Gruppe wird die Anmeldung abgelehnt. MFA und Gerätevorgaben regelt Conditional Access.
+
+## API-Tokens und PowerShell-Client
+
+Über das Benutzermenü › **API-Tokens** legt man Tokens für Skripte an (Name, Rolle bis zur eigenen, Gültigkeit
+30–365 Tage). Das Token wird **nur einmal** angezeigt. Administratoren sehen und widerrufen alle Tokens.
+
+Das Modul `client\TierModel.Service.Client` aus dem Paket auf den Admin-Rechner kopieren:
+
+```powershell
+Connect-TierModelService -Uri https://tiermodel01.contoso.com:8443 -Token (Read-Host -AsSecureString)
+$run = Start-TierModelAudit -PreferredDc dc01.contoso.com -FullDeployment | Wait-TierModelRun
+Get-TierModelRun -Id $run.Id
+Get-TierModelCompliance
+```
+
+Weitere Befehle: `Start-TierModelMonitor`, `Start-TierModelDeploy -Plan` / `-Apply -PlanRunId`,
+`Get-TierModelRunLog`, `Get-TierModelPrivileged`, `Get-TierModelConfigSection`, `Disconnect-TierModelService`.
+
 ## Häufige Aufgaben
 
 ### Administrator-Passwort zurücksetzen

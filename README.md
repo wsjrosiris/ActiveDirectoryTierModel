@@ -86,7 +86,7 @@ Beim TierModel Service gelten diese Anforderungen für das **Dienstkonto**.
 | **Privilegierte Zugriffe** | Mitglieder der geschützten und Tier-0-Gruppen (auch in deutschen Domänen), Änderungsverlauf, nicht erwartete Mitglieder, Konten-Hygiene, Angriffspfade zu Tier 0, Benachrichtigung bei Änderungen |
 | **Läufe** | Warteschlange, Live-Protokoll, Abbrechen, verwendete Konfigurationsversionen |
 | **Änderungsprotokoll** | wer hat wann was geändert, gestartet oder freigegeben |
-| **Administration** | Benutzer mit Rollen (Betrachter, Bearbeiter, Operator, Administrator), Windows-Anmeldung mit AD-Gruppen, Benachrichtigungen, Vier-Augen-Prinzip, Systemzustand (Zertifikat, Datenbank, Warteschlange, Hintergrunddienste), Einstellungen |
+| **Administration** | Benutzer mit Rollen (Betrachter, Bearbeiter, Operator, Administrator), Windows-Anmeldung mit AD-Gruppen, Benachrichtigungen, Vier-Augen-Prinzip, Systemzustand (Zertifikat, Datenbank, Warteschlange, Hintergrunddienste, Kette des Änderungsprotokolls), Wartungsfenster und Sperrzeiten, Entra-ID-Anmeldung, API-Tokens, SIEM (Syslog/CEF, Log Analytics), PDF-Berichte, Einstellungen |
 
 **Technik:** ASP.NET Core 10 als Windows-Dienst (self-contained, keine .NET-Installation nötig), PostgreSQL,
 React/TypeScript-Oberfläche, die der Dienst selbst ausliefert. Nur HTTPS, eigene Konten mit Sperre nach
