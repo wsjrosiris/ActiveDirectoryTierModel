@@ -206,8 +206,9 @@ function Get-TierModelWinLapsAcl {
 
         foreach ($group in $uniqueGroups) {
             try {
-                $escapedName = $group -replace "'", "''"
-                $adGroup = Get-ADGroup -Filter "Name -eq '$escapedName'" -Server $DomainController -Properties sAMAccountName -ErrorAction Stop
+                # Built-in groups (e.g. "Domain Admins") are resolved by SID so localized
+                # names ("Domänen-Admins") are found; others by name as before.
+                $adGroup = Get-TierModelADGroupByName -Name $group -DomainController $DomainController -Properties sAMAccountName
                 if ($adGroup) {
                     $groupResolution[$group] = "$netBIOSDomain\$($adGroup.sAMAccountName)"
                 } else {

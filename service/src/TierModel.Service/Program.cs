@@ -4,9 +4,13 @@ using TierModel.Service;
 using TierModel.Service.Auth;
 using TierModel.Service.Config;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
+using TierModel.Service.AdView;
 using TierModel.Service.Endpoints;
+using TierModel.Service.Monitoring;
 using TierModel.Service.Notifications;
 using TierModel.Service.Runs;
+using TierModel.Service.Setup;
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
@@ -37,15 +41,24 @@ builder.Services.Configure<TierModelOptions>(o =>
 
 // HTTPS certificate from the Windows certificate store (LocalMachine\My), selected by thumbprint.
 var isCli = args.Length > 0 && Cli.IsCommand(args[0]);
+var certificateSource = new ServerCertificateSource(null, "Kestrel-Konfiguration");
 if (!isCli && !string.IsNullOrWhiteSpace(options.CertificateThumbprint))
 {
     var certificate = CertificateLoader.FromStore(options.CertificateThumbprint);
     builder.WebHost.ConfigureKestrel(k => k.ConfigureHttpsDefaults(h => h.ServerCertificate = certificate));
+    certificateSource = new ServerCertificateSource(certificate, "Zertifikatspeicher LocalMachine\\My");
 }
+builder.Services.AddSingleton(certificateSource);
 
 var connectionString = builder.Configuration.GetConnectionString("TierModel")
     ?? throw new InvalidOperationException("ConnectionStrings:TierModel fehlt in appsettings.json.");
-builder.Services.AddDbContext<AppDbContext>(o => o.UseNpgsql(connectionString));
+// Saved change-log entries are also forwarded to SIEM channels (roadmap 19), see ChangeLogForwardInterceptor.
+builder.Services.AddDbContext<AppDbContext>((sp, o) => o.UseNpgsql(connectionString)
+    .AddInterceptors(sp.GetRequiredService<TierModel.Service.Notifications.Siem.ChangeLogForwardInterceptor>()));
+TierModel.Service.Notifications.Siem.SiemSetup.AddSiem(builder.Services);
+TierModel.Service.Reports.ReportEndpoints.AddReports(builder.Services);
+TierModel.Service.Jit.JitEndpoints.AddJit(builder.Services);
+TierModel.Service.Transfer.TransferEndpoints.AddTransfer(builder.Services);
 
 // Keys protecting the auth/antiforgery cookies: persisted next to the run data so sessions survive restarts
 // (a gMSA has no loaded user profile), encrypted with DPAPI for the service account on Windows.
@@ -57,13 +70,29 @@ if (OperatingSystem.IsWindows()) dataProtection.ProtectKeysWithDpapi();
 builder.Services.ConfigureHttpJsonOptions(o => JsonDefaults.Configure(o.SerializerOptions));
 builder.Services.AddProblemDetails();
 builder.Services.AddTierModelAuth(options.RequireHttps);
+// Several managed domains (roadmap 17): cached list, and the domain of the current request or background job.
+builder.Services.AddSingleton<TierModel.Service.Domains.DomainRegistry>();
+builder.Services.AddScoped<TierModel.Service.Domains.DomainContext>();
 builder.Services.AddScoped<ChangeLogService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<ConfigService>();
 builder.Services.AddScoped<RunService>();
+builder.Services.AddScoped<TierModel.Service.Maintenance.MaintenanceService>();
 builder.Services.AddSingleton<RunQueue>();
 builder.Services.AddSingleton<NotificationQueue>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddSingleton<WorkerHeartbeats>();
+builder.Services.AddScoped<HealthService>();
+// Live AD view per managed domain: a fake domain for development, the domain's DC (or the computer's domain) on Windows,
+// otherwise "not available".
+if (options.FakeDirectory || builder.Configuration.GetValue<bool>("TierModel:FakeDirectory"))
+    builder.Services.AddSingleton<IDirectoryReaderFactory>(new DelegateDirectoryReaderFactory(
+        t => new FakeDirectoryReader(Path.Combine(options.FrameworkPath, "config"), t.DnsName, t.PreferredDc)));
+else if (OperatingSystem.IsWindows())
+    builder.Services.AddSingleton<IDirectoryReaderFactory>(new DelegateDirectoryReaderFactory(t => new WindowsDirectoryReader(t)));
+else
+    builder.Services.AddSingleton<IDirectoryReaderFactory>(new DelegateDirectoryReaderFactory(_ => new UnavailableDirectoryReader()));
+builder.Services.AddSingleton<DirectoryService>();
 builder.Services.AddHttpClient("notifications", c => c.Timeout = TimeSpan.FromSeconds(20));
 
 // Command-line maintenance used by the installer: runs without starting the web server.
@@ -76,18 +105,28 @@ if (isCli)
 builder.Services.AddHostedService<RunWorker>();
 builder.Services.AddHostedService<ScheduleWorker>();
 builder.Services.AddHostedService<NotificationWorker>();
+builder.Services.AddHostedService<TierModel.Service.Jit.JitWorker>();
+builder.Services.AddHostedService<TierModel.Service.GitSync.GitSyncWorker>();
 
 var app = builder.Build();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {
     await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+    await scope.ServiceProvider.GetRequiredService<TierModel.Service.Domains.DomainRegistry>()
+        .InitializeAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), options);
+    // Change-log entries from before the hash chain get their hashes once (roadmap 23).
+    if (await ChangeLogChain.BackfillAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>()) is > 0 and var chained)
+        app.Logger.LogInformation("Änderungsprotokoll: {Count} ältere Einträge in die Hash-Kette aufgenommen", chained);
+    await scope.ServiceProvider.GetRequiredService<SettingsService>().LoadDefaultLanguageAsync();
     await scope.ServiceProvider.GetRequiredService<ConfigService>().SeedAsync();
     if (!await scope.ServiceProvider.GetRequiredService<AppDbContext>().Users.AnyAsync())
         app.Logger.LogWarning("Es existiert noch kein Benutzer. Anlegen mit: TierModel.Service.exe admin create --username <name>");
 }
 
 app.UseExceptionHandler();
+// Request language for server texts (roadmap 25), see Localization/LocalizationSetup.cs.
+app.UseTierModelLocalization();
 if (options.RequireHttps)
 {
     app.UseHsts();
@@ -103,15 +142,27 @@ app.UseAuthentication();
 app.UseTierModelSecurity();
 app.UseRateLimiter();
 app.UseAuthorization();
+app.UseMiddleware<TierModel.Service.Domains.DomainMiddleware>();
 
 app.MapAuthEndpoints();
+TierModel.Service.Domains.DomainEndpoints.MapDomainEndpoints(app);
 app.MapConfigEndpoints();
 app.MapRunEndpoints();
 app.MapMiscEndpoints();
 app.MapWindowsAuthSettings();
 app.MapNotificationEndpoints();
 app.MapLookupEndpoints();
-app.Map("/api/{**rest}", () => Results.Problem(title: "Nicht gefunden", statusCode: 404));
+app.MapPrivilegedEndpoints();
+app.MapAdEndpoints();
+app.MapSetupEndpoints();
+app.MapEntraAuthEndpoints();
+TierModel.Service.Reports.ReportEndpoints.MapReportEndpoints(app);
+TierModel.Service.Maintenance.MaintenanceEndpoints.MapMaintenanceEndpoints(app);
+app.MapApiTokenEndpoints();
+app.MapChangeLogChainEndpoints();
+TierModel.Service.Jit.JitEndpoints.MapJitEndpoints(app);
+TierModel.Service.Transfer.TransferEndpoints.MapTransferEndpoints(app);
+app.Map("/api/{**rest}", () => Results.Problem(title: L.T("Nicht gefunden"), statusCode: 404));
 app.MapFallbackToFile("index.html", new StaticFileOptions { OnPrepareResponse = CacheHeaders });
 
 app.Run();

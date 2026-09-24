@@ -39,7 +39,7 @@ import { Tooltip } from '@/components/ui/tooltip'
 import { TierBadge, TierDot } from '@/components/shared/badges'
 import { useHotkey } from '@/hooks/use-hotkey'
 import { tierOf } from '@/lib/tier'
-import { cn, formatNumber } from '@/lib/utils'
+import { cn, formatNumber, modKey } from '@/lib/utils'
 import type { EditorProps } from './editors'
 import { SwitchRow, useGpoNameOptions, useOuOptions } from './form-helpers'
 import { useGpoBackupOptions } from './lookups'
@@ -73,6 +73,10 @@ import {
   type GpoKind,
   type Obj,
 } from './gpo-model'
+import { gpoLinkTierIssues } from '@/lib/tier-rules'
+import { TierRuleAlerts } from './tier-rule-alerts'
+import { t } from '@/i18n'
+import { rich } from '@/i18n/rich'
 
 /* Form editor for tiermodel-gpos.json: link targets (master) → GPO lists (detail) → edit sheet.
  * Content is immutable; every edit spreads the original objects so unknown keys survive. */
@@ -127,11 +131,11 @@ export function GposEditor(props: EditorProps) {
   const rows = React.useMemo<TargetRow[]>(
     () =>
       keys.map((k) => {
-        const t = map[k]
-        const imp = gpoList(t, 'ImportOnlyGpo')
-        const post = gpoList(t, 'PostConfigureGpo')
-        const title = targetTitle(k, t)
-        const selfMatch = !!query && `${title} ${k} ${t?.displayName ?? ''}`.toLowerCase().includes(query)
+        const tt = map[k]
+        const imp = gpoList(tt, 'ImportOnlyGpo')
+        const post = gpoList(tt, 'PostConfigureGpo')
+        const title = targetTitle(k, tt)
+        const selfMatch = !!query && `${title} ${k} ${tt?.displayName ?? ''}`.toLowerCase().includes(query)
         const hits = query ? imp.filter((g) => matchesQuery(g, query)).length + post.filter((g) => matchesQuery(g, query)).length : 0
         return { k, title, imp: imp.length, post: post.length, hits, selfMatch, visible: !query || selfMatch || hits > 0 }
       }),
@@ -165,11 +169,11 @@ export function GposEditor(props: EditorProps) {
     setEditing({ id: ++editSeq, targetKey, kind, index: null, original: null, reference: null, initial: newGpo(kind, targetKey, contentRef.current?.gpos?.[targetKey]) })
   }, [])
   const duplicateGpo = React.useCallback((targetKey: string, kind: GpoKind, index: number) => {
-    const t = contentRef.current?.gpos?.[targetKey]
-    const g = gpoList(t, kind)[index]
+    const tt = contentRef.current?.gpos?.[targetKey]
+    const g = gpoList(tt, kind)[index]
     if (!g) return
-    const copy: Obj = { ...structuredClone(g), name: `${g.name ?? ''} (Kopie)` }
-    if (isLinked(targetKey) && 'linkOrder' in g) copy.linkOrder = nextLinkOrder(t)
+    const copy: Obj = { ...structuredClone(g), name: t('config.gpoEditor.valueCopy', { value: g.name ?? '' }) }
+    if (isLinked(targetKey) && 'linkOrder' in g) copy.linkOrder = nextLinkOrder(tt)
     setEditing({ id: ++editSeq, targetKey, kind, index: null, original: null, reference: null, initial: copy })
   }, [])
   const removeGpo = React.useCallback(
@@ -177,13 +181,13 @@ export function GposEditor(props: EditorProps) {
       const g = gpoList(contentRef.current?.gpos?.[targetKey], kind)[index]
       if (!g) return
       const ok = await confirm({
-        title: 'GPO entfernen?',
+        title: t('config.gpoEditor.removeGpo'),
         description: (
           <>
-            <span className="font-medium text-foreground">{g.name}</span> wird aus „{targetTitle(targetKey)}“ entfernt. Die Änderung wird erst beim Speichern übernommen und kann mit Strg+Z rückgängig gemacht werden.
+            {rich(t('config.gpoEditor.removeGpoDescription', { target: targetTitle(targetKey), key: `${modKey}+Z` }), { name: <span className="font-medium text-foreground">{g.name}</span> })}
           </>
         ),
-        confirmText: 'Entfernen',
+        confirmText: t('common.remove'),
         destructive: true,
       })
       if (!ok) return
@@ -192,7 +196,7 @@ export function GposEditor(props: EditorProps) {
         const i = list[index] === g ? index : list.indexOf(g)
         return i < 0 ? c : setGpoList(c, targetKey, kind, list.filter((_, j) => j !== i))
       })
-      toast('GPO entfernt', { description: g.name })
+      toast(t('config.gpoEditor.gpoRemoved'), { description: g.name })
     },
     [apply, confirm],
   )
@@ -209,23 +213,23 @@ export function GposEditor(props: EditorProps) {
 
   const removeTargetKey = React.useCallback(
     async (key: string) => {
-      const t = contentRef.current?.gpos?.[key]
-      const n = GPO_KINDS.reduce((s, k) => s + gpoList(t, k).length, 0)
+      const tt = contentRef.current?.gpos?.[key]
+      const n = GPO_KINDS.reduce((s, k) => s + gpoList(tt, k).length, 0)
       const ok = await confirm({
-        title: 'Verknüpfungsziel entfernen?',
+        title: t('config.gpoEditor.removeLinkTarget'),
         description: (
           <>
-            <span className="font-medium text-foreground">{targetTitle(key, t)}</span>
+            <span className="font-medium text-foreground">{targetTitle(key, tt)}</span>
             <span className="block font-mono text-xs break-all">{key}</span>
-            {n > 0 ? ` Alle ${n} GPO-Einträge dieses Ziels werden ebenfalls entfernt.` : ' Das Ziel enthält keine GPOs.'} Die Änderung kann mit Strg+Z rückgängig gemacht werden.
+            {n > 0 ? t('config.gpoEditor.allNGpoEntriesOf', { n }) : t('config.gpoEditor.theTargetContainsNoGpos')}{t('config.gpoEditor.undoHint', { key: `${modKey}+Z` })}
           </>
         ),
-        confirmText: 'Entfernen',
+        confirmText: t('common.remove'),
         destructive: true,
       })
       if (!ok) return
       apply((c) => removeTarget(c, key))
-      toast('Verknüpfungsziel entfernt', { description: targetTitle(key, t) })
+      toast(t('config.gpoEditor.linkTargetRemoved'), { description: targetTitle(key, tt) })
     },
     [apply, confirm],
   )
@@ -238,38 +242,38 @@ export function GposEditor(props: EditorProps) {
       return
     }
     if (k !== TEMPLATE_KEY && !k.includes('=')) {
-      toast.error('Ungültiges Verknüpfungsziel', { description: 'Erwartet wird ein Distinguished Name, z. B. OU=Name,{{DOMAIN_DN}}.' })
+      toast.error(t('config.gpoEditor.invalidLinkTarget'), { description: t('config.gpoEditor.aDistinguishedNameIsExpected') })
       return
     }
     apply((c) => addTarget(c, k, { ImportOnlyGpo: [], PostConfigureGpo: [] }))
     setSelected(k)
-    toast.success('Verknüpfungsziel hinzugefügt', { description: 'Im Entwurf – zum Übernehmen speichern.' })
+    toast.success(t('config.gpoEditor.linkTargetAdded'), { description: t('config.gpoEditor.inTheDraftSaveTo') })
   }
 
   const submitGpo = (st: EditState, value: Obj): Record<string, string> | null => {
     const c = contentRef.current
-    const t = c?.gpos?.[st.targetKey]
-    if (!t) {
-      toast.error('Verknüpfungsziel existiert nicht mehr')
+    const tt = c?.gpos?.[st.targetKey]
+    if (!tt) {
+      toast.error(t('config.gpoEditor.linkTargetNoLongerExists'))
       return null
     }
-    const list = gpoList(t, st.kind)
+    const list = gpoList(tt, st.kind)
     // The list may have changed while the sheet was open (undo/redo): find the entry by identity.
     const index = st.index === null ? null : list[st.index] === st.original ? st.index : list.indexOf(st.original!)
     if (index === -1) {
-      toast.error('GPO wurde zwischenzeitlich geändert oder entfernt', { description: 'Die Bearbeitung wurde nicht übernommen. Bitte erneut öffnen.' })
+      toast.error(t('config.gpoEditor.gpoWasChangedOrRemoved'), { description: t('config.gpoEditor.theEditWasNotApplied') })
       setEditing(null)
       return null
     }
     const final = finalizeGpo(value, st.reference)
-    const errs = validateGpo(final, st.targetKey, t, st.kind, index)
+    const errs = validateGpo(final, st.targetKey, tt, st.kind, index)
     if (Object.keys(errs).length) return errs
     if (index !== null && JSON.stringify(final) === JSON.stringify(st.original)) {
       setEditing(null)
       return null
     }
     apply((cur) => (index === null ? setGpoList(cur, st.targetKey, st.kind, [...list, final]) : replaceGpo(cur, st.targetKey, st.kind, index, final)))
-    toast.success(index === null ? 'GPO hinzugefügt' : 'GPO aktualisiert', { description: 'Im Entwurf – zum Übernehmen speichern.' })
+    toast.success(index === null ? t('config.gpoEditor.gpoAdded') : t('config.gpoEditor.gpoUpdated'), { description: t('config.gpoEditor.inTheDraftSaveTo') })
     setEditing(null)
     return null
   }
@@ -287,18 +291,18 @@ export function GposEditor(props: EditorProps) {
             ref={searchRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="GPO-Namen durchsuchen …"
+            placeholder={t('config.gpoEditor.searchGpoNames')}
             className="h-8 pr-8 pl-8 text-[13px]"
-            aria-label="GPOs durchsuchen"
+            aria-label={t('config.gpoEditor.searchGpos')}
           />
           {search && (
-            <button type="button" onClick={() => setSearch('')} className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground" aria-label="Suche leeren">
+            <button type="button" onClick={() => setSearch('')} className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground" aria-label={t('config.gpoEditor.clearSearch')}>
               <X className="size-3.5" />
             </button>
           )}
         </div>
         <span className="text-xs text-muted-foreground">
-          {formatNumber(keys.length)} Ziele · {formatNumber(totals)} GPOs
+          {t('config.gpoEditor.targetsCount', { targets: formatNumber(keys.length), gpos: formatNumber(totals) })}
         </span>
         {!readOnly && (
           <div className="ml-auto w-full sm:w-80">
@@ -327,7 +331,7 @@ export function GposEditor(props: EditorProps) {
           />
         ) : (
           <Card>
-            <EmptyState icon={<Inbox />} title="Keine Verknüpfungsziele" description={readOnly ? undefined : 'Fügen Sie oben ein Verknüpfungsziel hinzu.'} />
+            <EmptyState icon={<Inbox />} title={t('config.gpoEditor.noLinkTargets')} description={readOnly ? undefined : t('config.gpoEditor.addALinkTargetAbove')} />
           </Card>
         )}
       </div>
@@ -356,16 +360,16 @@ const GeneralSettings = React.memo(function GeneralSettings({
     <Card className="mb-3 overflow-hidden">
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-[13px] hover:bg-accent/40">
         <Settings2 className="size-4 text-muted-foreground" />
-        <span className="font-medium">Allgemein</span>
+        <span className="font-medium">{t('config.gpoEditor.general')}</span>
         <span className="min-w-0 flex-1 truncate text-muted-foreground">
-          {version !== undefined && <>Version {String(version)}</>}
+          {version !== undefined && <>{t('config.gpoEditor.version')} {String(version)}</>}
           {typeof comment === 'string' && comment && <> · {comment}</>}
         </span>
-        <span className="text-xs text-muted-foreground">{open ? 'Zuklappen' : 'Bearbeiten'}</span>
+        <span className="text-xs text-muted-foreground">{open ? t('config.gpoEditor.collapse') : t('common.edit')}</span>
       </button>
       {open && (
         <fieldset disabled={readOnly} className="grid gap-4 border-t px-4 py-4 sm:grid-cols-[10rem_1fr]">
-          <Field label="Version" htmlFor="gpos-version">
+          <Field label={t('config.gpoEditor.version')} htmlFor="gpos-version">
             <Input
               id="gpos-version"
               className="font-mono"
@@ -373,7 +377,7 @@ const GeneralSettings = React.memo(function GeneralSettings({
               onChange={(e) => apply((c) => setText(c, 'version', e.target.value, !('version' in c)), 'gpos-version')}
             />
           </Field>
-          <Field label="Kommentar" htmlFor="gpos-comment">
+          <Field label={t('config.gpoEditor.comment')} htmlFor="gpos-comment">
             <Textarea
               id="gpos-comment"
               rows={2}
@@ -395,10 +399,10 @@ function AddTargetPicker({ existing, onAdd }: { existing: string[]; onAdd: (k: s
   const options = React.useMemo(() => {
     const taken = new Set(existing.map((k) => k.toLowerCase()))
     const base: ComboOption[] = [
-      { value: DOMAIN_DN, label: 'Domänenstamm', hint: DOMAIN_DN, icon: <TierDot tier={null} /> },
-      { value: DC_OU, label: 'Domain Controllers', hint: DC_OU, icon: <TierDot tier={0} /> },
+      { value: DOMAIN_DN, label: t('config.gpoEditor.domainRoot'), hint: DOMAIN_DN, icon: <TierDot tier={null} /> },
+      { value: DC_OU, label: t('config.gpoEditor.domainControllers'), hint: DC_OU, icon: <TierDot tier={0} /> },
       ...ouOptions,
-      { value: TEMPLATE_KEY, label: 'Vorlagen (nicht verknüpft)', hint: TEMPLATE_KEY, icon: <FileStack className="size-4 text-muted-foreground" /> },
+      { value: TEMPLATE_KEY, label: t('config.gpoEditor.templatesNotLinked'), hint: TEMPLATE_KEY, icon: <FileStack className="size-4 text-muted-foreground" /> },
     ]
     const seen = new Set<string>()
     return base.filter((o) => {
@@ -416,10 +420,10 @@ function AddTargetPicker({ existing, onAdd }: { existing: string[]; onAdd: (k: s
       value=""
       onChange={onAdd}
       options={options}
-      placeholder="+ Verknüpfungsziel hinzufügen …"
-      searchPlaceholder="OU suchen oder DN eingeben …"
-      emptyText="Keine weitere OU verfügbar"
-      validateCustom={(v) => (v === TEMPLATE_KEY || /^(OU|CN|DC)=/i.test(v) || v === DOMAIN_DN ? null : 'Distinguished Name erwartet, z. B. OU=Name,{{DOMAIN_DN}}')}
+      placeholder={t('config.gpoEditor.addLinkTarget')}
+      searchPlaceholder={t('config.gpoEditor.searchOuOrEnterDn')}
+      emptyText={t('config.gpoEditor.noFurtherOuAvailable')}
+      validateCustom={(v) => (v === TEMPLATE_KEY || /^(OU|CN|DC)=/i.test(v) || v === DOMAIN_DN ? null : t('config.gpoEditor.distinguishedNameExpectedEG'))}
     />
   )
 }
@@ -449,11 +453,11 @@ const TargetList = React.memo(function TargetList({
 }) {
   return (
     <Card className="overflow-hidden lg:sticky lg:top-4">
-      <div className="border-b bg-muted/30 px-3 py-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Verknüpfungsziele</div>
+      <div className="border-b bg-muted/30 px-3 py-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{t('config.gpoEditor.linkTargets')}</div>
       {visible.length === 0 ? (
-        <p className="px-3 py-6 text-center text-xs text-muted-foreground">Keine Treffer</p>
+        <p className="px-3 py-6 text-center text-xs text-muted-foreground">{t('common.noMatches')}</p>
       ) : (
-        <ul className="max-h-[calc(100dvh-260px)] overflow-y-auto p-1.5" role="listbox" aria-label="Verknüpfungsziele">
+        <ul className="max-h-[calc(100dvh-260px)] overflow-y-auto p-1.5" role="listbox" aria-label={t('config.gpoEditor.linkTargets')}>
           {visible.map((r) => {
             const active = r.k === selected
             return (
@@ -479,13 +483,13 @@ const TargetList = React.memo(function TargetList({
                   </span>
                   <span className="flex shrink-0 flex-col items-end gap-0.5 pt-0.5">
                     {query && r.hits > 0 ? (
-                      <Badge variant="info" className="tabular text-[10px]">{r.hits} Treffer</Badge>
+                      <Badge variant="info" className="tabular text-[10px]">{t('config.gpoEditor.hits', { count: r.hits })}</Badge>
                     ) : (
-                      <span className="text-[11px] text-muted-foreground tabular" title={`${r.imp} nur importiert · ${r.post} konfiguriert`}>
+                      <span className="text-[11px] text-muted-foreground tabular" title={t('config.gpoEditor.impImportOnlyPostConfigured', { imp: r.imp, post: r.post })}>
                         {r.imp + r.post}
                       </span>
                     )}
-                    {r.post > 0 && !query && <span className="text-[10px] text-sky-600 tabular dark:text-sky-400" title="Importieren & konfigurieren">{r.post} konf.</span>}
+                    {r.post > 0 && !query && <span className="text-[10px] text-sky-600 tabular dark:text-sky-400" title={t('config.gpoEditor.importConfigure')}>{t('config.gpoEditor.configuredShort', { count: r.post })}</span>}
                   </span>
                 </button>
               </li>
@@ -532,18 +536,18 @@ const TargetDetail = React.memo(function TargetDetail(p: DetailProps) {
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-base font-semibold tracking-tight">{targetTitle(targetKey, target)}</h3>
               {tier !== null && <TierBadge tier={tier} />}
-              {!linked && <Badge variant="muted">Nicht verknüpft</Badge>}
+              {!linked && <Badge variant="muted">{t('config.gpoEditor.notLinked')}</Badge>}
             </div>
             <p className="mt-0.5 font-mono text-[12px] break-all text-muted-foreground">{targetKey}</p>
           </div>
           {!readOnly && (
             <Button type="button" variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={() => p.onRemoveTarget(targetKey)}>
-              <Trash2 /> Ziel entfernen
+              <Trash2 /> {t('config.gpoEditor.removeTarget')}
             </Button>
           )}
         </div>
         <div className="mt-4 max-w-md">
-          <Field label="Anzeigename" htmlFor="gpo-target-dn" hint="Optionaler, lesbarer Name für dieses Ziel.">
+          <Field label={t('config.gpoEditor.displayName')} htmlFor="gpo-target-dn" hint={t('config.gpoEditor.optionalReadableNameForThis')}>
             <Input
               id="gpo-target-dn"
               value={typeof target.displayName === 'string' ? target.displayName : ''}
@@ -552,8 +556,8 @@ const TargetDetail = React.memo(function TargetDetail(p: DetailProps) {
               onChange={(e) => {
                 const v = e.target.value
                 apply((c) => {
-                  const t = (c.gpos?.[targetKey] ?? {}) as Obj
-                  return setTarget(c, targetKey, setText(t, 'displayName', v, !('displayName' in target)))
+                  const tt = (c.gpos?.[targetKey] ?? {}) as Obj
+                  return setTarget(c, targetKey, setText(tt, 'displayName', v, !('displayName' in target)))
                 }, `gpo-displayName-${targetKey}`)
               }}
             />
@@ -561,7 +565,7 @@ const TargetDetail = React.memo(function TargetDetail(p: DetailProps) {
         </div>
         {dupOrders.length > 0 && (
           <p className="mt-3 flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300">
-            <AlertTriangle className="size-3.5" /> Link-Reihenfolge mehrfach vergeben: {dupOrders.join(', ')}
+            <AlertTriangle className="size-3.5" /> {t('config.gpoEditor.linkOrderAssignedMoreThan')} {dupOrders.join(', ')}
           </p>
         )}
       </Card>
@@ -620,22 +624,22 @@ function GpoTable({
         </div>
         {!readOnly && (
           <Button type="button" size="sm" variant="outline" onClick={() => onNew(targetKey, kind)}>
-            <Plus /> GPO hinzufügen
+            <Plus /> {t('config.gpoEditor.addGpo')}
           </Button>
         )}
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-5 text-center text-xs text-muted-foreground">{list.length === 0 ? 'Keine GPOs in dieser Liste.' : 'Keine Treffer für die Suche.'}</p>
+        <p className="px-4 py-5 text-center text-xs text-muted-foreground">{list.length === 0 ? t('config.gpoEditor.noGposInThisList') : t('config.gpoEditor.noMatchesForTheSearch')}</p>
       ) : (
         <Table>
           <THead>
             <TR>
               {linked && <SortableTH label="#" active={sort.id === 'order'} dir={sort.dir} onClick={() => toggleSort('order')} className="w-12" />}
-              <SortableTH label="Name" active={sort.id === 'name'} dir={sort.dir} onClick={() => toggleSort('name')} />
-              <SortableTH label="Modus" active={sort.id === 'mode'} dir={sort.dir} onClick={() => toggleSort('mode')} className="hidden @xl:table-cell" />
-              <TH className="hidden @3xl:table-cell">Status</TH>
-              {linked && <TH className="w-16">Link</TH>}
-              <TH className="w-10"><span className="sr-only">Aktionen</span></TH>
+              <SortableTH label={t('common.name')} active={sort.id === 'name'} dir={sort.dir} onClick={() => toggleSort('name')} />
+              <SortableTH label={t('config.gpoEditor.mode')} active={sort.id === 'mode'} dir={sort.dir} onClick={() => toggleSort('mode')} className="hidden @xl:table-cell" />
+              <TH className="hidden @3xl:table-cell">{t('common.status')}</TH>
+              {linked && <TH className="w-16">{t('config.gpoEditor.link')}</TH>}
+              <TH className="w-10"><span className="sr-only">{t('common.actions')}</span></TH>
             </TR>
           </THead>
           <TBody>
@@ -692,10 +696,10 @@ const GpoRow = React.memo(function GpoRow({
   const mode = modeMeta(g.mode)
   const status = statusMeta(g.gpoStatus)
   const extras: string[] = []
-  if (Array.isArray(g.userRightsAssignments) && g.userRightsAssignments.length) extras.push(`${g.userRightsAssignments.length} Rechte`)
+  if (Array.isArray(g.userRightsAssignments) && g.userRightsAssignments.length) extras.push(t('config.gpoEditor.lengthRights', { length: g.userRightsAssignments.length, count: g.userRightsAssignments.length }))
   if (g.restrictedGroups && !Array.isArray(g.restrictedGroups) && (g.restrictedGroups.emptyGroups?.length || g.restrictedGroups.membershipGroups?.length))
-    extras.push('Eingeschr. Gruppen')
-  if (Array.isArray(g.denyApplyGroupPolicy) && g.denyApplyGroupPolicy.length) extras.push('Verweigern')
+    extras.push(t('config.gpoEditor.restrictedGroupsShort'))
+  if (Array.isArray(g.denyApplyGroupPolicy) && g.denyApplyGroupPolicy.length) extras.push(t('config.gpoEditor.denyShort'))
   return (
     <TR
       className="group cursor-pointer"
@@ -708,11 +712,11 @@ const GpoRow = React.memo(function GpoRow({
       <TD className="max-w-0 w-full">
         <div className="grid min-w-0 gap-0.5">
           <span className={cn('truncate text-[13px] font-medium', linked && g.linkEnabled === false && 'text-muted-foreground')} title={g.name}>
-            {g.name || <span className="text-destructive">Ohne Namen</span>}
+            {g.name || <span className="text-destructive">{t('config.gpoEditor.withoutAName')}</span>}
           </span>
           {(g.rename || extras.length > 0 || g.comment) && (
             <span className="truncate text-[11px] text-muted-foreground" title={g.comment || undefined}>
-              {g.rename && <>Suchmuster: <span className="font-mono">{g.rename}</span>{(extras.length > 0 || g.comment) && ' · '}</>}
+              {g.rename && <>{t('config.gpoEditor.searchPattern')} <span className="font-mono">{g.rename}</span>{(extras.length > 0 || g.comment) && ' · '}</>}
               {extras.length > 0 && <>{extras.join(' · ')}{g.comment && ' · '}</>}
               {g.comment}
             </span>
@@ -729,13 +733,13 @@ const GpoRow = React.memo(function GpoRow({
       </TD>
       {linked && (
         <TD className="w-16">
-          <Tooltip content={g.linkEnabled ? 'Verknüpfung aktiv' : 'Verknüpfung deaktiviert'}>
+          <Tooltip content={g.linkEnabled ? t('config.gpoEditor.linkEnabled') : t('config.gpoEditor.linkDisabled')}>
             <span className="inline-flex">
               <Switch
                 checked={!!g.linkEnabled}
                 disabled={readOnly || !('linkEnabled' in g || linked)}
                 onCheckedChange={(v) => onToggleLink(targetKey, kind, index, v)}
-                aria-label={`Verknüpfung von ${g.name} aktiv`}
+                aria-label={t('config.gpoEditor.linkOfNameEnabled', { name: g.name })}
               />
             </span>
           </Tooltip>
@@ -744,25 +748,25 @@ const GpoRow = React.memo(function GpoRow({
       <TD className="w-10 text-right">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-xs" className="text-muted-foreground opacity-60 group-hover:opacity-100 data-[state=open]:opacity-100" aria-label="Aktionen">
+            <Button variant="ghost" size="icon-xs" className="text-muted-foreground opacity-60 group-hover:opacity-100 data-[state=open]:opacity-100" aria-label={t('common.actions')}>
               <MoreHorizontal />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => onOpen(targetKey, kind, index)}>
-              {readOnly ? <><Eye /> Anzeigen</> : <><Pencil /> Bearbeiten</>}
+              {readOnly ? <><Eye /> {t('config.gpoEditor.view')}</> : <><Pencil /> {t('common.edit')}</>}
             </DropdownMenuItem>
             {!readOnly && (
               <>
                 <DropdownMenuItem onSelect={() => onDuplicate(targetKey, kind, index)}>
-                  <Copy /> Duplizieren
+                  <Copy /> {t('config.gpoEditor.duplicate')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => onMove(targetKey, kind, index)}>
-                  <ArrowRightLeft /> Verschieben …
+                  <ArrowRightLeft /> {t('config.gpoEditor.move')}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => onRemove(targetKey, kind, index)} destructive>
-                  <Trash2 /> Entfernen
+                  <Trash2 /> {t('common.remove')}
                 </DropdownMenuItem>
               </>
             )}
@@ -801,13 +805,13 @@ function MoveDialog({
       const g = src[moving.index]
       const destT = c.gpos?.[dest]
       if (!g || !destT) {
-        err = 'Eintrag oder Ziel existiert nicht mehr.'
+        err = t('config.gpoEditor.entryOrTargetNoLonger')
         return c
       }
       const name = String(g.name ?? '').toLowerCase()
       const clash = GPO_KINDS.some((k) => gpoList(destT, k).some((x) => x !== g && String(x?.name ?? '').toLowerCase() === name))
       if (clash) {
-        err = 'Im Ziel existiert bereits eine GPO mit diesem Namen.'
+        err = t('config.gpoEditor.aGpoWithThisName')
         return c
       }
       let moved_: Obj = g
@@ -822,7 +826,7 @@ function MoveDialog({
       return
     }
     if (moved) {
-      toast.success('GPO verschoben', { description: `${targetTitle(dest)} · ${kindLabels[kind]}` })
+      toast.success(t('config.gpoEditor.gpoMoved'), { description: `${targetTitle(dest)} · ${kindLabels[kind]}` })
       onMoved(dest)
     }
     onClose()
@@ -839,10 +843,10 @@ function MoveDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>GPO verschieben</DialogTitle>
-            <DialogDescription>In ein anderes Verknüpfungsziel oder in die andere Liste.</DialogDescription>
+            <DialogTitle>{t('config.gpoEditor.moveGpo')}</DialogTitle>
+            <DialogDescription>{t('config.gpoEditor.toAnotherLinkTargetOr')}</DialogDescription>
           </DialogHeader>
-          <Field label="Verknüpfungsziel" htmlFor="gpo-move-dest">
+          <Field label={t('config.gpoEditor.linkTarget')} htmlFor="gpo-move-dest">
             <Combobox
               id="gpo-move-dest"
               value={dest}
@@ -851,7 +855,7 @@ function MoveDialog({
               options={keys.map((k) => ({ value: k, label: targetTitle(k), hint: targetHint(k), icon: k === TEMPLATE_KEY ? <FileStack className="size-4 text-muted-foreground" /> : <TierDot tier={targetTier(k)} /> }))}
             />
           </Field>
-          <Field label="Liste" htmlFor="gpo-move-kind" hint={kind === 'ImportOnlyGpo' && moving.kind === 'PostConfigureGpo' ? 'Benutzerrechte und eingeschränkte Gruppen bleiben erhalten, werden in dieser Liste aber nicht angewendet.' : undefined}>
+          <Field label={t('config.gpoEditor.list')} htmlFor="gpo-move-kind" hint={kind === 'ImportOnlyGpo' && moving.kind === 'PostConfigureGpo' ? t('config.gpoEditor.userRightsAndRestrictedGroups') : undefined}>
             <Select
               id="gpo-move-kind"
               value={kind}
@@ -861,8 +865,8 @@ function MoveDialog({
           </Field>
           {error && <p className="text-xs text-destructive" role="alert">{error}</p>}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
-            <Button type="submit" disabled={same}>Verschieben</Button>
+            <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button type="submit" disabled={same}>{t('config.gpoEditor.move2')}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -922,26 +926,27 @@ function GpoSheetBody({
       <SheetHeader>
         <div className="flex items-center gap-2">
           {state.targetKey === TEMPLATE_KEY ? <FileStack className="size-4 text-muted-foreground" /> : <TierDot tier={tier} />}
-          <SheetTitle>{readOnly ? value.name || 'GPO' : state.index === null ? 'GPO hinzufügen' : 'GPO bearbeiten'}</SheetTitle>
+          <SheetTitle>{readOnly ? value.name || 'GPO' : state.index === null ? t('config.gpoEditor.addGpo') : t('config.gpoEditor.editGpo')}</SheetTitle>
         </div>
         <SheetDescription>
           {targetTitle(state.targetKey)} · {kindLabels[state.kind]}
-          {readOnly && ' · Nur-Lese-Ansicht'}
+          {readOnly && t('config.gpoEditor.readOnlyView')}
         </SheetDescription>
       </SheetHeader>
       <SheetBody>
         <div className="grid min-w-0 gap-6 [&>*]:min-w-0">
+          <TierRuleAlerts issues={state.targetKey === TEMPLATE_KEY ? [] : gpoLinkTierIssues(value.name, state.targetKey)} />
           <GpoForm value={value} update={update} errors={errors} readOnly={readOnly} targetKey={state.targetKey} kind={state.kind} reference={state.reference} />
         </div>
       </SheetBody>
       <SheetFooter>
         {readOnly ? (
-          <Button type="button" variant="outline" onClick={onClose}>Schließen</Button>
+          <Button type="button" variant="outline" onClick={onClose}>{t('common.close')}</Button>
         ) : (
           <>
-            {Object.keys(errors).length > 0 && <span className="mr-auto text-xs text-destructive">Bitte markierte Felder prüfen.</span>}
-            <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
-            <Button type="submit" disabled={!changed}>{state.index === null ? 'Hinzufügen' : 'Übernehmen'}</Button>
+            {Object.keys(errors).length > 0 && <span className="mr-auto text-xs text-destructive">{t('config.gpoEditor.pleaseCheckTheMarkedFields')}</span>}
+            <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button type="submit" disabled={!changed}>{state.index === null ? t('common.add') : t('config.gpoEditor.apply')}</Button>
           </>
         )}
       </SheetFooter>
@@ -999,8 +1004,8 @@ function GpoForm({
       {/* Plain fields are disabled via fieldset; the collapsible sections below get explicit
           disabled props so their expanders keep working in the read-only view. */}
       <fieldset disabled={readOnly} className="contents">
-      <Section title="Allgemein">
-        <Field label="Name" htmlFor="gpo-name" required error={errors.name} hint="Anzeigename der GPO im Active Directory.">
+      <Section title={t('config.gpoEditor.general')}>
+        <Field label={t('common.name')} htmlFor="gpo-name" required error={errors.name} hint={t('config.gpoEditor.displayNameOfTheGpo')}>
           <div className="flex gap-2">
             <div className="min-w-0 flex-1">
               {freeName ? (
@@ -1011,15 +1016,15 @@ function GpoForm({
                   value={value.name ?? ''}
                   onChange={(v) => set('name', v)}
                   options={gpoNames}
-                  placeholder="Name wählen oder eingeben"
-                  searchPlaceholder="Name suchen oder neu eingeben …"
+                  placeholder={t('config.gpoEditor.selectOrEnterAName')}
+                  searchPlaceholder={t('config.gpoEditor.searchNameOrEnterA')}
                   invalid={!!errors.name}
                 />
               )}
             </div>
             {!readOnly && (
-              <Tooltip content={freeName ? 'Vorschläge anzeigen' : 'Namen direkt bearbeiten'}>
-                <Button type="button" variant="outline" size="icon" onClick={() => setFreeName((f) => !f)} aria-pressed={freeName} aria-label={freeName ? 'Vorschläge anzeigen' : 'Namen direkt bearbeiten'}>
+              <Tooltip content={freeName ? t('config.gpoEditor.showSuggestions') : t('config.gpoEditor.editNameDirectly')}>
+                <Button type="button" variant="outline" size="icon" onClick={() => setFreeName((f) => !f)} aria-pressed={freeName} aria-label={freeName ? t('config.gpoEditor.showSuggestions') : t('config.gpoEditor.editNameDirectly')}>
                   {freeName ? <Search /> : <Pencil />}
                 </Button>
               </Tooltip>
@@ -1027,15 +1032,15 @@ function GpoForm({
           </div>
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Modus" htmlFor="gpo-mode" required error={errors.mode} hint={mode?.description}>
-            <Select id="gpo-mode" value={value.mode} onValueChange={(v) => set('mode', v)} options={withUnknown(modeOptions, value.mode)} placeholder="Modus wählen" disabled={readOnly} />
+          <Field label={t('config.gpoEditor.mode')} htmlFor="gpo-mode" required error={errors.mode} hint={mode?.description}>
+            <Select id="gpo-mode" value={value.mode} onValueChange={(v) => set('mode', v)} options={withUnknown(modeOptions, value.mode)} placeholder={t('config.gpoEditor.selectMode')} disabled={readOnly} />
           </Field>
-          <Field label="Status" htmlFor="gpo-status" hint="Welche Hälfte der GPO aktiv ist.">
-            <Select id="gpo-status" value={value.gpoStatus} onValueChange={(v) => set('gpoStatus', v)} options={withUnknown(statusOptions, value.gpoStatus)} placeholder="Status wählen" disabled={readOnly} />
+          <Field label={t('common.status')} htmlFor="gpo-status" hint={t('config.gpoEditor.whichHalfOfTheGpo')}>
+            <Select id="gpo-status" value={value.gpoStatus} onValueChange={(v) => set('gpoStatus', v)} options={withUnknown(statusOptions, value.gpoStatus)} placeholder={t('config.gpoEditor.selectStatus')} disabled={readOnly} />
           </Field>
         </div>
         {value.mode !== 'create' && (
-          <Field label="Import-Pfad" htmlFor="gpo-import" required error={errors.importPath} hint={unknownBackup ? 'Dieser Pfad ist nicht unter den mitgelieferten GPO-Backups.' : 'GPO-Backup aus dem Framework (config\\gpo\\…\\{GUID}).'}>
+          <Field label={t('config.gpoEditor.importPath')} htmlFor="gpo-import" required error={errors.importPath} hint={unknownBackup ? t('config.gpoEditor.thisPathIsNotAmong') : t('config.gpoEditor.gpoBackupFromTheFramework')}>
             <Combobox
               id="gpo-import"
               mono
@@ -1049,8 +1054,8 @@ function GpoForm({
                 })
               }}
               options={backups}
-              placeholder="GPO-Backup wählen"
-              searchPlaceholder="Backup nach Name, Ordner oder GUID suchen …"
+              placeholder={t('config.gpoEditor.selectGpoBackup')}
+              searchPlaceholder={t('config.gpoEditor.searchBackupByNameFolder')}
               invalid={!!errors.importPath}
             />
           </Field>
@@ -1058,9 +1063,9 @@ function GpoForm({
       </Section>
 
       {showLink && (
-        <Section title="Verknüpfung">
+        <Section title={t('config.gpoEditor.link2')}>
           <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
-            <Field label="Link-Reihenfolge" htmlFor="gpo-order" required error={errors.linkOrder}>
+            <Field label={t('config.gpoEditor.linkOrder')} htmlFor="gpo-order" required error={errors.linkOrder}>
               <Input
                 id="gpo-order"
                 type="number"
@@ -1084,27 +1089,27 @@ function GpoForm({
               />
             </Field>
             <div className="grid content-end">
-              <SwitchRow id="gpo-link" label="Verknüpfung aktiv" description="Deaktivierte Links werden angelegt, aber nicht angewendet." checked={!!value.linkEnabled} onCheckedChange={(v) => set('linkEnabled', v)} />
+              <SwitchRow id="gpo-link" label={t('config.gpoEditor.linkEnabled')} description={t('config.gpoEditor.disabledLinksAreCreatedBut')} checked={!!value.linkEnabled} onCheckedChange={(v) => set('linkEnabled', v)} />
             </div>
           </div>
         </Section>
       )}
 
-      <Section title="Beschreibung">
-        <Field label="Umbenennen in" htmlFor="gpo-rename" hint="Optional: Suchmuster (Platzhalter * erlaubt), über das eine bereits umbenannte GPO wiedergefunden wird.">
-          <Input id="gpo-rename" value={value.rename ?? ''} onChange={(e) => { const v = e.target.value; update((g) => setText(g, 'rename', v, !had('rename'))) }} placeholder="z. B. *- Tier 0 DCs SHF" />
+      <Section title={t('config.gpoEditor.description')}>
+        <Field label={t('config.gpoEditor.renameTo')} htmlFor="gpo-rename" hint={t('config.gpoEditor.optionalSearchPatternWildcardAllowed')}>
+          <Input id="gpo-rename" value={value.rename ?? ''} onChange={(e) => { const v = e.target.value; update((g) => setText(g, 'rename', v, !had('rename'))) }} placeholder={t('config.gpoEditor.eGTier0Dcs')} />
         </Field>
-        <Field label="GPO-Kommentar" htmlFor="gpo-gcomment" hint="Wird als Kommentar in die GPO geschrieben.">
+        <Field label={t('config.gpoEditor.gpoComment')} htmlFor="gpo-gcomment" hint={t('config.gpoEditor.writtenIntoTheGpoAs')}>
           <Textarea id="gpo-gcomment" rows={3} value={value.gpoComment ?? ''} onChange={(e) => { const v = e.target.value; update((g) => setText(g, 'gpoComment', v, !had('gpoComment') && reference !== null)) }} />
         </Field>
-        <Field label="Kommentar" htmlFor="gpo-comment" hint="Interne Notiz in der Konfiguration.">
+        <Field label={t('config.gpoEditor.comment')} htmlFor="gpo-comment" hint={t('config.gpoEditor.internalNoteInTheConfiguration')}>
           <Textarea id="gpo-comment" rows={2} value={value.comment ?? ''} onChange={(e) => { const v = e.target.value; update((g) => setText(g, 'comment', v, !had('comment') && reference !== null)) }} />
         </Field>
       </Section>
       </fieldset>
 
       {(kind === 'PostConfigureGpo' || 'userRightsAssignments' in value || 'restrictedGroups' in value || 'denyApplyGroupPolicy' in value) && (
-        <Section title="Konfiguration" description="Wird nach dem Import auf die GPO angewendet.">
+        <Section title={t('config.gpoEditor.configuration')} description={t('config.gpoEditor.appliedToTheGpoAfter')}>
           <div className="grid min-w-0 gap-3 [&>*]:min-w-0">
             <DenyApplySection values={Array.isArray(value.denyApplyGroupPolicy) ? value.denyApplyGroupPolicy : []} update={update} disabled={readOnly} />
             <UserRightsSection rights={Array.isArray(value.userRightsAssignments) ? value.userRightsAssignments : []} update={update} disabled={readOnly} error={errors.userRightsAssignments} />

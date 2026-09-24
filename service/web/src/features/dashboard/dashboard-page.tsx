@@ -23,7 +23,7 @@ import {
 import type { ChangeEntry, Dashboard, RunSummary } from '@/api/types'
 import { useDashboardQuery } from '@/components/layout/app-layout'
 import { Page, PageHeader } from '@/components/shared/page-header'
-import { RunKindIcon, RunStatusBadge } from '@/components/shared/badges'
+import { RunKindIcon, RunStatusBadge, runKindText } from '@/components/shared/badges'
 import { OuTree } from '@/components/shared/ou-tree'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -34,6 +34,12 @@ import { sectionQuery } from '@/features/config/queries'
 import { actionLabels, includeLabels, scopeLabels } from '@/lib/labels'
 import { cn, formatDuration, formatNumber, formatRelative } from '@/lib/utils'
 
+import { ComplianceTiles } from './compliance-tiles'
+import { SetupCard } from '@/features/setup/setup-card'
+import { useDomains } from '@/features/domains/domain-context'
+import { DomainsOverviewCard } from '@/features/domains/domains-overview'
+import { t } from '@/i18n'
+
 const DriftChart = React.lazy(() => import('./drift-chart'))
 
 export function Component() {
@@ -41,30 +47,47 @@ export function Component() {
   const user = useUser()
   const canEdit = useCan('Editor')
   const hour = new Date().getHours()
-  const greeting = hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Guten Tag' : 'Guten Abend'
+  const greeting = hour < 11 ? t('dashboard.dashboard.goodMorning') : hour < 18 ? t('dashboard.dashboard.goodAfternoon') : t('dashboard.dashboard.goodEvening')
+  const { multiple, current } = useDomains()
 
   return (
     <Page wide>
       <PageHeader
         title={`${greeting}, ${user.displayName?.split(' ')[0] || user.username}`}
-        description="Überblick über Soll-Konfiguration, Drift und laufende Vorgänge."
+        description={
+          multiple && current ? (
+            <>
+              {t('dashboard.dashboard.overviewOfDesiredConfigurationDrift')}{' '}
+              <span className="font-medium text-foreground" data-testid="dashboard-domain">{current.displayName}</span>
+              {current.dnsName && current.dnsName !== current.displayName ? ` (${current.dnsName})` : ''}.
+            </>
+          ) : (
+            t('dashboard.dashboard.overviewOfDesiredConfigurationDrift2')
+          )
+        }
         actions={
           canEdit && (
             <>
               <Button variant="outline" asChild>
-                <Link to="/audits?start=1"><ScanSearch /> Audit starten</Link>
+                <Link to="/audits?start=1"><ScanSearch /> {t('dashboard.dashboard.startAudit')}</Link>
               </Button>
               <Button asChild>
-                <Link to="/deploy"><Rocket /> Neuer Deploy</Link>
+                <Link to="/deploy"><Rocket /> {t('dashboard.dashboard.newDeployment')}</Link>
               </Button>
             </>
           )
         }
       />
 
+      <SetupCard />
+
+      <DomainsOverviewCard />
+
       {!!data?.pendingApprovals?.length && <PendingApprovalsCard runs={data.pendingApprovals} />}
 
       <KpiRow data={data} loading={isLoading} />
+
+      <ComplianceTiles />
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <AuditCard data={data} loading={isLoading} />
@@ -76,8 +99,8 @@ export function Component() {
         <Card className="flex flex-col xl:col-span-3">
           <CardHeader>
             <div>
-              <CardTitle>Drift-Verlauf</CardTitle>
-              <CardDescription>Abweichungen der letzten 30 erfolgreichen Audits</CardDescription>
+              <CardTitle>{t('dashboard.dashboard.driftHistory')}</CardTitle>
+              <CardDescription>{t('dashboard.dashboard.deviationsOfTheLast30')}</CardDescription>
             </div>
           </CardHeader>
           <CardContent className="min-h-64 flex-1 pl-2">
@@ -88,16 +111,16 @@ export function Component() {
                 <DriftChart data={data.driftTrend} />
               </React.Suspense>
             ) : (
-              <EmptyState compact icon={<Activity />} title="Noch keine Audits" description="Sobald Audits erfolgreich laufen, erscheint hier der Drift-Verlauf." />
+              <EmptyState compact icon={<Activity />} title={t('dashboard.dashboard.noAuditsYet')} description={t('dashboard.dashboard.asSoonAsAuditsRun')} />
             )}
           </CardContent>
         </Card>
-        <RecentRuns runs={data?.recentRuns} loading={isLoading} className="xl:col-span-2" />
+        <RecentRuns runs={data?.recentRuns} loading={isLoading} className="min-w-0 xl:col-span-2" />
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-5">
-        <OuTreeCard className="xl:col-span-3" />
-        <RecentChanges changes={data?.recentChanges} loading={isLoading} className="xl:col-span-2" />
+        <OuTreeCard className="min-w-0 xl:col-span-3" />
+        <RecentChanges changes={data?.recentChanges} loading={isLoading} className="min-w-0 xl:col-span-2" />
       </div>
     </Page>
   )
@@ -116,16 +139,16 @@ function PendingApprovalsCard({ runs }: { runs: RunSummary[] }) {
           </span>
           <div>
             <CardTitle className="flex items-center gap-2">
-              Freigaben ausstehend
+              {t('dashboard.dashboard.pendingApprovals')}
               <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-800 tabular dark:text-amber-300">{runs.length}</span>
             </CardTitle>
             <CardDescription>
-              {canDecide ? 'Deploys, die auf die Freigabe durch eine zweite Person warten' : 'Deploys, die auf die Freigabe durch einen Operator warten'}
+              {canDecide ? t('dashboard.dashboard.deploymentsWaitingForApprovalBy') : t('dashboard.dashboard.deploymentsWaitingForApprovalBy2')}
             </CardDescription>
           </div>
         </div>
         <Button variant="ghost" size="xs" asChild className="text-muted-foreground">
-          <Link to="/laeufe?status=AwaitingApproval">Alle <ArrowRight /></Link>
+          <Link to="/laeufe?status=AwaitingApproval">{t('dashboard.dashboard.all')} <ArrowRight /></Link>
         </Button>
       </CardHeader>
       <CardContent className="relative px-2 pb-2">
@@ -141,19 +164,19 @@ function PendingApprovalsCard({ runs }: { runs: RunSummary[] }) {
                   <RunKindIcon kind={r.kind} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-medium">
-                      #{r.id} · Deploy · {r.scope ? scopeLabels[r.scope] : 'Nur Add-ons'}
+                      #{r.id} {t('dashboard.dashboard.deploy')} {r.scope ? scopeLabels[r.scope] : t('dashboard.dashboard.addOnsOnly')}
                       {r.includes.length > 0 && <span className="font-normal text-muted-foreground"> + {r.includes.map((i) => includeLabels[i] ?? i).join(', ')}</span>}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {r.requestedBy}{own && ' (Sie)'} · {formatRelative(r.createdAt)} · DC {r.preferredDc}
+                      {r.requestedBy}{own && t('dashboard.dashboard.you')} · {formatRelative(r.createdAt)} {t('dashboard.dashboard.dc')} {r.preferredDc}
                     </p>
                   </div>
                   {r.approvalExpiresAt && (
-                    <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex" title="Läuft ab">
+                    <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex" title={t('dashboard.dashboard.expires')}>
                       <Timer className="size-3.5" /> {formatRelative(r.approvalExpiresAt)}
                     </span>
                   )}
-                  <span className="text-xs font-medium text-primary">{canDecide && !own ? 'Prüfen' : 'Ansehen'}</span>
+                  <span className="text-xs font-medium text-primary">{canDecide && !own ? t('dashboard.dashboard.review') : t('dashboard.dashboard.view')}</span>
                   <ArrowRight className="size-3.5 text-muted-foreground" />
                 </Link>
               </li>
@@ -167,14 +190,14 @@ function PendingApprovalsCard({ runs }: { runs: RunSummary[] }) {
 
 function KpiRow({ data, loading }: { data?: Dashboard; loading: boolean }) {
   const tiles = [
-    { label: 'OUs', value: data?.counts.ous, icon: FolderTree, to: '/konfiguration/ous', tone: 'text-indigo-600 bg-indigo-500/10 dark:text-indigo-300' },
-    { label: 'Gruppen', value: data?.counts.groups, icon: Users, to: '/konfiguration/groups', tone: 'text-sky-600 bg-sky-500/10 dark:text-sky-300' },
-    { label: 'Benutzer', value: data?.counts.users, icon: UserIcon, to: '/konfiguration/users', tone: 'text-teal-600 bg-teal-500/10 dark:text-teal-300' },
-    { label: 'ACL-Delegationen', value: data?.counts.acls, icon: ShieldCheck, to: '/konfiguration/acls', tone: 'text-violet-600 bg-violet-500/10 dark:text-violet-300' },
+    { label: t('dashboard.dashboard.ous'), value: data?.counts.ous, icon: FolderTree, to: '/konfiguration/ous', tone: 'text-indigo-600 bg-indigo-500/10 dark:text-indigo-300' },
+    { label: t('dashboard.dashboard.groups'), value: data?.counts.groups, icon: Users, to: '/konfiguration/groups', tone: 'text-sky-600 bg-sky-500/10 dark:text-sky-300' },
+    { label: t('dashboard.dashboard.users'), value: data?.counts.users, icon: UserIcon, to: '/konfiguration/users', tone: 'text-teal-600 bg-teal-500/10 dark:text-teal-300' },
+    { label: t('dashboard.dashboard.aclDelegations'), value: data?.counts.acls, icon: ShieldCheck, to: '/konfiguration/acls', tone: 'text-violet-600 bg-violet-500/10 dark:text-violet-300' },
     {
-      label: 'GPOs',
+      label: t('dashboard.dashboard.gpos'),
       value: data?.counts.gpos,
-      sub: data ? `${formatNumber(data.counts.gpoLinks)} Verknüpfungen` : undefined,
+      sub: data ? t('dashboard.dashboard.gpolinksLinks', { count: data.counts.gpoLinks, gpoLinks: formatNumber(data.counts.gpoLinks) }) : undefined,
       icon: ScrollText,
       to: '/konfiguration/gpos',
       tone: 'text-fuchsia-600 bg-fuchsia-500/10 dark:text-fuchsia-300',
@@ -182,26 +205,26 @@ function KpiRow({ data, loading }: { data?: Dashboard; loading: boolean }) {
   ]
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-      {tiles.map((t) => (
+      {tiles.map((tt) => (
         <Link
-          key={t.label}
-          to={t.to}
+          key={tt.label}
+          to={tt.to}
           className="group rounded-xl border bg-card p-4 shadow-[0_1px_2px_0_rgb(0_0_0/0.03)] transition-all outline-none hover:-translate-y-px hover:border-input hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring dark:shadow-none"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-medium text-muted-foreground">{t.label}</span>
-            <span className={cn('grid size-7 place-content-center rounded-md', t.tone)}>
-              <t.icon className="size-4" />
+            <span className="text-[13px] font-medium text-muted-foreground">{tt.label}</span>
+            <span className={cn('grid size-7 place-content-center rounded-md', tt.tone)}>
+              <tt.icon className="size-4" />
             </span>
           </div>
           {loading ? (
             <Skeleton className="mt-3 h-8 w-16" />
           ) : (
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-[28px] leading-9 font-semibold tracking-tight tabular">{formatNumber(t.value)}</span>
+              <span className="text-[28px] leading-9 font-semibold tracking-tight tabular">{formatNumber(tt.value)}</span>
             </div>
           )}
-          <p className="mt-0.5 h-4 text-xs text-muted-foreground">{t.sub}</p>
+          <p className="mt-0.5 h-4 text-xs text-muted-foreground">{tt.sub}</p>
         </Link>
       ))}
     </div>
@@ -224,8 +247,8 @@ function AuditCard({ data, loading }: { data?: Dashboard; loading: boolean }) {
       />
       <CardHeader className="relative">
         <div>
-          <CardTitle>Letztes Audit</CardTitle>
-          <CardDescription>{a ? formatRelative(a.finishedAt ?? a.createdAt) : 'Soll/Ist-Vergleich'}</CardDescription>
+          <CardTitle>{t('dashboard.dashboard.lastAudit')}</CardTitle>
+          <CardDescription>{a ? formatRelative(a.finishedAt ?? a.createdAt) : t('dashboard.dashboard.desiredActualComparison')}</CardDescription>
         </div>
         {a && <RunStatusBadge status={a.status} />}
       </CardHeader>
@@ -234,7 +257,7 @@ function AuditCard({ data, loading }: { data?: Dashboard; loading: boolean }) {
           <Skeleton className="h-16 w-full" />
         ) : !a ? (
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <ScanSearch className="size-5" /> Noch kein Audit ausgeführt.
+            <ScanSearch className="size-5" /> {t('dashboard.dashboard.noAuditRunYet')}
           </div>
         ) : (
           <div className="flex items-end justify-between gap-4">
@@ -244,15 +267,15 @@ function AuditCard({ data, loading }: { data?: Dashboard; loading: boolean }) {
               </div>
               <div>
                 <p className={cn('text-lg font-semibold tracking-tight', ok && 'text-emerald-700 dark:text-emerald-400', bad && 'text-rose-700 dark:text-rose-400')}>
-                  {drift === null || drift === undefined ? statusText(a) : drift === 0 ? 'Kein Drift' : `${formatNumber(drift)} Abweichungen`}
+                  {drift === null || drift === undefined ? statusText(a) : drift === 0 ? t('dashboard.dashboard.noDrift') : t('dashboard.dashboard.driftDeviations', { count: drift, drift: formatNumber(drift) })}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {a.errorCount ? `${a.errorCount} Fehler · ` : ''}DC {a.preferredDc}
+                  {a.errorCount ? t('dashboard.dashboard.errorcountErrors', { errorCount: a.errorCount, count: a.errorCount }) : ''}{t('dashboard.dashboard.dc2')} {a.preferredDc}
                 </p>
               </div>
             </div>
             <Button variant="ghost" size="sm" asChild>
-              <Link to={`/laeufe/${a.id}`}>Details <ArrowRight /></Link>
+              <Link to={`/laeufe/${a.id}`}>{t('dashboard.dashboard.details')} <ArrowRight /></Link>
             </Button>
           </div>
         )}
@@ -262,7 +285,7 @@ function AuditCard({ data, loading }: { data?: Dashboard; loading: boolean }) {
 }
 
 function statusText(r: RunSummary) {
-  return r.status === 'Running' ? 'Läuft …' : r.status === 'Queued' ? 'Wartet …' : r.status === 'Failed' ? 'Fehlgeschlagen' : '–'
+  return r.status === 'Running' ? t('dashboard.dashboard.running') : r.status === 'Queued' ? t('dashboard.dashboard.waiting') : r.status === 'Failed' ? t('dashboard.dashboard.failed') : '–'
 }
 
 function DeployCard({ data, loading }: { data?: Dashboard; loading: boolean }) {
@@ -271,8 +294,8 @@ function DeployCard({ data, loading }: { data?: Dashboard; loading: boolean }) {
     <Card>
       <CardHeader>
         <div>
-          <CardTitle>Letzter Deploy</CardTitle>
-          <CardDescription>{d ? formatRelative(d.finishedAt ?? d.createdAt) : 'Bereitstellung ins AD'}</CardDescription>
+          <CardTitle>{t('dashboard.dashboard.lastDeployment')}</CardTitle>
+          <CardDescription>{d ? formatRelative(d.finishedAt ?? d.createdAt) : t('dashboard.dashboard.deploymentToAd')}</CardDescription>
         </div>
         {d && <RunStatusBadge status={d.status} />}
       </CardHeader>
@@ -281,7 +304,7 @@ function DeployCard({ data, loading }: { data?: Dashboard; loading: boolean }) {
           <Skeleton className="h-16 w-full" />
         ) : !d ? (
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <Rocket className="size-5" /> Noch kein Deploy ausgeführt.
+            <Rocket className="size-5" /> {t('dashboard.dashboard.noDeploymentRunYet')}
           </div>
         ) : (
           <div className="flex items-end justify-between gap-4">
@@ -290,20 +313,20 @@ function DeployCard({ data, loading }: { data?: Dashboard; loading: boolean }) {
               <div>
                 <p className="text-lg font-semibold tracking-tight">
                   {d.status === 'AwaitingApproval'
-                    ? 'Wartet auf Freigabe'
+                    ? t('dashboard.dashboard.awaitingApproval')
                     : d.status === 'Rejected'
-                      ? 'Abgelehnt'
+                      ? t('dashboard.dashboard.rejected')
                       : d.mode === 'Apply'
-                        ? 'Angewendet'
-                        : 'Geplant (WhatIf)'}
+                        ? t('dashboard.dashboard.applied')
+                        : t('dashboard.dashboard.plannedWhatif')}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {d.scope ? scopeLabels[d.scope] : 'Nur Add-ons'} · {d.requestedBy} · {formatDuration(d.startedAt, d.finishedAt)}
+                  {d.scope ? scopeLabels[d.scope] : t('dashboard.dashboard.addOnsOnly')} · {d.requestedBy} · {formatDuration(d.startedAt, d.finishedAt)}
                 </p>
               </div>
             </div>
             <Button variant="ghost" size="sm" asChild>
-              <Link to={`/laeufe/${d.id}`}>Details <ArrowRight /></Link>
+              <Link to={`/laeufe/${d.id}`}>{t('dashboard.dashboard.details')} <ArrowRight /></Link>
             </Button>
           </div>
         )}
@@ -318,8 +341,8 @@ function QueueValidationCard({ data, loading }: { data?: Dashboard; loading: boo
     <Card>
       <CardHeader>
         <div>
-          <CardTitle>Warteschlange & Validierung</CardTitle>
-          <CardDescription>Aktueller Zustand des Dienstes</CardDescription>
+          <CardTitle>{t('dashboard.dashboard.queueValidation')}</CardTitle>
+          <CardDescription>{t('dashboard.dashboard.currentStateOfTheService')}</CardDescription>
         </div>
       </CardHeader>
       <CardContent className="grid grid-cols-2 gap-3">
@@ -331,11 +354,11 @@ function QueueValidationCard({ data, loading }: { data?: Dashboard; loading: boo
         ) : (
           <>
             <Link to="/laeufe" className="rounded-lg border bg-muted/30 p-3 transition-colors outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring">
-              <p className="text-xs text-muted-foreground">Läufe</p>
+              <p className="text-xs text-muted-foreground">{t('dashboard.dashboard.runs')}</p>
               <p className="mt-1 flex items-baseline gap-1.5 text-sm">
-                <span className="text-xl font-semibold tabular">{data?.queue.running ?? 0}</span> aktiv
+                <span className="text-xl font-semibold tabular">{data?.queue.running ?? 0}</span> {t('dashboard.dashboard.active')}
               </p>
-              <p className="text-xs text-muted-foreground">{data?.queue.queued ?? 0} wartend</p>
+              <p className="text-xs text-muted-foreground">{data?.queue.queued ?? 0} {t('dashboard.dashboard.waiting2')}</p>
             </Link>
             <Link
               to="/konfiguration/validierung"
@@ -344,18 +367,18 @@ function QueueValidationCard({ data, loading }: { data?: Dashboard; loading: boo
                 v && v.errors > 0 ? 'border-rose-500/25 bg-rose-500/5 hover:bg-rose-500/10' : v && v.warnings > 0 ? 'border-amber-500/25 bg-amber-500/5 hover:bg-amber-500/10' : 'bg-muted/30 hover:bg-muted/60',
               )}
             >
-              <p className="text-xs text-muted-foreground">Validierung</p>
+              <p className="text-xs text-muted-foreground">{t('dashboard.dashboard.validation')}</p>
               {v && v.errors + v.warnings === 0 ? (
                 <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                  <CheckCircle2 className="size-4" /> Keine Probleme
+                  <CheckCircle2 className="size-4" /> {t('dashboard.dashboard.noProblems')}
                 </p>
               ) : (
                 <>
                   <p className="mt-1 flex items-center gap-1.5 text-sm">
                     <XCircle className="size-4 text-rose-500" />
-                    <span className="text-xl font-semibold tabular">{v?.errors ?? 0}</span> Fehler
+                    <span className="text-xl font-semibold tabular">{v?.errors ?? 0}</span> {t('dashboard.dashboard.errors', { count: v?.errors ?? 0 })}
                   </p>
-                  <p className="text-xs text-muted-foreground">{v?.warnings ?? 0} Warnungen</p>
+                  <p className="text-xs text-muted-foreground">{v?.warnings ?? 0} {t('dashboard.dashboard.warnings', { count: v?.warnings ?? 0 })}</p>
                 </>
               )}
             </Link>
@@ -372,18 +395,18 @@ function RecentRuns({ runs, loading, className }: { runs?: RunSummary[]; loading
     <Card className={className}>
       <CardHeader>
         <div>
-          <CardTitle>Letzte Läufe</CardTitle>
-          <CardDescription>Deploys und Audits</CardDescription>
+          <CardTitle>{t('dashboard.dashboard.recentRuns')}</CardTitle>
+          <CardDescription>{t('dashboard.dashboard.deploymentsAuditsAndMonitoringRuns')}</CardDescription>
         </div>
         <Button variant="ghost" size="xs" asChild className="text-muted-foreground">
-          <Link to="/laeufe">Alle <ArrowRight /></Link>
+          <Link to="/laeufe">{t('dashboard.dashboard.all')} <ArrowRight /></Link>
         </Button>
       </CardHeader>
       <CardContent className="px-2 pb-2">
         {loading ? (
           <div className="grid gap-2 px-3 pb-3">{Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-10" />)}</div>
         ) : !runs?.length ? (
-          <EmptyState compact icon={<Activity />} title="Keine Läufe" description="Starten Sie einen Deploy oder ein Audit." />
+          <EmptyState compact icon={<Activity />} title={t('dashboard.dashboard.noRuns')} description={t('dashboard.dashboard.startADeploymentOrAn')} />
         ) : (
           <ul>
             {runs.map((r) => (
@@ -396,10 +419,10 @@ function RecentRuns({ runs, loading, className }: { runs?: RunSummary[]; loading
                   <RunKindIcon kind={r.kind} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-medium">
-                      #{r.id} · {r.kind === 'Deploy' ? (r.mode === 'Apply' ? 'Deploy' : 'Deploy (Plan)') : 'Audit'}
+                      #{r.id} · {runKindText(r)}
                       {r.kind === 'Audit' && r.driftCount !== null && (
                         <span className={cn('ml-2 text-xs font-normal', r.driftCount ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
-                          {r.driftCount ? `${r.driftCount} Drift` : 'kein Drift'}
+                          {r.driftCount ? t('dashboard.dashboard.driftcountDrift', { driftCount: r.driftCount }) : t('dashboard.dashboard.noDrift2')}
                         </span>
                       )}
                     </p>
@@ -423,20 +446,20 @@ function RecentChanges({ changes, loading, className }: { changes?: ChangeEntry[
     <Card className={className}>
       <CardHeader>
         <div>
-          <CardTitle>Letzte Änderungen</CardTitle>
-          <CardDescription>Änderungsprotokoll</CardDescription>
+          <CardTitle>{t('dashboard.dashboard.recentChanges')}</CardTitle>
+          <CardDescription>{t('dashboard.dashboard.changeLog')}</CardDescription>
         </div>
         <Button variant="ghost" size="xs" asChild className="text-muted-foreground">
-          <Link to="/aenderungen">Alle <ArrowRight /></Link>
+          <Link to="/aenderungen">{t('dashboard.dashboard.all')} <ArrowRight /></Link>
         </Button>
       </CardHeader>
       <CardContent>
         {loading ? (
           <div className="grid gap-3">{Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-9" />)}</div>
         ) : !changes?.length ? (
-          <EmptyState compact icon={<FileClock />} title="Keine Änderungen" />
+          <EmptyState compact icon={<FileClock />} title={t('dashboard.dashboard.noChanges')} />
         ) : (
-          <ol className="relative grid gap-4 before:absolute before:top-2 before:bottom-2 before:left-[5px] before:w-px before:bg-border">
+          <ol className="relative grid grid-cols-[minmax(0,1fr)] gap-4 before:absolute before:top-2 before:bottom-2 before:left-[5px] before:w-px before:bg-border">
             {changes.map((c) => (
               <li key={c.id} className="relative flex gap-3 pl-5">
                 <span className={cn('absolute top-1.5 left-0 size-[11px] rounded-full border-2 border-card', dotColor(c.action))} aria-hidden />
@@ -476,16 +499,16 @@ function OuTreeCard({ className }: { className?: string }) {
       <CardHeader className="pb-1">
         <div>
           <CardTitle className="flex items-center gap-2">
-            <Layers className="size-4 text-muted-foreground" /> OU-Struktur
+            <Layers className="size-4 text-muted-foreground" /> {t('dashboard.dashboard.ouStructure')}
           </CardTitle>
-          <CardDescription>Soll-Struktur aus der Konfiguration, farbig nach Tier</CardDescription>
+          <CardDescription>{t('dashboard.dashboard.desiredStructureFromTheConfiguration')}</CardDescription>
         </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <div className="grid gap-2">{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-7" style={{ marginLeft: (i % 3) * 18 }} />)}</div>
         ) : ous.length === 0 ? (
-          <EmptyState compact icon={<FolderTree />} title="Keine OUs konfiguriert" />
+          <EmptyState compact icon={<FolderTree />} title={t('dashboard.dashboard.noOusConfigured')} />
         ) : (
           <div className="max-h-[420px] overflow-y-auto pr-1">
             <OuTree ous={ous} onSelect={(i) => navigate(`/konfiguration/ous?edit=${i}`)} />

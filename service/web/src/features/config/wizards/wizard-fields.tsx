@@ -1,0 +1,136 @@
+import * as React from 'react'
+import { RadioGroup } from 'radix-ui'
+import { TriangleAlert } from 'lucide-react'
+import { Segmented } from '@/components/ui/segmented'
+import { TierDot } from '@/components/shared/badges'
+import { cn } from '@/lib/utils'
+import { INHERITANCE_LABELS, objectTypeText, type AclTemplate, type TierNum } from './wizard-model'
+import { t } from '@/i18n'
+
+/** German labels of Active Directory rights (technical name stays visible in the chip). */
+export const RIGHT_LABELS: Record<string, string> = {
+  GenericAll: t('config.wizards.wizardFields.fullControl'),
+  GenericRead: t('config.wizards.wizardFields.read'),
+  GenericWrite: t('config.wizards.wizardFields.write'),
+  CreateChild: t('config.wizards.wizardFields.createObjects'),
+  DeleteChild: t('config.wizards.wizardFields.deleteObjects'),
+  ReadProperty: t('config.wizards.wizardFields.readProperties'),
+  WriteProperty: t('config.wizards.wizardFields.writeProperties'),
+  ExtendedRight: t('config.wizards.wizardFields.extendedRight'),
+  ListChildren: t('config.wizards.wizardFields.listContents'),
+  Delete: t('config.wizards.wizardFields.delete'),
+  DeleteTree: t('config.wizards.wizardFields.deleteSubtree'),
+  WriteDacl: t('config.wizards.wizardFields.changePermissions'),
+  WriteOwner: t('config.wizards.wizardFields.changeOwner'),
+  Self: t('config.wizards.wizardFields.validatedWrites'),
+}
+
+export function TierPicker({ id, value, onChange, allowed = [0, 1, 2] }: { id?: string; value: TierNum; onChange: (tt: TierNum) => void; allowed?: TierNum[] }) {
+  return (
+    <div id={id}>
+      <Segmented
+        aria-label={t('config.wizards.wizardFields.tier')}
+        value={String(value) as '0' | '1' | '2'}
+        onValueChange={(v) => onChange(Number(v) as TierNum)}
+        options={allowed.map((tt) => ({ value: String(tt) as '0' | '1' | '2', label: t('config.wizards.wizardFields.tierTt', { tt }), icon: <TierDot tier={tt} /> }))}
+      />
+    </div>
+  )
+}
+
+export function RightsChips({ rights, className }: { rights: string[]; className?: string }) {
+  return (
+    <span className={cn('flex flex-wrap gap-1', className)}>
+      {rights.map((r) => (
+        <span key={r} className="inline-flex items-center gap-1.5 rounded-md border bg-card px-1.5 py-0.5 text-[11.5px]" title={r}>
+          {RIGHT_LABELS[r] ?? r}
+          <span className="font-mono text-[10.5px] text-muted-foreground">{r}</span>
+        </span>
+      ))}
+    </span>
+  )
+}
+
+/** One ACL entry as a compact, readable line: object type · inheritance, then rights chips. */
+export function AclTemplateLine({ t: tt, allow = true }: { t: AclTemplate; allow?: boolean }) {
+  return (
+    <div className="grid gap-1.5">
+      <p className="text-[12px] text-muted-foreground">
+        <span className={cn('font-medium', allow ? 'text-foreground' : 'text-destructive')}>{allow ? t('config.wizards.wizardFields.allow') : t('config.wizards.wizardFields.deny')}</span> {t('config.wizards.wizardFields.on')}{' '}
+        <span className="font-medium text-foreground">{objectTypeText(tt.objecttype)}</span>
+        {tt.inheritedObjectType && <> {t('config.wizards.wizardFields.only')} {objectTypeText(tt.inheritedObjectType)})</>} · {INHERITANCE_LABELS[tt.activeDirectorysecurityinheritance] ?? tt.activeDirectorysecurityinheritance}
+      </p>
+      <RightsChips rights={tt.activedirectoryrights} />
+    </div>
+  )
+}
+
+export function RadioCards({
+  value,
+  onChange,
+  options,
+  label,
+}: {
+  value: string
+  onChange: (v: string) => void
+  label: string
+  options: { value: string; title: string; description?: string; extra?: React.ReactNode }[]
+}) {
+  return (
+    <RadioGroup.Root value={value} onValueChange={onChange} aria-label={label} className="grid gap-2">
+      {options.map((o) => (
+        <RadioGroup.Item
+          key={o.value}
+          value={o.value}
+          className="group grid gap-2 rounded-lg border bg-card px-3.5 py-3 text-left transition-colors outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring data-[state=checked]:border-primary/50 data-[state=checked]:bg-primary/5"
+        >
+          <span className="flex items-start gap-3">
+            <span className="mt-0.5 grid size-4 shrink-0 place-content-center rounded-full border border-input bg-card group-data-[state=checked]:border-primary">
+              <RadioGroup.Indicator className="size-2 rounded-full bg-primary" />
+            </span>
+            <span className="grid min-w-0 gap-0.5">
+              <span className="text-[13px] font-medium">{o.title}</span>
+              {o.description && <span className="text-xs text-muted-foreground">{o.description}</span>}
+            </span>
+          </span>
+          {o.extra && <span className="grid gap-2 pl-7">{o.extra}</span>}
+        </RadioGroup.Item>
+      ))}
+    </RadioGroup.Root>
+  )
+}
+
+/** Preview box for a distinguished name (shortened, with tier badge slot). */
+export function DnPreview({ label, dn, badge }: { label: string; dn: string; badge?: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-dashed bg-muted/30 px-3 py-2.5">
+      <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
+      <div className="mt-1 flex items-center gap-2">
+        <p className="min-w-0 flex-1 font-mono text-[12px] break-all">{dn || '–'}</p>
+        {badge}
+      </div>
+    </div>
+  )
+}
+
+export function Callout({ tone = 'warning', children }: { tone?: 'warning' | 'info'; children: React.ReactNode }) {
+  return (
+    <div
+      className={cn(
+        'flex gap-3 rounded-xl border px-4 py-3 text-[13px]',
+        tone === 'warning' ? 'border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200' : 'border-sky-500/30 bg-sky-500/10 text-sky-900 dark:text-sky-200',
+      )}
+      role="note"
+    >
+      <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+      <div className="min-w-0">{children}</div>
+    </div>
+  )
+}
+
+export const shortDn = (dn: string) => (dn === '{{DOMAIN_DN}}' ? t('config.wizards.wizardFields.domainRoot') : dn.replace(/,\{\{DOMAIN_DN\}\}$/, ''))
+
+/** Keeps wide children (chips of a MultiCombobox, long DNs) inside the column instead of widening the dialog. */
+export function Contained({ children }: { children: React.ReactNode }) {
+  return <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] [&>div]:min-w-0 [&>div]:grid-cols-[minmax(0,1fr)]">{children}</div>
+}

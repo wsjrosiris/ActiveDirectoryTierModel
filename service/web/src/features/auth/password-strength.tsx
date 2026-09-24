@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { t } from '@/i18n'
 
 export function scorePassword(pw: string): number {
   if (!pw) return 0
@@ -13,7 +14,7 @@ export function scorePassword(pw: string): number {
   return Math.min(4, score)
 }
 
-const labels = ['Sehr schwach', 'Schwach', 'Mittel', 'Stark', 'Sehr stark']
+const labels = [t('auth.passwordStrength.veryWeak'), t('auth.passwordStrength.weak'), t('auth.passwordStrength.medium'), t('auth.passwordStrength.strong'), t('auth.passwordStrength.veryStrong')]
 const colors = ['bg-rose-500', 'bg-rose-500', 'bg-amber-500', 'bg-emerald-500', 'bg-emerald-500']
 
 export function PasswordStrength({ password }: { password: string }) {
@@ -27,9 +28,9 @@ export function PasswordStrength({ password }: { password: string }) {
       </div>
       <p className="text-xs text-muted-foreground">
         {password ? (
-          <>Passwortstärke: <span className="font-medium text-foreground">{labels[s]}</span></>
+          <>{t('auth.passwordStrength.passwordStrength')} <span className="font-medium text-foreground">{labels[s]}</span></>
         ) : (
-          'Mindestens 12 Zeichen. Tipp: Eine Passphrase aus mehreren Wörtern ist sicher und merkbar.'
+          t('auth.passwordStrength.atLeast12CharactersTip')
         )}
       </p>
     </div>

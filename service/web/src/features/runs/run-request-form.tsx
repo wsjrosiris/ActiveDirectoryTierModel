@@ -10,17 +10,19 @@ import { Switch } from '@/components/ui/switch'
 import { scopeLabels, scopes } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 import { languageError, useDomainControllerOptions, useLanguageOptions } from '@/features/config/lookups'
+import { t } from '@/i18n'
 
 export const settingsQuery = { queryKey: ['settings'], queryFn: api.settings.get, staleTime: 5 * 60_000 }
 
 const scopeDescriptions: Record<Scope, string> = {
-  FullDeployment: 'OUs, Gruppen, Benutzer, ACLs, GPOs und ADMX',
-  OuOnly: 'Nur die OU-Struktur',
-  GroupOnly: 'Nur Sicherheitsgruppen',
-  UserOnly: 'Nur Dienstkonten',
-  GposOnly: 'Nur Gruppenrichtlinien',
-  OuAclsOnly: 'Nur OU-Berechtigungen',
-  AdmxOnly: 'Nur ADMX/ADML-Vorlagen',
+  FullDeployment: t('runs.runRequestForm.ousGroupsUsersAclsGpos'),
+  OuOnly: t('runs.runRequestForm.onlyTheOuStructure'),
+  GroupOnly: t('runs.runRequestForm.onlySecurityGroups'),
+  UserOnly: t('runs.runRequestForm.onlyServiceAccounts'),
+  GposOnly: t('runs.runRequestForm.onlyGroupPolicies'),
+  OuAclsOnly: t('runs.runRequestForm.onlyOuPermissions'),
+  AdmxOnly: t('runs.runRequestForm.onlyAdmxAdmlTemplates'),
+  AuthSilosOnly: t('runs.runRequestForm.authenticationPoliciesSilosAndDevice'),
 }
 
 export function emptyRunRequest(): RunRequest {
@@ -32,10 +34,10 @@ export function hasInclude(r: RunRequest) {
 }
 
 export function runRequestError(r: RunRequest): string | null {
-  if (!r.preferredDc.trim()) return 'Bitte einen Domain Controller angeben.'
-  if (r.admlLanguage && languageError(r.admlLanguage)) return 'Die ADML-Sprache hat ein ungültiges Format (z. B. en-US).'
-  if (r.scope === null && !hasInclude(r)) return 'Ohne Bereich muss mindestens ein Add-on aktiviert sein.'
-  if (!includesAllowed(r.scope) && hasInclude(r)) return 'Add-ons sind nur mit „Vollständig“ oder „Kein Bereich“ möglich.'
+  if (!r.preferredDc.trim()) return t('runs.runRequestForm.pleaseEnterADomainController')
+  if (r.admlLanguage && languageError(r.admlLanguage)) return t('runs.runRequestForm.theAdmlLanguageHasAn')
+  if (r.scope === null && !hasInclude(r)) return t('runs.runRequestForm.withoutAScopeAtLeast')
+  if (!includesAllowed(r.scope) && hasInclude(r)) return t('runs.runRequestForm.addOnsAreOnlyPossible')
   return null
 }
 
@@ -79,15 +81,15 @@ export function RunRequestFields({
   const languageOptions = useLanguageOptions()
   const set = <K extends keyof RunRequest>(k: K, v: RunRequest[K]) => onChange({ ...value, [k]: v })
   const includes: { key: 'includeMsa' | 'includeGmsa' | 'includeDmsa' | 'includeWinLaps'; label: string; hint: string }[] = [
-    { key: 'includeMsa', label: 'MSA', hint: 'Managed Service Accounts' },
-    { key: 'includeGmsa', label: 'gMSA', hint: 'Group Managed Service Accounts' },
-    { key: 'includeDmsa', label: 'dMSA', hint: 'Delegated MSA (Server 2025)' },
-    { key: 'includeWinLaps', label: 'Windows LAPS', hint: 'LAPS-Delegationen & Decryptor-GPOs' },
+    { key: 'includeMsa', label: 'MSA', hint: t('runs.runRequestForm.managedServiceAccounts') },
+    { key: 'includeGmsa', label: 'gMSA', hint: t('runs.runRequestForm.groupManagedServiceAccounts') },
+    { key: 'includeDmsa', label: 'dMSA', hint: t('runs.runRequestForm.delegatedMsaServer2025') },
+    { key: 'includeWinLaps', label: 'Windows LAPS', hint: t('runs.runRequestForm.lapsDelegationsDecryptorGpos') },
   ]
   return (
     <fieldset disabled={disabled} className="grid min-w-0 gap-6">
       <div className={cn('grid gap-4', !compact && 'sm:grid-cols-2')}>
-        <Field label="Domain Controller" htmlFor={`${idPrefix}-dc`} required hint={settings ? `Standard: ${settings.defaultPreferredDc || '–'}` : undefined}>
+        <Field label={t('runs.runRequestForm.domainController')} htmlFor={`${idPrefix}-dc`} required hint={settings ? t('runs.runRequestForm.defaultValue', { value: settings.defaultPreferredDc || '–' }) : undefined}>
           <Combobox
             id={`${idPrefix}-dc`}
             mono
@@ -95,12 +97,12 @@ export function RunRequestFields({
             onChange={(v) => set('preferredDc', v)}
             options={dcOptions}
             placeholder="dc01.contoso.local"
-            searchPlaceholder="DC suchen oder FQDN eingeben …"
-            emptyText="Keine Domain Controller gefunden – FQDN eingeben"
+            searchPlaceholder={t('runs.runRequestForm.searchDcOrEnterFqdn')}
+            emptyText={t('runs.runRequestForm.noDomainControllersFoundEnter')}
             disabled={disabled}
           />
         </Field>
-        <Field label="ADML-Sprache" htmlFor={`${idPrefix}-lang`} error={languageError(value.admlLanguage ?? '') ?? undefined} hint={`Leer = Standard aus den Einstellungen (${settings?.admlLanguage || 'en-US'})`}>
+        <Field label={t('runs.runRequestForm.admlLanguage')} htmlFor={`${idPrefix}-lang`} error={languageError(value.admlLanguage ?? '') ?? undefined} hint={t('runs.runRequestForm.emptyDefaultFromTheSettings', { value: settings?.admlLanguage || 'en-US' })}>
           <div className="flex gap-1.5">
             <Combobox
               id={`${idPrefix}-lang`}
@@ -108,13 +110,13 @@ export function RunRequestFields({
               value={value.admlLanguage ?? ''}
               onChange={(v) => set('admlLanguage', v || undefined)}
               options={languageOptions}
-              placeholder={`Standard (${settings?.admlLanguage || 'en-US'})`}
-              searchPlaceholder="Sprache suchen, z. B. de-DE …"
+              placeholder={t('runs.runRequestForm.defaultValue2', { value: settings?.admlLanguage || 'en-US' })}
+              searchPlaceholder={t('runs.runRequestForm.searchLanguageEGDe')}
               validateCustom={languageError}
               disabled={disabled}
             />
             {value.admlLanguage && !disabled && (
-              <Button type="button" variant="ghost" size="icon" aria-label="Auf Standard zurücksetzen" onClick={() => set('admlLanguage', undefined)}>
+              <Button type="button" variant="ghost" size="icon" aria-label={t('runs.runRequestForm.resetToDefault')} onClick={() => set('admlLanguage', undefined)}>
                 <RotateCcw />
               </Button>
             )}
@@ -123,8 +125,8 @@ export function RunRequestFields({
       </div>
 
       <div className="grid gap-2">
-        <p className="text-[13px] font-medium">Bereich</p>
-        <div role="radiogroup" aria-label="Bereich" className={cn('grid gap-2', compact ? 'sm:grid-cols-2' : 'sm:grid-cols-2 2xl:grid-cols-4')}>
+        <p className="text-[13px] font-medium">{t('runs.runRequestForm.scope')}</p>
+        <div role="radiogroup" aria-label={t('runs.runRequestForm.scope')} className={cn('grid gap-2', compact ? 'sm:grid-cols-2' : 'sm:grid-cols-2 2xl:grid-cols-4')}>
           {[...scopes, null].map((s) => {
             const checked = value.scope === s
             const isNone = s === null
@@ -152,8 +154,8 @@ export function RunRequestFields({
                   {checked && <span className="size-1.5 rounded-full bg-primary-foreground" />}
                 </span>
                 <span className="grid gap-0.5">
-                  <span className="text-[13px] font-medium">{isNone ? 'Kein Bereich' : scopeLabels[s]}</span>
-                  <span className="text-xs text-muted-foreground">{isNone ? 'Nur die gewählten Add-ons' : scopeDescriptions[s]}</span>
+                  <span className="text-[13px] font-medium">{isNone ? t('runs.runRequestForm.noScope') : scopeLabels[s]}</span>
+                  <span className="text-xs text-muted-foreground">{isNone ? t('runs.runRequestForm.onlyTheSelectedAddOns') : scopeDescriptions[s]}</span>
                 </span>
               </button>
             )
@@ -162,9 +164,9 @@ export function RunRequestFields({
       </div>
 
       <div className="grid gap-2">
-        <p className="text-[13px] font-medium">Add-ons</p>
+        <p className="text-[13px] font-medium">{t('runs.runRequestForm.addOns')}</p>
         {!includesAllowed(value.scope) && (
-          <p className="text-xs text-muted-foreground">Add-ons sind nur mit „Vollständig“ oder „Kein Bereich“ möglich.</p>
+          <p className="text-xs text-muted-foreground">{t('runs.runRequestForm.addOnsAreOnlyPossible')}</p>
         )}
         <div className={cn('grid gap-2', compact ? 'sm:grid-cols-2' : 'sm:grid-cols-2 2xl:grid-cols-4')}>
           {includes.map((i) => (

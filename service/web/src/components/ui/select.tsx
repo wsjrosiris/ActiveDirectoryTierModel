@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Select as S } from 'radix-ui'
 import { Check, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { t } from '@/i18n'
 
 export interface SelectOption {
   value: string
@@ -14,7 +15,7 @@ export function Select({
   value,
   onValueChange,
   options,
-  placeholder = 'Auswählen…',
+  placeholder = t('ui.select.select'),
   disabled,
   id,
   className,

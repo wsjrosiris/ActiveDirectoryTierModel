@@ -18,8 +18,8 @@ export const tierMeta = {
 
 export type TierFilter = 'all' | '0' | '1' | '2' | 'none'
 
-export function matchesTierFilter(t: Tier, f: TierFilter) {
+export function matchesTierFilter(tt: Tier, f: TierFilter) {
   if (f === 'all') return true
-  if (f === 'none') return t === null || t === 'admin'
-  return t === Number(f)
+  if (f === 'none') return tt === null || tt === 'admin'
+  return tt === Number(f)
 }

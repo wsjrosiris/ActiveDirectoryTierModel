@@ -5,13 +5,19 @@ import { api } from '@/api/client'
 import type { Role, User } from '@/api/types'
 import { hasRole } from '@/lib/roles'
 import { FullPageSpinner } from '@/components/layout/full-page-spinner'
+import { applyPreference, preferenceOf } from '@/i18n/language'
 
 export const meQueryKey = ['auth', 'me'] as const
 
 export function useMe() {
   return useQuery({
     queryKey: meQueryKey,
-    queryFn: () => api.auth.me(),
+    queryFn: async () => {
+      const r = await api.auth.me()
+      // Follow the user's language (server-side, per user); reloads once if it differs from the active one.
+      if (r.user) applyPreference(preferenceOf(r.user.language))
+      return r
+    },
     staleTime: 5 * 60_000,
     retry: false,
   })

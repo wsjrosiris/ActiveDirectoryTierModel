@@ -33,11 +33,12 @@ import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHea
 import { Skeleton } from '@/components/ui/skeleton'
 import { SortableTH, Table, TBody, TD, TH, THead, TR, type SortDir } from '@/components/ui/table'
 import { Tooltip } from '@/components/ui/tooltip'
-import { cn, formatNumber } from '@/lib/utils'
+import { cn, formatNumber, modKey } from '@/lib/utils'
 import type { EditorProps } from './editors'
 import { FormSection } from './form-helpers'
 import { useTemplateFiles } from './lookups'
 import { mergeSubset, ObjectFields } from './object-form'
+import { currentLocale, t } from '@/i18n'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = any
@@ -53,9 +54,9 @@ export function urlError(v: string): string | null {
   if (!v.trim()) return null
   try {
     const u = new URL(v.trim())
-    return u.protocol === 'https:' || u.protocol === 'http:' ? null : 'Der Link muss mit https:// beginnen.'
+    return u.protocol === 'https:' || u.protocol === 'http:' ? null : t('config.admxEditor.theLinkMustStartWith')
   } catch {
-    return 'Bitte eine vollständige Adresse angeben (https://…).'
+    return t('config.admxEditor.pleaseEnterACompleteAddress')
   }
 }
 
@@ -68,15 +69,15 @@ export function formatDay(v: string | undefined | null) {
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toLocaleString('de-DE', { maximumFractionDigits: 1 })} KB`
-  return `${(bytes / 1024 / 1024).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MB`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toLocaleString(currentLocale(), { maximumFractionDigits: 1 })} KB`
+  return `${(bytes / 1024 / 1024).toLocaleString(currentLocale(), { maximumFractionDigits: 1 })} MB`
 }
 
 const statusMeta: Record<Status, { label: string; variant: 'success' | 'warning' | 'danger' | 'muted'; icon: React.ReactNode; hint: string }> = {
-  ok: { label: 'aktuell', variant: 'success', icon: <CheckCircle2 />, hint: 'Der konfigurierte Hash stimmt mit der Datei überein.' },
-  mismatch: { label: 'abweichend', variant: 'warning', icon: <AlertTriangle />, hint: 'Die Datei wurde seit der letzten Hash-Berechnung verändert.' },
-  missing: { label: 'Datei fehlt', variant: 'danger', icon: <FileX2 />, hint: 'Die Datei liegt nicht im Vorlagenordner des Servers.' },
-  unknown: { label: 'unbekannt', variant: 'muted', icon: null, hint: 'Vorlagendateien konnten nicht gelesen werden.' },
+  ok: { label: t('config.admxEditor.statusOk'), variant: 'success', icon: <CheckCircle2 />, hint: t('config.admxEditor.theConfiguredHashMatchesThe') },
+  mismatch: { label: t('config.admxEditor.statusMismatch'), variant: 'warning', icon: <AlertTriangle />, hint: t('config.admxEditor.theFileHasChangedSince') },
+  missing: { label: t('config.admxEditor.fileMissing'), variant: 'danger', icon: <FileX2 />, hint: t('config.admxEditor.theFileIsNotIn') },
+  unknown: { label: t('config.admxEditor.statusUnknown'), variant: 'muted', icon: null, hint: t('config.admxEditor.templateFilesCouldNotBe') },
 }
 
 export function AdmxEditor({ sectionKey, content, setContent, readOnly }: EditorProps) {
@@ -129,7 +130,7 @@ export function AdmxEditor({ sectionKey, content, setContent, readOnly }: Editor
     () =>
       (actual ?? [])
         .filter((f) => !names.some((n) => n.toLowerCase() === f.name.toLowerCase()))
-        .map((f) => ({ value: f.name, hint: `${formatSize(f.size)} · geändert ${formatDay(f.modified)}`, icon: <FileCode2 className="size-4 text-muted-foreground" /> })),
+        .map((f) => ({ value: f.name, hint: t('config.admxEditor.sizeModifiedModified', { size: formatSize(f.size), modified: formatDay(f.modified) }), icon: <FileCode2 className="size-4 text-muted-foreground" /> })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [actual, names.join('|')],
   )
@@ -145,14 +146,14 @@ export function AdmxEditor({ sectionKey, content, setContent, readOnly }: Editor
       [f.name]: { comment: sample?.comment ?? '', hashDate: todayIso(), downloadLink: sample?.downloadLink ?? '', hash: f.md5 },
     })
     setEditing(f.name)
-    toast.success(`${f.name} hinzugefügt`, { description: 'Hash und Hash-Datum wurden aus der Datei übernommen.' })
+    toast.success(t('config.admxEditor.nameAdded', { name: f.name }), { description: t('config.admxEditor.hashAndHashDateWere') })
   }
 
   const takeHash = (name: string) => {
     const f = actualByName.get(name.toLowerCase())
     if (!f) return
     setFile(name, { ...files[name], hash: f.md5, hashDate: todayIso() })
-    toast.success('Hash übernommen', { description: name })
+    toast.success(t('config.admxEditor.hashTakenOver'), { description: name })
   }
 
   const takeAll = () => {
@@ -164,14 +165,14 @@ export function AdmxEditor({ sectionKey, content, setContent, readOnly }: Editor
         n++
       }
     setFiles(next)
-    toast.success(`${n} Hashes übernommen`)
+    toast.success(t('config.admxEditor.nHashesTakenOver', { n, count: n }))
   }
 
   const remove = async (name: string) => {
     const ok = await confirm({
-      title: 'Datei entfernen?',
-      description: `${name} wird aus der Konfiguration entfernt (die Datei selbst bleibt erhalten). Rückgängig mit Strg+Z.`,
-      confirmText: 'Entfernen',
+      title: t('config.admxEditor.removeFile'),
+      description: t('config.admxEditor.removeDescription', { name, key: `${modKey}+Z` }),
+      confirmText: t('common.remove'),
       destructive: true,
     })
     if (!ok) return
@@ -190,34 +191,34 @@ export function AdmxEditor({ sectionKey, content, setContent, readOnly }: Editor
     <div className="grid gap-4">
       <Card className="p-5">
         <fieldset disabled={readOnly} className="grid min-w-0 gap-5">
-          <FormSection title="Allgemein">
+          <FormSection title={t('config.admxEditor.general')}>
             <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_200px]">
-              <Field label="Version" htmlFor="ax-version">
+              <Field label={t('config.admxEditor.version')} htmlFor="ax-version">
                 <Input id="ax-version" className="font-mono" value={root.version ?? ''} onChange={(e) => setRoot('version', e.target.value, 'ax-version')} placeholder="2.0.0" />
               </Field>
-              <Field label="Zuletzt aktualisiert" htmlFor="ax-updated">
+              <Field label={t('config.admxEditor.lastUpdated')} htmlFor="ax-updated">
                 <Input id="ax-updated" type="date" value={root.lastUpdated ?? ''} onChange={(e) => setRoot('lastUpdated', e.target.value, 'ax-updated')} />
               </Field>
             </div>
-            <Field label="Kommentar" htmlFor="ax-comment">
+            <Field label={t('config.admxEditor.comment')} htmlFor="ax-comment">
               <Textarea id="ax-comment" rows={2} value={root.comment ?? ''} onChange={(e) => setRoot('comment', e.target.value, 'ax-comment')} />
             </Field>
           </FormSection>
           <FormSection
-            title={isAdml ? `Pfade der ADML-Dateien (${lang})` : 'Pfade der ADMX-Dateien'}
-            description="Platzhalter wie {{DOMAIN_FQDN}} werden beim Deploy durch die Werte der Zieldomäne ersetzt."
+            title={isAdml ? t('config.admxEditor.pathsOfTheAdmlFiles', { lang }) : t('config.admxEditor.pathsOfTheAdmxFiles')}
+            description={t('config.admxEditor.placeholdersSuchAsDomainFqdn')}
           >
-            <Field label="Zielpfad" htmlFor="ax-dest" hint={<>Central Store im SYSVOL, z. B. <span className="font-mono">\\{'{{DOMAIN_FQDN}}'}\SYSVOL\{'{{DOMAIN_FQDN}}'}\Policies\PolicyDefinitions{isAdml ? `\\${lang}` : ''}</span></>}>
+            <Field label={t('config.admxEditor.targetPath')} htmlFor="ax-dest" hint={<>{t('config.admxEditor.centralStoreInSysvolE')} <span className="font-mono">\\{'{{DOMAIN_FQDN}}'}\SYSVOL\{'{{DOMAIN_FQDN}}'}\Policies\PolicyDefinitions{isAdml ? `\\${lang}` : ''}</span></>}>
               <Input id="ax-dest" className="font-mono text-[13px]" value={block.destinationPath ?? ''} onChange={(e) => setBlock('destinationPath', e.target.value, 'ax-dest')} />
             </Field>
-            <Field label="Quellpfad" htmlFor="ax-src" hint="Relativ zum Framework-Verzeichnis, z. B. config\admx">
+            <Field label={t('config.admxEditor.sourcePath')} htmlFor="ax-src" hint={t('config.admxEditor.relativeToTheFrameworkDirectory')}>
               <Input id="ax-src" className="font-mono text-[13px]" value={block.sourcePath ?? ''} onChange={(e) => setBlock('sourcePath', e.target.value, 'ax-src')} />
             </Field>
           </FormSection>
         </fieldset>
         {(Object.keys(extraRoot).length > 0 || Object.keys(extraBlock).length > 0) && (
           <div className="mt-5 grid gap-4 border-t pt-5">
-            <h3 className="text-[13px] font-semibold">Weitere Felder</h3>
+            <h3 className="text-[13px] font-semibold">{t('config.admxEditor.moreFields')}</h3>
             {Object.keys(extraRoot).length > 0 && (
               <ObjectFields value={extraRoot} readOnly={readOnly} depth={1} idPrefix="ax-extra" onChange={(x) => setContent(mergeSubset(root, extraRoot, x))} />
             )}
@@ -231,9 +232,9 @@ export function AdmxEditor({ sectionKey, content, setContent, readOnly }: Editor
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-full max-w-xs">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Dateien filtern …" className="h-8 pr-8 pl-8 text-[13px]" aria-label="Dateien filtern" />
+          <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('config.admxEditor.filterFiles')} className="h-8 pr-8 pl-8 text-[13px]" aria-label={t('config.admxEditor.filterFiles2')} />
           {filter && (
-            <button type="button" onClick={() => setFilter('')} className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground" aria-label="Filter leeren">
+            <button type="button" onClick={() => setFilter('')} className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground" aria-label={t('config.admxEditor.clearFilter')}>
               <X className="size-3.5" />
             </button>
           )}
@@ -254,7 +255,7 @@ export function AdmxEditor({ sectionKey, content, setContent, readOnly }: Editor
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {!readOnly && !!counts.mismatch && (
             <Button size="sm" variant="outline" onClick={takeAll}>
-              <RefreshCw /> Alle Hashes übernehmen
+              <RefreshCw /> {t('config.admxEditor.takeOverAllHashes')}
             </Button>
           )}
           {!readOnly && (
@@ -264,9 +265,9 @@ export function AdmxEditor({ sectionKey, content, setContent, readOnly }: Editor
                 onChange={addFile}
                 options={addOptions}
                 allowCustom={false}
-                placeholder="Datei hinzufügen …"
-                searchPlaceholder={`${ext.slice(1).toUpperCase()}-Datei suchen …`}
-                emptyText={templates.isLoading ? 'Lädt …' : actual ? `Alle ${ext}-Dateien sind bereits konfiguriert` : 'Vorlagenordner nicht lesbar'}
+                placeholder={t('config.admxEditor.addFile')}
+                searchPlaceholder={t('config.admxEditor.searchTouppercaseFile', { toUpperCase: ext.slice(1).toUpperCase() })}
+                emptyText={templates.isLoading ? t('common.loading') : actual ? t('config.admxEditor.allExtFilesAreAlready', { ext }) : t('config.admxEditor.templateFolderNotReadable')}
               />
             </div>
           )}
@@ -275,18 +276,18 @@ export function AdmxEditor({ sectionKey, content, setContent, readOnly }: Editor
 
       <Card className="@container overflow-hidden">
         {rows.length === 0 ? (
-          <EmptyState compact icon={<FileCode2 />} title={names.length ? 'Keine Treffer' : 'Keine Dateien konfiguriert'} description={names.length ? 'Filter anpassen.' : `Fügen Sie ${ext}-Dateien aus dem Vorlagenordner hinzu.`} />
+          <EmptyState compact icon={<FileCode2 />} title={names.length ? t('common.noMatches') : t('config.admxEditor.noFilesConfigured')} description={names.length ? t('config.admxEditor.adjustTheFilter') : t('config.admxEditor.addExtFilesFromThe', { ext })} />
         ) : (
           <Table>
             <THead>
               <TR>
-                <SortableTH label="Datei" active={sort.id === 'name'} dir={sort.dir} onClick={() => toggleSort('name')} />
-                <SortableTH label="Kommentar" active={sort.id === 'comment'} dir={sort.dir} onClick={() => toggleSort('comment')} className="hidden @2xl:table-cell" />
-                <SortableTH label="Hash-Datum" active={sort.id === 'date'} dir={sort.dir} onClick={() => toggleSort('date')} className="hidden @xl:table-cell" />
-                <TH className="hidden @4xl:table-cell">Download-Link</TH>
-                <TH className="hidden @5xl:table-cell">Hash</TH>
-                <SortableTH label="Status" active={sort.id === 'status'} dir={sort.dir} onClick={() => toggleSort('status')} />
-                <TH className="w-10"><span className="sr-only">Aktionen</span></TH>
+                <SortableTH label={t('config.admxEditor.file')} active={sort.id === 'name'} dir={sort.dir} onClick={() => toggleSort('name')} />
+                <SortableTH label={t('config.admxEditor.comment')} active={sort.id === 'comment'} dir={sort.dir} onClick={() => toggleSort('comment')} className="hidden @2xl:table-cell" />
+                <SortableTH label={t('config.admxEditor.hashDate')} active={sort.id === 'date'} dir={sort.dir} onClick={() => toggleSort('date')} className="hidden @xl:table-cell" />
+                <TH className="hidden @4xl:table-cell">{t('config.admxEditor.downloadLink')}</TH>
+                <TH className="hidden @5xl:table-cell">{t('config.admxEditor.hash')}</TH>
+                <SortableTH label={t('common.status')} active={sort.id === 'status'} dir={sort.dir} onClick={() => toggleSort('status')} />
+                <TH className="w-10"><span className="sr-only">{t('common.actions')}</span></TH>
               </TR>
             </THead>
             <TBody>
@@ -313,12 +314,12 @@ export function AdmxEditor({ sectionKey, content, setContent, readOnly }: Editor
                     </TD>
                     <TD>
                       <div className="flex items-center gap-1.5 whitespace-nowrap">
-                        <Tooltip content={st === 'mismatch' ? `Datei: ${actualByName.get(name.toLowerCase())?.md5}` : statusMeta[st].hint}>
+                        <Tooltip content={st === 'mismatch' ? t('config.admxEditor.fileMd5', { md5: actualByName.get(name.toLowerCase())?.md5 }) : statusMeta[st].hint}>
                           <span><Badge variant={statusMeta[st].variant}>{statusMeta[st].icon} {statusMeta[st].label}</Badge></span>
                         </Tooltip>
                         {st === 'mismatch' && !readOnly && (
                           <Button type="button" size="xs" variant="outline" onClick={() => takeHash(name)}>
-                            <RefreshCw /> Hash übernehmen
+                            <RefreshCw /> {t('config.admxEditor.takeOverHash')}
                           </Button>
                         )}
                       </div>
@@ -326,17 +327,17 @@ export function AdmxEditor({ sectionKey, content, setContent, readOnly }: Editor
                     <TD className="w-10 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon-xs" className="text-muted-foreground opacity-60 group-hover:opacity-100" aria-label="Aktionen">
+                          <Button variant="ghost" size="icon-xs" className="text-muted-foreground opacity-60 group-hover:opacity-100" aria-label={t('common.actions')}>
                             <MoreHorizontal />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onSelect={() => setEditing(name)}><Pencil /> {readOnly ? 'Anzeigen' : 'Bearbeiten'}</DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setEditing(name)}><Pencil /> {readOnly ? t('config.admxEditor.view') : t('common.edit')}</DropdownMenuItem>
                           {!readOnly && (
                             <>
-                              {st === 'mismatch' && <DropdownMenuItem onSelect={() => takeHash(name)}><RefreshCw /> Hash übernehmen</DropdownMenuItem>}
+                              {st === 'mismatch' && <DropdownMenuItem onSelect={() => takeHash(name)}><RefreshCw /> {t('config.admxEditor.takeOverHash')}</DropdownMenuItem>}
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem destructive onSelect={() => remove(name)}><Trash2 /> Entfernen</DropdownMenuItem>
+                              <DropdownMenuItem destructive onSelect={() => remove(name)}><Trash2 /> {t('common.remove')}</DropdownMenuItem>
                             </>
                           )}
                         </DropdownMenuContent>
@@ -349,8 +350,8 @@ export function AdmxEditor({ sectionKey, content, setContent, readOnly }: Editor
           </Table>
         )}
         <div className="flex items-center justify-between border-t bg-muted/20 px-5 py-2 text-xs text-muted-foreground">
-          <span>{rows.length === names.length ? `${formatNumber(names.length)} Dateien` : `${formatNumber(rows.length)} von ${formatNumber(names.length)} Dateien`}</span>
-          {actual && <span>{formatNumber(actual.length)} {ext}-Dateien im Vorlagenordner</span>}
+          <span>{rows.length === names.length ? t('config.admxEditor.filesCount', { count: names.length, value: formatNumber(names.length) }) : t('config.admxEditor.filesFiltered', { shown: formatNumber(rows.length), total: formatNumber(names.length) })}</span>
+          {actual && <span>{t('config.admxEditor.filesInFolder', { count: actual.length, value: formatNumber(actual.length), ext })}</span>}
         </div>
       </Card>
 
@@ -408,27 +409,27 @@ function FileSheet({
             <SheetHeader>
               <SheetTitle className="flex items-center gap-2 font-mono text-[15px]"><FileCode2 className="size-4 text-muted-foreground" /> {name}</SheetTitle>
               <SheetDescription>
-                {actual ? `${formatSize(actual.size)} · geändert ${formatDay(actual.modified)}` : 'Die Datei liegt nicht im Vorlagenordner.'}
+                {actual ? t('config.admxEditor.sizeModifiedModified', { size: formatSize(actual.size), modified: formatDay(actual.modified) }) : t('config.admxEditor.theFileIsNotIn2')}
               </SheetDescription>
             </SheetHeader>
             <SheetBody>
               <fieldset disabled={readOnly} className="grid min-w-0 gap-5">
-                <Field label="Kommentar" htmlFor="af-comment" hint="z. B. Herkunft und Version des Vorlagenpakets">
+                <Field label={t('config.admxEditor.comment')} htmlFor="af-comment" hint={t('config.admxEditor.eGOriginAndVersion')}>
                   <Textarea id="af-comment" rows={2} value={draft.comment ?? ''} onChange={(e) => set('comment', e.target.value)} />
                 </Field>
                 <div className="grid gap-4 sm:grid-cols-[200px_minmax(0,1fr)]">
-                  <Field label="Hash-Datum" htmlFor="af-date">
+                  <Field label={t('config.admxEditor.hashDate')} htmlFor="af-date">
                     <Input id="af-date" type="date" value={draft.hashDate ?? ''} onChange={(e) => set('hashDate', e.target.value)} />
                   </Field>
-                  <Field label="Download-Link" htmlFor="af-link" error={linkErr ?? undefined}>
+                  <Field label={t('config.admxEditor.downloadLink')} htmlFor="af-link" error={linkErr ?? undefined}>
                     <Input id="af-link" type="url" inputMode="url" className="font-mono text-[13px]" value={draft.downloadLink ?? ''} onChange={(e) => set('downloadLink', e.target.value)} placeholder="https://www.microsoft.com/…" aria-invalid={!!linkErr || undefined} />
                   </Field>
                 </div>
                 <Field
-                  label="Hash (MD5)"
+                  label={t('config.admxEditor.hashMd5')}
                   htmlFor="af-hash"
                   hint={
-                    !actual ? 'Ohne Datei kann der Hash nicht berechnet werden.' : hashOk ? 'Stimmt mit der Datei überein.' : `Abweichend – aktueller Hash der Datei: ${actual.md5}`
+                    !actual ? t('config.admxEditor.withoutAFileTheHash') : hashOk ? t('config.admxEditor.matchesTheFile') : t('config.admxEditor.differentCurrentHashOfThe', { md5: actual.md5 })
                   }
                 >
                   <div className="flex gap-2">
@@ -439,7 +440,7 @@ function FileSheet({
                       disabled={!actual || readOnly}
                       onClick={() => actual && setDraft((d: Json) => ({ ...d, hash: actual.md5, hashDate: todayIso() }))}
                     >
-                      <RefreshCw /> Neu berechnen
+                      <RefreshCw /> {t('config.admxEditor.recalculate')}
                     </Button>
                   </div>
                 </Field>
@@ -447,11 +448,11 @@ function FileSheet({
             </SheetBody>
             <SheetFooter>
               {readOnly ? (
-                <Button type="button" variant="outline" onClick={onClose}>Schließen</Button>
+                <Button type="button" variant="outline" onClick={onClose}>{t('common.close')}</Button>
               ) : (
                 <>
-                  <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
-                  <Button type="submit" disabled={!changed || !!linkErr}>Übernehmen</Button>
+                  <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
+                  <Button type="submit" disabled={!changed || !!linkErr}>{t('config.admxEditor.apply')}</Button>
                 </>
               )}
             </SheetFooter>

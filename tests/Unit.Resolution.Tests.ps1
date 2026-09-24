@@ -900,6 +900,8 @@ Describe "Resolve-TierModelPrincipalSid" -Tag 'Unit', 'Resolution', 'PrincipalSi
         # Clear the module-level SID cache before each test
         InModuleScope TierModel {
             $script:SidCache = @{}
+            # Domain SIDs cached by the well-known RID resolution (Administrator = RID 500)
+            Clear-TierModelWellKnownPrincipalCache
         }
         Mock Write-TierModelLog { } -ModuleName TierModel
         Mock Write-Warning      { } -ModuleName TierModel
@@ -1041,31 +1043,31 @@ Describe "Resolve-TierModelPrincipalSid" -Tag 'Unit', 'Resolution', 'PrincipalSi
         }
 
         It "Should return Cached = false on first call" {
-            $result = Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com'
+            $result = Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com'
             $result.Cached | Should -BeFalse
         }
 
         It "Should return Cached = true on second call" {
-            $null = Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com'
-            $result = Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com'
+            $null = Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com'
+            $result = Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com'
             $result.Cached | Should -BeTrue
         }
 
         It "Should call AD resolution only once with cache enabled" {
-            $null = Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com'
-            $null = Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com'
+            $null = Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com'
+            $null = Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com'
             Should -Invoke Resolve-ADPrincipalSid -ModuleName TierModel -Times 1 -Exactly
         }
 
         It "Should bypass cache when UseCache = false" {
-            $null = Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com' -UseCache $false
-            $null = Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com' -UseCache $false
+            $null = Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com' -UseCache $false
+            $null = Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com' -UseCache $false
             Should -Invoke Resolve-ADPrincipalSid -ModuleName TierModel -Times 2 -Exactly
         }
 
         It "Should preserve SID value in cached result" {
-            $null = Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com'
-            $result = Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com'
+            $null = Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com'
+            $result = Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com'
             $result.Sid | Should -Be 'S-1-5-21-123-456-789-1001'
         }
 
@@ -1220,7 +1222,7 @@ Describe "Resolve-TierModelPrincipalSid" -Tag 'Unit', 'Resolution', 'PrincipalSi
         }
 
         It "Should resolve principal as ADGroup when user lookup fails" {
-            $result = Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com'
+            $result = Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com'
             $result.Success | Should -BeTrue
             $result.Source  | Should -Be 'ADGroup'
             $result.Sid     | Should -Be 'S-1-5-21-100-200-300-512'
@@ -1293,13 +1295,13 @@ Describe "Resolve-TierModelPrincipalSid" -Tag 'Unit', 'Resolution', 'PrincipalSi
         }
 
         It "Should return Failed when ActiveDirectory module is not available" {
-            $result = Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com'
+            $result = Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com'
             $result.Success | Should -BeFalse
             $result.Source  | Should -Be 'Failed'
         }
 
         It "Should include error information when AD module missing" {
-            $result = Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com'
+            $result = Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com'
             $result.Error | Should -Not -BeNullOrEmpty
         }
     }
@@ -1310,11 +1312,11 @@ Describe "Resolve-TierModelPrincipalSid" -Tag 'Unit', 'Resolution', 'PrincipalSi
     Context "Exception Handling" {
 
         It "Should return Exception source when Resolve-ADPrincipalSid throws" {
-            # "Domain Admins" is not well-known, so Get-WellKnownSid returns null naturally
-            # then Resolve-ADPrincipalSid is called and throws
+            # "Tier0Admins" is not a well-known principal (unlike "Domain Admins", which now
+            # resolves via its RID), so Resolve-ADPrincipalSid is called and throws
             Mock Resolve-ADPrincipalSid { throw 'Unexpected error in AD resolution' } -ModuleName TierModel
 
-            $result = Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com'
+            $result = Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com'
             $result.Success | Should -BeFalse
             $result.Source  | Should -Be 'Exception'
             $result.Sid     | Should -BeNullOrEmpty
@@ -1323,7 +1325,7 @@ Describe "Resolve-TierModelPrincipalSid" -Tag 'Unit', 'Resolution', 'PrincipalSi
         It "Should include exception message in Error property" {
             Mock Resolve-ADPrincipalSid { throw 'Unexpected error in AD resolution' } -ModuleName TierModel
 
-            $result = Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com'
+            $result = Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com'
             $result.Error | Should -Match 'Exception resolving SID'
         }
 
@@ -1362,7 +1364,7 @@ Describe "Resolve-TierModelPrincipalSid" -Tag 'Unit', 'Resolution', 'PrincipalSi
 
             Mock Resolve-ADPrincipalSid { return $adResult } -ModuleName TierModel
 
-            $result = Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com'
+            $result = Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com'
             $result.PSObject.Properties.Name | Should -Contain 'ActualName'
             $result.ActualName | Should -Be 'Root'
         }
@@ -1378,7 +1380,7 @@ Describe "Resolve-TierModelPrincipalSid" -Tag 'Unit', 'Resolution', 'PrincipalSi
                 }
             } -ModuleName TierModel
 
-            $result = Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com'
+            $result = Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com'
             $result.PSObject.Properties.Name | Should -Not -Contain 'ActualName'
         }
     }
@@ -1393,7 +1395,7 @@ Describe "Resolve-TierModelPrincipalSid" -Tag 'Unit', 'Resolution', 'PrincipalSi
                 return @{ Sid = 'S-1-1-0'; Source = 'ADUser'; Success = $true; Error = $null }
             } -ModuleName TierModel
 
-            { Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com' -CorrelationId 'my-test-id' } |
+            { Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com' -CorrelationId 'my-test-id' } |
                 Should -Not -Throw
         }
 
@@ -1402,7 +1404,7 @@ Describe "Resolve-TierModelPrincipalSid" -Tag 'Unit', 'Resolution', 'PrincipalSi
                 return @{ Sid = 'S-1-1-0'; Source = 'ADUser'; Success = $true; Error = $null }
             } -ModuleName TierModel
 
-            { Resolve-TierModelPrincipalSid -Principal 'Domain Admins' -DomainController 'dc01.contoso.com' } |
+            { Resolve-TierModelPrincipalSid -Principal 'Tier0Admins' -DomainController 'dc01.contoso.com' } |
                 Should -Not -Throw
         }
     }

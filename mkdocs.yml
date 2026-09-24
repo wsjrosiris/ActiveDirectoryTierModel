@@ -21,6 +21,8 @@ nav:
       - Sicherheit: service/sicherheit.md
       - Entwicklung: service/entwicklung.md
       - REST-API: service/api.md
+      - Roadmap: service/roadmap.md
+      - Testplan Windows: service/testplan-windows.md
   - Contributing: contributing.md
   - Quick Deployment Guide: quick-deployment-guide.md
   - Detailed Deployment Guide: detailed-deployment-guide.md
@@ -28,6 +30,9 @@ nav:
   - Conditional Principals: conditional-principals.md
   - Deployment Methodology: deployment-methodology.md
   - Drift Detection: drift-detection-details.md
+  - Privileged Access Monitoring: privileged-access-monitoring.md
+  - Just-in-Time Admin Access: jit-access.md
+  - Authentication Policies and Silos: authentication-silos.md
   - Cmdlet Architecture: cmdlet-architecture.md
   - CI/CD: ci-cd.md
   - GPO Management Strategy: gpo-management-strategy.md

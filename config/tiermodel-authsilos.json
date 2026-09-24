@@ -1,0 +1,100 @@
+{
+  "version": "1.0.0",
+  "comment": "Kerberos authentication policies, authentication policy silos and device group synchronisation for the Tier Model. Optional add-on - deployed by Deploy-TierModel.ps1 -AuthSilosOnly and as the last phase of -FullDeployment when this file has entries. Requires a domain functional level of Windows Server 2012 R2 or later. Keep enforce=false (audit mode) until the AuthenticationPolicyFailures event logs are clean. See docs/authentication-silos.md.",
+  "authenticationPolicies": [
+    {
+      "name": "Tier 0 Authentication Policy",
+      "description": "Tier 0 accounts may only sign in from domain controllers, Tier 0 PAW devices and Tier 0 member servers",
+      "enforce": false,
+      "userTgtLifetimeMins": 240,
+      "allowedToAuthenticateFrom": {
+        "includeDomainControllers": true,
+        "deviceGroups": [
+          "Tier0PAWDevices",
+          "Tier0MemberServers"
+        ]
+      },
+      "comment": "Replaces '*- Tier 0 Authentication Silo' of optional/TierModel-AuthSilos. Device condition: DC OR member of any device group."
+    },
+    {
+      "name": "Tier 1 Authentication Policy",
+      "description": "Tier 1 accounts may only sign in from Tier 1 PAW devices and Tier 1 member servers",
+      "enforce": false,
+      "userTgtLifetimeMins": 240,
+      "allowedToAuthenticateFrom": {
+        "includeDomainControllers": false,
+        "deviceGroups": [
+          "Tier1PAWDevices",
+          "Tier1MemberServers"
+        ]
+      },
+      "comment": "Replaces '*- Tier 1 Authentication Silo' of optional/TierModel-AuthSilos. Device condition: member of any device group."
+    }
+  ],
+  "authenticationPolicySilos": [
+    {
+      "name": "Tier 0 Authentication Silo",
+      "description": "Tier 0 administrative accounts",
+      "enforce": false,
+      "userAuthenticationPolicy": "Tier 0 Authentication Policy",
+      "computerAuthenticationPolicy": "",
+      "serviceAuthenticationPolicy": "",
+      "members": {
+        "userOUs": [
+          "OU=Tier 0 Accounts,OU=Tier 0,OU=Tier Model Administration,{{DOMAIN_DN}}"
+        ],
+        "computerGroups": [],
+        "computerOUs": [],
+        "excludeAccounts": []
+      },
+      "comment": "All users below the Tier 0 Accounts OU are permitted in and assigned to the silo. Service accounts (Tier 0 Service Accounts OU) are not included."
+    },
+    {
+      "name": "Tier 1 Authentication Silo",
+      "description": "Tier 1 administrative accounts",
+      "enforce": false,
+      "userAuthenticationPolicy": "Tier 1 Authentication Policy",
+      "computerAuthenticationPolicy": "",
+      "serviceAuthenticationPolicy": "",
+      "members": {
+        "userOUs": [
+          "OU=Tier 1 Accounts,OU=Tier 1,OU=Tier Model Administration,{{DOMAIN_DN}}"
+        ],
+        "computerGroups": [],
+        "computerOUs": [],
+        "excludeAccounts": []
+      },
+      "comment": "All users below the Tier 1 Accounts OU are permitted in and assigned to the silo. Service accounts (Tier 1 Service Accounts OU) are not included."
+    }
+  ],
+  "deviceGroupSync": [
+    {
+      "group": "Tier0PAWDevices",
+      "sourceOUs": [
+        "OU=Tier 0 PAW Devices,OU=Tier 0,OU=Tier Model Administration,{{DOMAIN_DN}}"
+      ],
+      "comment": "Replaces Update-Tier0PAWDevices.ps1"
+    },
+    {
+      "group": "Tier0MemberServers",
+      "sourceOUs": [
+        "OU=Tier 0 Member Servers,{{DOMAIN_DN}}"
+      ],
+      "comment": "Replaces Update-Tier0MemberServers.ps1"
+    },
+    {
+      "group": "Tier1PAWDevices",
+      "sourceOUs": [
+        "OU=Tier 1 PAW Devices,OU=Tier 1,OU=Tier Model Administration,{{DOMAIN_DN}}"
+      ],
+      "comment": "Replaces Update-Tier1PAWDevices.ps1"
+    },
+    {
+      "group": "Tier1MemberServers",
+      "sourceOUs": [
+        "OU=Tier 1 Member Servers,{{DOMAIN_DN}}"
+      ],
+      "comment": "Replaces Update-Tier1MemberServers.ps1"
+    }
+  ]
+}

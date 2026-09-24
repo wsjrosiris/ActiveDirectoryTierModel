@@ -10,6 +10,7 @@ import { fieldLabel } from '@/lib/field-labels'
 import { cn } from '@/lib/utils'
 import type { EditorProps } from './editors'
 import { isPlainObject, mergeSubset, ObjectFields } from './object-form'
+import { t } from '@/i18n'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = any
@@ -21,9 +22,9 @@ const LDAP_RE = /^[A-Za-z][A-Za-z0-9-]*$/
 const CATEGORIES = ['objectClasses', 'extendedRights', 'attributes']
 
 function valueError(mode: Mode, v: string, aliasTargets?: Set<string>): string | null {
-  if (mode === 'guid') return GUID_RE.test(v.trim()) ? null : 'GUID im Format xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
-  if (mode === 'resolve') return LDAP_RE.test(v.trim()) ? null : 'LDAP-Anzeigename, z. B. lockoutTime'
-  if (mode === 'alias') return !v.trim() ? 'Technischen Namen wählen' : aliasTargets && !aliasTargets.has(v.toLowerCase()) ? 'Unbekannter Name – nicht in den Zuordnungen' : null
+  if (mode === 'guid') return GUID_RE.test(v.trim()) ? null : t('config.guidEditor.guidInTheFormatXxxxxxxx')
+  if (mode === 'resolve') return LDAP_RE.test(v.trim()) ? null : t('config.guidEditor.ldapDisplayNameEG')
+  if (mode === 'alias') return !v.trim() ? t('config.guidEditor.selectTechnicalName') : aliasTargets && !aliasTargets.has(v.toLowerCase()) ? t('config.guidEditor.unknownNameNotInThe') : null
   return null
 }
 
@@ -31,11 +32,11 @@ function valueError(mode: Mode, v: string, aliasTargets?: Set<string>): string |
 function KeyInput({ value, onCommit, others, readOnly, label }: { value: string; onCommit: (v: string) => void; others: string[]; readOnly: boolean; label: string }) {
   const [text, setText] = React.useState(value)
   React.useEffect(() => setText(value), [value])
-  const t = text.trim()
-  const err = !t ? 'Name erforderlich' : t !== value && others.some((o) => o.toLowerCase() === t.toLowerCase()) ? 'Name bereits vorhanden' : null
+  const tt = text.trim()
+  const err = !tt ? t('config.guidEditor.nameRequired') : tt !== value && others.some((o) => o.toLowerCase() === tt.toLowerCase()) ? t('config.guidEditor.nameAlreadyPresent') : null
   const commit = () => {
     if (err) setText(value)
-    else if (t !== value) onCommit(t)
+    else if (tt !== value) onCommit(tt)
   }
   return (
     <div className="grid gap-1">
@@ -85,7 +86,7 @@ function ValueInput({
         disabled={readOnly}
         mono
         allowCustom={false}
-        placeholder="Technischen Namen wählen"
+        placeholder={t('config.guidEditor.selectTechnicalName')}
         invalid={!!valueError('alias', value, aliasTargets)}
       />
     )
@@ -96,7 +97,7 @@ function ValueInput({
     return (
       <div className="grid gap-1">
         <div className="flex items-center gap-2">
-          <Input aria-label={`${label} – LDAP-Name`} readOnly={readOnly} value={ldap} onChange={(e) => onChange(`{{resolve_guid:${e.target.value.trim()}}}`)} aria-invalid={!!err || undefined} className="h-8 font-mono text-[12.5px]" placeholder="lockoutTime" />
+          <Input aria-label={t('config.guidEditor.labelLdapName', { label })} readOnly={readOnly} value={ldap} onChange={(e) => onChange(`{{resolve_guid:${e.target.value.trim()}}}`)} aria-invalid={!!err || undefined} className="h-8 font-mono text-[12.5px]" placeholder="lockoutTime" />
         </div>
         <span className={cn('truncate font-mono text-[10.5px]', err ? 'text-destructive' : 'text-muted-foreground')} title={value}>
           {err ?? `→ {{resolve_guid:${ldap}}}`}
@@ -121,7 +122,7 @@ function MapTable({
   onChange,
   mode,
   readOnly,
-  keyHeader = 'Name',
+  keyHeader = t('common.name'),
   valueHeader,
   aliasOptions,
   aliasTargets,
@@ -144,7 +145,7 @@ function MapTable({
   const [newKey, setNewKey] = React.useState('')
   const [newVal, setNewVal] = React.useState('')
   const nk = newKey.trim()
-  const newKeyErr = nk && keys.some((k) => k.toLowerCase() === nk.toLowerCase()) ? 'Name bereits vorhanden' : null
+  const newKeyErr = nk && keys.some((k) => k.toLowerCase() === nk.toLowerCase()) ? t('config.guidEditor.nameAlreadyPresent') : null
   const newValErr = (newVal || mode === 'alias') && nk ? valueError(mode, newVal.trim(), aliasTargets) : null
   const canAdd = !!nk && !newKeyErr && !newValErr && (mode === 'text' || !!newVal.trim())
 
@@ -175,7 +176,7 @@ function MapTable({
         <Badge variant="muted" className="tabular">{entries.length}</Badge>
       </div>
       {typeof map.comment === 'string' && (
-        <Textarea aria-label={`${title} – Kommentar`} rows={1} readOnly={readOnly} value={map.comment} onChange={(e) => onChange({ ...map, comment: e.target.value }, `${title}-comment`)} className="min-h-9 text-[13px]" placeholder="Kommentar" />
+        <Textarea aria-label={t('config.guidEditor.titleComment', { title })} rows={1} readOnly={readOnly} value={map.comment} onChange={(e) => onChange({ ...map, comment: e.target.value }, `${title}-comment`)} className="min-h-9 text-[13px]" placeholder={t('config.guidEditor.comment')} />
       )}
       <div className="overflow-hidden rounded-lg border">
         <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_36px] gap-2 border-b bg-muted/40 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
@@ -184,13 +185,13 @@ function MapTable({
           <span />
         </div>
         <div className="divide-y">
-          {entries.length === 0 && <p className="px-3 py-3 text-xs text-muted-foreground">Keine Einträge.</p>}
+          {entries.length === 0 && <p className="px-3 py-3 text-xs text-muted-foreground">{t('config.guidEditor.noEntries')}</p>}
           {entries.map(([k, v], i) => (
             <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_36px] items-start gap-2 px-3 py-2">
               <KeyInput value={k} others={keys} readOnly={readOnly} label={`${keyHeader} ${k}`} onCommit={(to) => rename(k, to)} />
-              <ValueInput mode={mode} value={String(v ?? '')} readOnly={readOnly} aliasOptions={aliasOptions} aliasTargets={aliasTargets} label={`${valueHeader} für ${k}`} onChange={(x) => onChange({ ...map, [k]: x }, `${title}-${k}`)} />
+              <ValueInput mode={mode} value={String(v ?? '')} readOnly={readOnly} aliasOptions={aliasOptions} aliasTargets={aliasTargets} label={t('config.guidEditor.valueheaderForK', { valueHeader, k })} onChange={(x) => onChange({ ...map, [k]: x }, `${title}-${k}`)} />
               {!readOnly && (
-                <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground hover:text-destructive" onClick={() => remove(k)} aria-label={`${k} entfernen`}>
+                <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground hover:text-destructive" onClick={() => remove(k)} aria-label={t('config.guidEditor.removeK', { k })}>
                   <Trash2 />
                 </Button>
               )}
@@ -199,18 +200,18 @@ function MapTable({
           {!readOnly && (
             <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_36px] items-start gap-2 bg-muted/20 px-3 py-2">
               <div className="grid gap-1">
-                <Input aria-label={`Neuer ${keyHeader}`} value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder={`Neuer ${keyHeader} …`} className="h-8 font-mono text-[12.5px] placeholder:font-sans" onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), add())} aria-invalid={!!newKeyErr || undefined} />
+                <Input aria-label={t('config.guidEditor.newKeyheader', { keyHeader })} value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder={t('config.guidEditor.newKeyheader2', { keyHeader })} className="h-8 font-mono text-[12.5px] placeholder:font-sans" onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), add())} aria-invalid={!!newKeyErr || undefined} />
                 {newKeyErr && <span className="text-[11px] text-destructive">{newKeyErr}</span>}
               </div>
               <div className="grid gap-1">
                 {mode === 'alias' ? (
-                  <Combobox value={newVal} onChange={setNewVal} options={aliasOptions ?? []} mono allowCustom={false} placeholder="Technischen Namen wählen" />
+                  <Combobox value={newVal} onChange={setNewVal} options={aliasOptions ?? []} mono allowCustom={false} placeholder={t('config.guidEditor.selectTechnicalName')} />
                 ) : (
                   <Input
-                    aria-label={mode === 'resolve' ? 'LDAP-Name' : valueHeader}
+                    aria-label={mode === 'resolve' ? t('config.guidEditor.ldapName') : valueHeader}
                     value={newVal}
                     onChange={(e) => setNewVal(e.target.value)}
-                    placeholder={mode === 'guid' ? 'GUID' : mode === 'resolve' ? 'LDAP-Name, z. B. lockoutTime' : 'Wert (optional)'}
+                    placeholder={mode === 'guid' ? 'GUID' : mode === 'resolve' ? t('config.guidEditor.ldapNameEGLockouttime') : t('config.guidEditor.valueOptional')}
                     className="h-8 font-mono text-[12.5px] placeholder:font-sans"
                     onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), add())}
                     aria-invalid={!!newValErr || undefined}
@@ -222,7 +223,7 @@ function MapTable({
                   <span className="font-mono text-[10.5px] text-muted-foreground">→ {`{{resolve_guid:${newVal.trim()}}}`}</span>
                 ) : null}
               </div>
-              <Button type="button" variant="outline" size="icon-xs" disabled={!canAdd} onClick={add} aria-label="Eintrag hinzufügen">
+              <Button type="button" variant="outline" size="icon-xs" disabled={!canAdd} onClick={add} aria-label={t('config.guidEditor.addEntry')}>
                 <Plus />
               </Button>
             </div>
@@ -271,11 +272,11 @@ export function GuidMappingsEditor({ content, setContent, readOnly }: EditorProp
         </div>
         <p className="mb-4 text-xs text-muted-foreground">
           {isDynamic
-            ? 'Werden beim Deploy über das Schema der Zieldomäne aufgelöst – nur den LDAP-Namen angeben.'
-            : 'Feste Schema-GUIDs, in allen Gesamtstrukturen gleich.'}
+            ? t('config.guidEditor.resolvedViaTheTargetDomain')
+            : t('config.guidEditor.fixedSchemaGuidsIdenticalIn')}
         </p>
         <div className="grid gap-6">
-          <Field label="Kommentar" htmlFor={`gm-${kind}-comment`}>
+          <Field label={t('config.guidEditor.comment')} htmlFor={`gm-${kind}-comment`}>
             <Textarea id={`gm-${kind}-comment`} rows={1} readOnly={readOnly} className="min-h-9" value={b.comment ?? ''} onChange={(e) => setRoot(kind, { ...b, comment: e.target.value }, `gm-${kind}-comment`)} />
           </Field>
           <div className="grid gap-6 2xl:grid-cols-2">
@@ -287,7 +288,7 @@ export function GuidMappingsEditor({ content, setContent, readOnly }: EditorProp
                 icon={<Tag />}
                 map={b[cat]}
                 mode={isDynamic ? 'resolve' : 'guid'}
-                valueHeader={isDynamic ? 'LDAP-Name (wird aufgelöst)' : 'Schema-GUID'}
+                valueHeader={isDynamic ? t('config.guidEditor.ldapNameResolved') : t('config.guidEditor.schemaGuid')}
                 readOnly={readOnly}
                 onChange={(next, tag) => setRoot(kind, { ...b, [cat]: next }, tag && `gm-${kind}-${tag}`)}
               />
@@ -304,12 +305,12 @@ export function GuidMappingsEditor({ content, setContent, readOnly }: EditorProp
   return (
     <div className="grid gap-4">
       <Card className="p-5">
-        <h3 className="mb-4 text-[13px] font-semibold">Allgemein</h3>
+        <h3 className="mb-4 text-[13px] font-semibold">{t('config.guidEditor.general')}</h3>
         <div className="grid gap-4 sm:grid-cols-[200px_minmax(0,1fr)]">
-          <Field label="Version" htmlFor="gm-version">
+          <Field label={t('config.guidEditor.version')} htmlFor="gm-version">
             <Input id="gm-version" readOnly={readOnly} className="font-mono" value={root.version ?? ''} onChange={(e) => setRoot('version', e.target.value, 'gm-version')} />
           </Field>
-          <Field label="Kommentar" htmlFor="gm-comment">
+          <Field label={t('config.guidEditor.comment')} htmlFor="gm-comment">
             <Textarea id="gm-comment" rows={2} readOnly={readOnly} value={root.comment ?? ''} onChange={(e) => setRoot('comment', e.target.value, 'gm-comment')} />
           </Field>
         </div>
@@ -329,8 +330,8 @@ export function GuidMappingsEditor({ content, setContent, readOnly }: EditorProp
             icon={<Tag />}
             map={isPlainObject(root.specialValues) ? root.specialValues : {}}
             mode="text"
-            keyHeader="Name"
-            valueHeader="Wert"
+            keyHeader={t('common.name')}
+            valueHeader={t('config.guidEditor.value')}
             readOnly={readOnly}
             onChange={(next, tag) => setRoot('specialValues', next, tag && `gm-sv-${tag}`)}
           />
@@ -342,8 +343,8 @@ export function GuidMappingsEditor({ content, setContent, readOnly }: EditorProp
             icon={<ArrowRight />}
             map={isPlainObject(root.friendlyNameMappings) ? root.friendlyNameMappings : {}}
             mode="alias"
-            keyHeader="Alias"
-            valueHeader="Technischer Name"
+            keyHeader={t('config.guidEditor.alias')}
+            valueHeader={t('config.guidEditor.technicalName')}
             aliasOptions={technical}
             aliasTargets={technicalSet}
             readOnly={readOnly}

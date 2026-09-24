@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { meQueryKey, useLogout, useUser } from './auth'
 import { AuthShell } from './auth-shell'
 import { PasswordStrength } from './password-strength'
+import { t } from '@/i18n'
 
 export function Component() {
   const user = useUser()
@@ -33,23 +34,23 @@ export function Component() {
     meta: { silent: true },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: meQueryKey })
-      toast.success('Passwort geändert')
+      toast.success(t('auth.changePassword.passwordChanged'))
       navigate('/', { replace: true })
     },
   })
   const err = mutation.error instanceof ApiError ? mutation.error : null
 
   return (
-    <AuthShell footer={<span>Angemeldet als <span className="font-medium text-foreground">{user.username}</span></span>}>
+    <AuthShell footer={<span>{t('auth.changePassword.signedInAs')} <span className="font-medium text-foreground">{user.username}</span></span>}>
       <div className="mb-6 flex flex-col items-center text-center">
         <div className="mb-4 grid size-11 place-content-center rounded-xl border bg-primary/10 text-primary">
           <KeyRound className="size-5" />
         </div>
-        <h1 className="text-xl font-semibold tracking-tight">Passwort ändern</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{t('common.changePassword')}</h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
           {forced
-            ? 'Bevor Sie fortfahren können, müssen Sie ein neues Passwort festlegen.'
-            : 'Legen Sie ein neues Passwort für Ihr Konto fest.'}
+            ? t('auth.changePassword.beforeYouCanContinueYou')
+            : t('auth.changePassword.setANewPasswordFor')}
         </p>
       </div>
       <form
@@ -63,36 +64,36 @@ export function Component() {
         {err && (
           <div role="alert" className="flex items-start gap-2.5 rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2.5 text-[13px] text-destructive">
             <AlertCircle className="mt-0.5 size-4 shrink-0" />
-            <span>{err.status === 400 || err.status === 401 ? err.detail || 'Das aktuelle Passwort ist falsch oder das neue erfüllt die Richtlinie nicht.' : err.userMessage}</span>
+            <span>{err.status === 400 || err.status === 401 ? err.detail || t('auth.changePassword.theCurrentPasswordIsWrong') : err.userMessage}</span>
           </div>
         )}
-        <Field label="Aktuelles Passwort" htmlFor="cur">
+        <Field label={t('auth.changePassword.currentPassword')} htmlFor="cur">
           <Input id="cur" type="password" autoComplete="current-password" autoFocus value={current} onChange={(e) => setCurrent(e.target.value)} className="h-10" />
         </Field>
         <Field
-          label="Neues Passwort"
+          label={t('auth.changePassword.newPassword')}
           htmlFor="new"
-          error={(touched || next.length >= 12) && tooShort ? 'Mindestens 12 Zeichen erforderlich.' : sameAsOld ? 'Das neue Passwort muss sich vom aktuellen unterscheiden.' : undefined}
+          error={(touched || next.length >= 12) && tooShort ? t('auth.changePassword.atLeast12CharactersRequired') : sameAsOld ? t('auth.changePassword.theNewPasswordMustDiffer') : undefined}
         >
           <Input id="new" type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} className="h-10" aria-invalid={(touched && tooShort) || sameAsOld || undefined} />
         </Field>
         <PasswordStrength password={next} />
-        <Field label="Neues Passwort bestätigen" htmlFor="confirm" error={mismatch ? 'Die Passwörter stimmen nicht überein.' : undefined}>
+        <Field label={t('auth.changePassword.confirmNewPassword')} htmlFor="confirm" error={mismatch ? t('auth.changePassword.thePasswordsDoNotMatch') : undefined}>
           <div className="relative">
             <Input id="confirm" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="h-10 pr-9" aria-invalid={mismatch || undefined} />
             <Check className={cn('absolute top-1/2 right-3 size-4 -translate-y-1/2 text-emerald-500 transition-opacity', confirm && confirm === next && next.length >= 12 ? 'opacity-100' : 'opacity-0')} />
           </div>
         </Field>
         <Button type="submit" size="lg" className="mt-2 h-10 w-full" disabled={!valid} loading={mutation.isPending}>
-          Passwort speichern
+          {t('auth.changePassword.savePassword')}
         </Button>
         {forced ? (
           <Button type="button" variant="ghost" className="text-muted-foreground" onClick={() => logout()}>
-            <LogOut /> Abmelden
+            <LogOut /> {t('common.signOut')}
           </Button>
         ) : (
           <Button type="button" variant="ghost" className="text-muted-foreground" onClick={() => navigate(-1)}>
-            <ArrowLeft /> Zurück
+            <ArrowLeft /> {t('common.back')}
           </Button>
         )}
       </form>

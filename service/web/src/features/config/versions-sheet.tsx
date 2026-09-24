@@ -18,6 +18,7 @@ import { ChangeList } from './change-list'
 import { draftStore, useDraftState } from './draft-store'
 import { versionsQuery } from './queries'
 import { useAfterConfigChange } from './save-dialog'
+import { t } from '@/i18n'
 
 export function VersionsSheet({
   sectionKey,
@@ -57,7 +58,7 @@ export function VersionsSheet({
     onSuccess: (section) => {
       draftStore.saved(section)
       after(section)
-      toast.success(`Version ${selected} wiederhergestellt`, { description: `Neue Version ${section.version}` })
+      toast.success(t('config.versionsSheet.versionSelectedRestored', { selected }), { description: t('config.versionsSheet.newVersionVersion', { version: section.version }) })
       setRestoreOpen(false)
       setComment('')
       setSelected(null)
@@ -77,17 +78,17 @@ export function VersionsSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-[min(1200px,95vw)]">
         <SheetHeader>
-          <SheetTitle className="flex items-center gap-2"><History className="size-4" /> Versionen – {title}</SheetTitle>
-          <SheetDescription>Vergleichen Sie frühere Stände mit der aktuell gespeicherten Version (v{base?.version}).</SheetDescription>
+          <SheetTitle className="flex items-center gap-2"><History className="size-4" /> {t('config.versionsSheet.versions')} {title}</SheetTitle>
+          <SheetDescription>{t('config.versionsSheet.compareHint', { version: base?.version })}</SheetDescription>
         </SheetHeader>
         <div className="grid min-h-0 flex-1 md:grid-cols-[300px_1fr]">
           <div className="min-h-0 overflow-y-auto border-b p-2 md:border-r md:border-b-0">
             {versions.isLoading ? (
               <div className="grid gap-2 p-2">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-14" />)}</div>
             ) : !versions.data?.length ? (
-              <EmptyState compact icon={<History />} title="Keine Versionen" />
+              <EmptyState compact icon={<History />} title={t('config.versionsSheet.noVersions')} />
             ) : (
-              <ul className="grid gap-0.5" role="listbox" aria-label="Versionen">
+              <ul className="grid gap-0.5" role="listbox" aria-label={t('config.versionsSheet.versions2')}>
                 {versions.data.map((v) => (
                   <li key={v.version}>
                     <button
@@ -101,11 +102,11 @@ export function VersionsSheet({
                       )}
                     >
                       <span className="flex items-center gap-2 text-[13px] font-medium">
-                        v{v.version}
-                        {v.version === base?.version && <Badge variant="success" className="text-[10px]">aktuell</Badge>}
+                        {t('config.versionsSheet.v')}{v.version}
+                        {v.version === base?.version && <Badge variant="success" className="text-[10px]">{t('config.versionsSheet.current')}</Badge>}
                         <span className="ml-auto text-xs font-normal text-muted-foreground" title={formatDateTime(v.createdAt)}>{formatRelative(v.createdAt)}</span>
                       </span>
-                      <span className="line-clamp-2 text-xs text-muted-foreground">{v.comment || <em>Kein Kommentar</em>}</span>
+                      <span className="line-clamp-2 text-xs text-muted-foreground">{v.comment || <em>{t('config.versionsSheet.noComment')}</em>}</span>
                       <span className="text-[11px] text-muted-foreground/80">{v.createdBy}</span>
                     </button>
                   </li>
@@ -115,24 +116,24 @@ export function VersionsSheet({
           </div>
           <div className="flex min-h-0 flex-col gap-3 overflow-y-auto p-4">
             {selected === null ? (
-              <EmptyState icon={<History />} title="Version auswählen" description="Wählen Sie links eine Version für den Vergleich." />
+              <EmptyState icon={<History />} title={t('config.versionsSheet.selectAVersion')} description={t('config.versionsSheet.selectAVersionOnThe')} />
             ) : (
               <>
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm">
-                    <span className="font-medium">v{selected}</span>
-                    <span className="text-muted-foreground"> → aktuell (v{base?.version})</span>
+                    <span className="font-medium">{t('config.versionsSheet.v')}{selected}</span>
+                    <span className="text-muted-foreground"> {t('config.versionsSheet.toCurrent', { version: base?.version })}</span>
                   </p>
                   <div className="ml-auto flex items-center gap-2">
                     {canEdit && !isCurrent && (
                       <Button size="sm" variant="outline" onClick={() => setRestoreOpen(true)}>
-                        <RotateCcw /> Wiederherstellen
+                        <RotateCcw /> {t('config.versionsSheet.restore')}
                       </Button>
                     )}
                   </div>
                 </div>
                 {version.isLoading || !base ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Lädt …</div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> {t('common.loading')}</div>
                 ) : diff ? (
                   <ChangeList key={selected} diff={diff} maxHeight="calc(100dvh - 260px)" />
                 ) : null}
@@ -145,19 +146,19 @@ export function VersionsSheet({
       <Dialog open={restoreOpen} onOpenChange={setRestoreOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Version {selected} wiederherstellen?</DialogTitle>
+            <DialogTitle>{t('config.versionsSheet.restoreTitle', { version: selected })}</DialogTitle>
             <DialogDescription>
-              Der Stand von v{selected} wird als neue Version gespeichert. Die bisherige Historie bleibt erhalten.
-              {dirty && <span className="mt-2 block font-medium text-amber-700 dark:text-amber-400">Ungespeicherte Änderungen an dieser Sektion werden verworfen.</span>}
+              {t('config.versionsSheet.restoreText', { version: selected })}
+              {dirty && <span className="mt-2 block font-medium text-amber-700 dark:text-amber-400">{t('config.versionsSheet.unsavedChangesToThisSection')}</span>}
             </DialogDescription>
           </DialogHeader>
           <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); if (comment.trim()) restore.mutate() }}>
-            <Field label="Kommentar" htmlFor="restore-comment" required>
-              <Textarea id="restore-comment" autoFocus rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Grund für die Wiederherstellung" />
+            <Field label={t('config.versionsSheet.comment')} htmlFor="restore-comment" required>
+              <Textarea id="restore-comment" autoFocus rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder={t('config.versionsSheet.reasonForTheRestore')} />
             </Field>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setRestoreOpen(false)}>Abbrechen</Button>
-              <Button type="submit" disabled={!comment.trim()} loading={restore.isPending}>Wiederherstellen</Button>
+              <Button type="button" variant="outline" onClick={() => setRestoreOpen(false)}>{t('common.cancel')}</Button>
+              <Button type="submit" disabled={!comment.trim()} loading={restore.isPending}>{t('config.versionsSheet.restore')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

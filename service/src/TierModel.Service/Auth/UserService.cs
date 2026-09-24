@@ -4,14 +4,15 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Auth;
 
 public record UserDto(Guid Id, string Username, string DisplayName, Role Role, AuthType AuthType, bool IsActive, bool MustChangePassword,
-    DateTimeOffset? LastLoginAt, DateTimeOffset? LockedUntil, DateTimeOffset CreatedAt)
+    DateTimeOffset? LastLoginAt, DateTimeOffset? LockedUntil, DateTimeOffset CreatedAt, string? Language = null)
 {
     public static UserDto From(AppUser u) => new(u.Id, u.Username, u.DisplayName, u.Role, u.AuthType, u.IsActive, u.MustChangePassword,
-        u.LastLoginAt, u.LockedUntil > DateTimeOffset.UtcNow ? u.LockedUntil : null, u.CreatedAt);
+        u.LastLoginAt, u.LockedUntil > DateTimeOffset.UtcNow ? u.LockedUntil : null, u.CreatedAt, u.Language);
 }
 
 public enum LoginResult { Success, Invalid, LockedOut }
@@ -37,7 +38,7 @@ public static partial class AuthClaims
         new Claim(MustChangePassword, u.MustChangePassword ? "1" : "0"),
     ], CookieAuthenticationDefaults.AuthenticationScheme));
 
-    public static string UserName(this ClaimsPrincipal p) => p.Identity?.Name ?? "unbekannt";
+    public static string UserName(this ClaimsPrincipal p) => p.Identity?.Name ?? L.P("unbekannt");
 
     public static Guid? UserId(this ClaimsPrincipal p) =>
         Guid.TryParse(p.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
@@ -49,8 +50,8 @@ public static partial class AuthClaims
 
     public static string? PasswordProblem(string? password) =>
         string.IsNullOrEmpty(password) || password.Length < MinPasswordLength
-            ? $"Das Passwort muss mindestens {MinPasswordLength} Zeichen lang sein."
-            : password.Length > 256 ? "Das Passwort ist zu lang." : null;
+            ? L.F("Das Passwort muss mindestens {0} Zeichen lang sein.", MinPasswordLength)
+            : password.Length > 256 ? L.T("Das Passwort ist zu lang.") : null;
 }
 
 public class UserService(AppDbContext db, IPasswordHasher<AppUser> hasher)

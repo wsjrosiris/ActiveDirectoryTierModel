@@ -26,6 +26,9 @@ public class TierModelOptions
     /// <summary>Thumbprint of the HTTPS certificate in LocalMachine\My. Empty = Kestrel configuration decides.</summary>
     public string CertificateThumbprint { get; set; } = "";
 
+    /// <summary>Development only: serve a deterministic fake Active Directory (live AD view, setup wizard) instead of reading the domain.</summary>
+    public bool FakeDirectory { get; set; }
+
     /// <summary>Set to false only for local development over plain HTTP.</summary>
     public bool RequireHttps { get; set; } = true;
 }

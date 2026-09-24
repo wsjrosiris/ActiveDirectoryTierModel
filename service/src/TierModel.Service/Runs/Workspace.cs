@@ -1,5 +1,6 @@
 using System.Text;
 using TierModel.Service.Config;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Runs;
 
@@ -11,6 +12,11 @@ namespace TierModel.Service.Runs;
 public static class Workspace
 {
     private static readonly string[] Files = ["Deploy-TierModel.ps1", "Audit-TierModel.ps1"];
+    /// <summary>Newer framework scripts; older framework versions do not have them (the run using them then fails with a clear message).</summary>
+    private static readonly string[] OptionalFiles = [MonitorScript, JitScript];
+
+    public const string MonitorScript = "Watch-TierModelPrivilegedGroups.ps1";
+    public const string JitScript = "Grant-TierModelJitAccess.ps1";
     private static readonly string[] Directories = ["modules", "config"];
 
     public static string RunsRoot(TierModelOptions o) => Path.Combine(o.WorkPath, "runs");
@@ -21,13 +27,15 @@ public static class Workspace
     {
         var source = o.FrameworkPath;
         if (!File.Exists(Path.Combine(source, "Deploy-TierModel.ps1")))
-            throw new InvalidOperationException($"Framework nicht gefunden: '{source}' enthält kein Deploy-TierModel.ps1. Einstellung TierModel:FrameworkPath prüfen.");
+            throw new InvalidOperationException(L.PF("Framework nicht gefunden: '{0}' enthält kein Deploy-TierModel.ps1. Einstellung TierModel:FrameworkPath prüfen.", source));
 
         var root = PathFor(o, runId);
         if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         Directory.CreateDirectory(root);
 
         foreach (var f in Files)
+            File.Copy(Path.Combine(source, f), Path.Combine(root, f));
+        foreach (var f in OptionalFiles.Where(f => File.Exists(Path.Combine(source, f))))
             File.Copy(Path.Combine(source, f), Path.Combine(root, f));
         foreach (var d in Directories)
             CopyDirectory(Path.Combine(source, d), Path.Combine(root, d));

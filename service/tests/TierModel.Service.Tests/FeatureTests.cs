@@ -121,14 +121,17 @@ public class ApprovalApiTests(ApiFixture fixture)
         })).EnsureSuccessStatusCode();
         (await admin.PostAsJsonAsync("/api/users", new { username = "op2", displayName = "Op 2", role = "Operator", password = "Operator-Pass-1" })).EnsureSuccessStatusCode();
 
+        // Applying requires a reviewed planning run with the same parameters (requirePlanBeforeApply is on by default).
+        var planRunId = await PlanTests.RunPlanAsync(admin, "OuOnly");
         var submitted = await admin.PostAsJsonAsync("/api/runs/deploy", new
         {
             preferredDc = "dc01.contoso.local", scope = "OuOnly", includeMsa = false, includeGmsa = false,
-            includeDmsa = false, includeWinLaps = false, confirmApply = true,
+            includeDmsa = false, includeWinLaps = false, confirmApply = true, planRunId,
         });
         var run = (await submitted.Content.ReadFromJsonAsync<JsonObject>())!;
         Assert.Equal("AwaitingApproval", run["status"]!.GetValue<string>());
         var id = run["id"]!.GetValue<long>();
+        Assert.Equal(planRunId, run["planRunId"]!.GetValue<long>());
         var pinnedOus = (await admin.GetFromJsonAsync<JsonObject>($"/api/runs/{id}"))!["configVersions"]!["ous"]!.GetValue<int>();
 
         // The configuration changes after submission; the approved run must still use the pinned version.

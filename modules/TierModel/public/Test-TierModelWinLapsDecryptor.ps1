@@ -193,9 +193,9 @@ function Test-TierModelWinLapsDecryptor {
             # Step 2: Compute expected value from config group — NETBIOS\sAMAccountName
             $expectedValue = $null
             try {
-                $escapedName = $decryptorGroupName -replace "'", "''"
-                $adGroup = Get-ADGroup -Filter "Name -eq '$escapedName'" -Server $DomainController `
-                               -Properties sAMAccountName -ErrorAction Stop
+                # Built-in groups resolve by SID (localized names), others by name
+                $adGroup = Get-TierModelADGroupByName -Name $decryptorGroupName -DomainController $DomainController `
+                               -Properties sAMAccountName
                 if (-not $adGroup) {
                     throw "Group '$decryptorGroupName' not found in Active Directory."
                 }

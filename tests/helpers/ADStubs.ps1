@@ -27,7 +27,7 @@ if (-not (Get-Command Get-ADDomain -ErrorAction SilentlyContinue)) {
     # ActiveDirectory module stubs
     function Get-ADDomain { param($Server, $Identity) }
     function Get-ADForest { param($Server, $Identity) }
-    function Get-ADGroup { param($Identity, $Server, $Filter, $SearchBase, $Properties, $ErrorAction) }
+    function Get-ADGroup { param($Identity, $Server, $Filter, $SearchBase, $Properties, [switch]$ShowMemberTimeToLive, $ErrorAction) }
     function Get-ADGroupMember { param($Identity, $Server, $Recursive) }
     function Get-ADUser { param($Identity, $Server, $Filter, $SearchBase, $Properties, $ErrorAction) }
     function Get-ADOrganizationalUnit { param($Identity, $Server, $Filter, $SearchBase, $Properties, $ErrorAction) }
@@ -37,14 +37,16 @@ if (-not (Get-Command Get-ADDomain -ErrorAction SilentlyContinue)) {
     function New-ADGroup { param($Name, $GroupScope, $GroupCategory, $Path, $Server, $Description, $DisplayName, $SamAccountName, $ErrorAction) }
     function New-ADOrganizationalUnit { param($Name, $Path, $Server, $Description, $ProtectedFromAccidentalDeletion, $ErrorAction) }
     function New-ADUser { param($Name, $SamAccountName, $UserPrincipalName, $Path, $Server, $AccountPassword, $Enabled, $DisplayName, $Description, $GivenName, $Surname, $ErrorAction) }
-    function Add-ADGroupMember { param($Identity, $Members, $Server, $ErrorAction) }
+    function Add-ADGroupMember { param($Identity, $Members, $Server, $MemberTimeToLive, $ErrorAction) }
+    function Remove-ADGroupMember { param($Identity, $Members, $Server, $Confirm, $ErrorAction) }
+    function Get-ADOptionalFeature { param($Identity, $Filter, $Server, $ErrorAction) }
     function Set-ADObject { param($Identity, $Server, $Replace, $Add, $Remove, $Clear, $ErrorAction) }
 
     # Register as in-memory module so Get-Module ActiveDirectory returns a result
     New-Module -Name ActiveDirectory -ScriptBlock {
         function Get-ADDomain { param($Server, $Identity) }
         function Get-ADForest { param($Server, $Identity) }
-        function Get-ADGroup { param($Identity, $Server, $Filter, $SearchBase, $Properties, $ErrorAction) }
+        function Get-ADGroup { param($Identity, $Server, $Filter, $SearchBase, $Properties, [switch]$ShowMemberTimeToLive, $ErrorAction) }
         function Get-ADGroupMember { param($Identity, $Server, $Recursive) }
         function Get-ADUser { param($Identity, $Server, $Filter, $SearchBase, $Properties, $ErrorAction) }
         function Get-ADOrganizationalUnit { param($Identity, $Server, $Filter, $SearchBase, $Properties, $ErrorAction) }
@@ -54,7 +56,9 @@ if (-not (Get-Command Get-ADDomain -ErrorAction SilentlyContinue)) {
         function New-ADGroup { param($Name, $GroupScope, $GroupCategory, $Path, $Server, $Description, $DisplayName, $SamAccountName, $ErrorAction) }
         function New-ADOrganizationalUnit { param($Name, $Path, $Server, $Description, $ProtectedFromAccidentalDeletion, $ErrorAction) }
         function New-ADUser { param($Name, $SamAccountName, $UserPrincipalName, $Path, $Server, $AccountPassword, $Enabled, $DisplayName, $Description, $GivenName, $Surname, $ErrorAction) }
-        function Add-ADGroupMember { param($Identity, $Members, $Server, $ErrorAction) }
+        function Add-ADGroupMember { param($Identity, $Members, $Server, $MemberTimeToLive, $ErrorAction) }
+        function Remove-ADGroupMember { param($Identity, $Members, $Server, $Confirm, $ErrorAction) }
+        function Get-ADOptionalFeature { param($Identity, $Filter, $Server, $ErrorAction) }
         function Set-ADObject { param($Identity, $Server, $Replace, $Add, $Remove, $Clear, $ErrorAction) }
         Export-ModuleMember -Function *
     } | Import-Module -Global -Force
@@ -109,6 +113,24 @@ if (-not (Get-Command Find-LapsADExtendedRights -ErrorAction SilentlyContinue)) 
         function Set-LapsADComputerSelfPermission { param($Identity, $DomainController, $Credential, $ErrorAction) }
         function Set-LapsADReadPasswordPermission { param($Identity, $AllowedPrincipals, $DomainController, $Credential, $ErrorAction) }
         function Set-LapsADResetPasswordPermission { param($Identity, $AllowedPrincipals, $DomainController, $Credential, $ErrorAction) }
+        Export-ModuleMember -Function *
+    } | Import-Module -Global -Force
+}
+
+if (-not (Get-Command Get-ADAuthenticationPolicy -ErrorAction SilentlyContinue)) {
+
+    # ActiveDirectory authentication policy / silo stubs (Windows Server 2012 R2+ cmdlets) - required
+    # for Get-/New-/Test-TierModelAuthSilo. Registered as a separate in-memory module so they are also
+    # added when the ActiveDirectory stub module above already exists in the session.
+    New-Module -Name TierModelAuthPolicyStubs -ScriptBlock {
+        function Get-ADAuthenticationPolicy { param($Identity, $Filter, $LDAPFilter, $Properties, $Server, $ErrorAction) }
+        function New-ADAuthenticationPolicy { param($Name, $Description, $Enforce, $UserTGTLifetimeMins, $UserAllowedToAuthenticateFrom, $ProtectedFromAccidentalDeletion, $Server, $ErrorAction) }
+        function Set-ADAuthenticationPolicy { param($Identity, $Description, $Enforce, $UserTGTLifetimeMins, $UserAllowedToAuthenticateFrom, $Clear, $Server, $ErrorAction) }
+        function Get-ADAuthenticationPolicySilo { param($Identity, $Filter, $LDAPFilter, $Properties, $Server, $ErrorAction) }
+        function New-ADAuthenticationPolicySilo { param($Name, $Description, $Enforce, $UserAuthenticationPolicy, $ComputerAuthenticationPolicy, $ServiceAuthenticationPolicy, $ProtectedFromAccidentalDeletion, $Server, $ErrorAction) }
+        function Set-ADAuthenticationPolicySilo { param($Identity, $Description, $Enforce, $UserAuthenticationPolicy, $ComputerAuthenticationPolicy, $ServiceAuthenticationPolicy, $Clear, $Server, $ErrorAction) }
+        function Grant-ADAuthenticationPolicySiloAccess { param($Identity, $Account, $Server, $ErrorAction) }
+        function Set-ADAccountAuthenticationPolicySilo { param($Identity, $AuthenticationPolicySilo, $AuthenticationPolicy, $Server, $ErrorAction) }
         Export-ModuleMember -Function *
     } | Import-Module -Global -Force
 }

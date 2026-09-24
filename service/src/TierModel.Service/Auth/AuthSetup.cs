@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Auth;
 
@@ -13,16 +14,24 @@ public static class AuthSetup
     public const string XsrfCookie = "XSRF-TOKEN";
     public const string XsrfHeader = "X-XSRF-TOKEN";
     public const string LoginRateLimit = "login";
+    public const string DefaultScheme = "TierModel";
 
     public static IServiceCollection AddTierModelAuth(this IServiceCollection services, bool requireHttps)
     {
         services.AddScoped<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
         services.AddScoped<UserService>();
 
-        var authentication = services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme);
+        // Default: the session cookie; requests with "Authorization: Bearer …" are handled by the API-token scheme only
+        // (the cookie is then ignored, so a token request can never ride on a browser session).
+        var authentication = services.AddAuthentication(DefaultScheme);
+        authentication.AddPolicyScheme(DefaultScheme, "Cookie oder API-Token", o => o.ForwardDefaultSelector = ctx =>
+            ApiTokens.HasBearer(ctx.Request) ? ApiTokens.Scheme : CookieAuthenticationDefaults.AuthenticationScheme);
+        authentication.AddScheme<AuthenticationSchemeOptions, ApiTokenHandler>(ApiTokens.Scheme, null);
         // Windows sign-in (Kerberos/NTLM) only on Windows; used solely by GET /api/auth/windows,
         // which then issues the normal cookie.
         if (WindowsAuth.Available) authentication.AddNegotiate();
+        // Entra ID sign-in (OpenID Connect); configured at runtime from the settings, see EntraAuth.
+        authentication.AddEntraAuth(requireHttps);
         authentication
             .AddCookie(o =>
             {
@@ -74,6 +83,12 @@ public static class AuthSetup
             o.AddPolicy(LoginRateLimit, ctx => RateLimitPartition.GetFixedWindowLimiter(
                 ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+            // Requests with an API token: limited per token.
+            o.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+                ctx.User.IsTokenAuthenticated() && ctx.User.FindFirst(ApiTokens.TokenIdClaim)?.Value is { } tokenId
+                    ? RateLimitPartition.GetFixedWindowLimiter("token:" + tokenId,
+                        _ => new FixedWindowRateLimiterOptions { PermitLimit = ApiTokens.PermitsPerMinute, Window = TimeSpan.FromMinutes(1) })
+                    : RateLimitPartition.GetNoLimiter(""));
         });
         return services;
     }
@@ -114,7 +129,22 @@ public static class AuthSetup
         app.Use(async (ctx, next) =>
         {
             var path = ctx.Request.Path;
-            if (path.StartsWithSegments("/api") && !HttpMethods.IsGet(ctx.Request.Method) && !HttpMethods.IsHead(ctx.Request.Method) && !HttpMethods.IsOptions(ctx.Request.Method))
+            // A bearer token that did not authenticate is an error of its own (no fallback to the cookie).
+            if (path.StartsWithSegments("/api") && ApiTokens.HasBearer(ctx.Request) && !ctx.User.IsTokenAuthenticated())
+            {
+                var failure = (await ctx.AuthenticateAsync(ApiTokens.Scheme)).Failure?.Message;
+                ctx.Response.Headers.WWWAuthenticate = "Bearer";
+                await Results.Problem(title: L.T("Nicht angemeldet"), detail: failure ?? L.T("Ungültiges API-Token."), statusCode: StatusCodes.Status401Unauthorized).ExecuteAsync(ctx);
+                return;
+            }
+            // Sign-in, sign-out and password changes belong to the browser session, not to scripts.
+            if (path.StartsWithSegments("/api/auth") && ctx.User.IsTokenAuthenticated() && !HttpMethods.IsGet(ctx.Request.Method))
+            {
+                await Results.Problem(title: L.T("Mit einem API-Token nicht möglich"), statusCode: StatusCodes.Status403Forbidden).ExecuteAsync(ctx);
+                return;
+            }
+            // CSRF protects the cookie session only; token requests carry no cookie credentials.
+            if (path.StartsWithSegments("/api") && !ctx.User.IsTokenAuthenticated() && !HttpMethods.IsGet(ctx.Request.Method) && !HttpMethods.IsHead(ctx.Request.Method) && !HttpMethods.IsOptions(ctx.Request.Method))
             {
                 var af = ctx.RequestServices.GetRequiredService<IAntiforgery>();
                 try
@@ -123,7 +153,7 @@ public static class AuthSetup
                 }
                 catch (AntiforgeryValidationException)
                 {
-                    await Results.Problem(title: "Ungültiges oder fehlendes CSRF-Token", detail: "Bitte die Seite neu laden.",
+                    await Results.Problem(title: L.T("Ungültiges oder fehlendes CSRF-Token"), detail: L.T("Bitte die Seite neu laden."),
                         statusCode: StatusCodes.Status400BadRequest).ExecuteAsync(ctx);
                     return;
                 }
@@ -132,7 +162,7 @@ public static class AuthSetup
             if (path.StartsWithSegments("/api") && !path.StartsWithSegments("/api/auth")
                 && ctx.User.Identity?.IsAuthenticated == true && ctx.User.FindFirst(AuthClaims.MustChangePassword)?.Value == "1")
             {
-                await Results.Problem(title: "Passwortänderung erforderlich", statusCode: StatusCodes.Status403Forbidden).ExecuteAsync(ctx);
+                await Results.Problem(title: L.T("Passwortänderung erforderlich"), statusCode: StatusCodes.Status403Forbidden).ExecuteAsync(ctx);
                 return;
             }
             await next();

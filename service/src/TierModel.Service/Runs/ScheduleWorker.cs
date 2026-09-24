@@ -2,13 +2,20 @@ using Cronos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Runs;
 
-/// <summary>Queues scheduled audits when they are due and removes expired run data once a day.</summary>
-public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptions> options, ILogger<ScheduleWorker> logger) : BackgroundService
+/// <summary>Queues scheduled audits and monitor runs when they are due and removes expired run data once a day.</summary>
+public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptions> options, WorkerHeartbeats heartbeats, ILogger<ScheduleWorker> logger) : BackgroundService
 {
+    public const string HeartbeatName = "ScheduleWorker";
     private DateTimeOffset _lastCleanup = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastCertificateCheck = DateTimeOffset.MinValue;
+
+    public static RunRequest RequestFor(Schedule s) => s.Kind == RunKind.Monitor
+        ? new(s.PreferredDc, null, false, false, false, false, null)
+        : new(s.PreferredDc, s.Scope, s.IncludeMsa, s.IncludeGmsa, s.IncludeDmsa, s.IncludeWinLaps, s.AdmlLanguage);
 
     public static DateTimeOffset? NextOccurrence(string cron, string timeZone, DateTimeOffset after)
     {
@@ -26,7 +33,7 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
         }
         catch (CronFormatException ex)
         {
-            return $"Ungültiger Cron-Ausdruck: {ex.Message}";
+            return L.F("Ungültiger Cron-Ausdruck: {0}", ex.Message);
         }
         try
         {
@@ -34,7 +41,7 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
         }
         catch (Exception)
         {
-            return $"Unbekannte Zeitzone '{timeZone}'.";
+            return L.F("Unbekannte Zeitzone '{0}'.", timeZone);
         }
         return null;
     }
@@ -44,14 +51,22 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
         do
         {
+            heartbeats.Beat(HeartbeatName, TimeSpan.FromSeconds(30));
             try
             {
                 await QueueDueAsync(stoppingToken);
+                await PromoteScheduledAsync(stoppingToken);
                 await ExpireApprovalsAsync(stoppingToken);
                 if (DateTimeOffset.UtcNow - _lastCleanup > TimeSpan.FromDays(1))
                 {
                     await CleanupAsync(stoppingToken);
                     _lastCleanup = DateTimeOffset.UtcNow;
+                }
+                if (DateTimeOffset.UtcNow - _lastCertificateCheck > TimeSpan.FromDays(1))
+                {
+                    _lastCertificateCheck = DateTimeOffset.UtcNow;
+                    await using var scope = scopes.CreateAsyncScope();
+                    await scope.ServiceProvider.GetRequiredService<HealthService>().CheckCertificateExpiryAsync(stoppingToken);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -67,21 +82,29 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var runs = scope.ServiceProvider.GetRequiredService<RunService>();
+        var domain = scope.ServiceProvider.GetRequiredService<Domains.DomainContext>();
+        var domains = scope.ServiceProvider.GetRequiredService<Domains.DomainRegistry>();
         var now = DateTimeOffset.UtcNow;
 
         var due = await db.Schedules.Where(s => s.Enabled && s.NextRunAt != null && s.NextRunAt <= now).ToListAsync(ct);
         foreach (var s in due)
         {
+            // The run belongs to the schedule's domain (roadmap 17); disabled domains do not run.
+            domain.Use(s.DomainId);
+            var disabled = domains.Find(s.DomainId) is { Enabled: false };
             // Skip if the previous run of this schedule is still waiting or running.
             var busy = s.LastRunId is { } last && await db.Runs.AnyAsync(r => r.Id == last && (r.Status == RunStatus.Queued || r.Status == RunStatus.Running), ct);
-            if (!busy)
+            if (disabled)
             {
-                var run = await runs.EnqueueAsync(RunKind.Audit,
-                    new RunRequest(s.PreferredDc, s.Scope, s.IncludeMsa, s.IncludeGmsa, s.IncludeDmsa, s.IncludeWinLaps, s.AdmlLanguage),
-                    confirmApply: false, $"Zeitplan: {s.Name}", RunTrigger.Schedule, s.Id, ct);
+                logger.LogInformation("Schedule {Schedule} skipped: domain {Domain} is disabled", s.Name, domain.Key);
+            }
+            else if (!busy)
+            {
+                var run = await runs.EnqueueAsync(s.Kind == RunKind.Monitor ? RunKind.Monitor : RunKind.Audit, RequestFor(s),
+                    confirmApply: false, L.PF("Zeitplan: {0}", s.Name), RunTrigger.Schedule, s.Id, ct);
                 s.LastRunId = run.Id;
                 s.LastRunAt = now;
-                logger.LogInformation("Schedule {Schedule} queued audit run {RunId}", s.Name, run.Id);
+                logger.LogInformation("Schedule {Schedule} queued {Kind} run {RunId}", s.Name, s.Kind, run.Id);
             }
             else
             {
@@ -100,6 +123,14 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
             }
         }
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Applies waiting for a maintenance window (roadmap 4) are queued once it opens.</summary>
+    private async Task PromoteScheduledAsync(CancellationToken ct)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var n = await scope.ServiceProvider.GetRequiredService<Maintenance.MaintenanceService>().PromoteDueAsync(DateTimeOffset.UtcNow, ct);
+        if (n > 0) logger.LogInformation("{Count} scheduled apply run(s) queued: maintenance window open", n);
     }
 
     private async Task ExpireApprovalsAsync(CancellationToken ct)

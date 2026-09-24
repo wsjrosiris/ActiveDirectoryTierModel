@@ -6,6 +6,7 @@ using TierModel.Service.Auth;
 using TierModel.Service.Config;
 using TierModel.Service.Data;
 using TierModel.Service.Runs;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Endpoints;
 
@@ -42,11 +43,16 @@ public static class MiscEndpoints
 
         var api = app.MapGroup("/api").RequireAuthorization(nameof(Role.Viewer));
 
-        api.MapGet("/changelog", async (AppDbContext db, string? entityType, int? page, int? pageSize) =>
+        api.MapGet("/health/details", (HealthService health, CancellationToken ct) => health.GetAsync(ct))
+            .RequireAuthorization(nameof(Role.Admin));
+
+        // currentDomain=true: only entries of the current domain plus instance-wide ones (roadmap 17).
+        api.MapGet("/changelog", async (AppDbContext db, string? entityType, int? page, int? pageSize, bool? currentDomain, Domains.DomainContext domain) =>
         {
             var size = Math.Clamp(pageSize ?? 50, 1, 200);
             var p = Math.Max(page ?? 1, 1);
             var q = db.ChangeLog.AsNoTracking();
+            if (currentDomain == true) q = ChangeLogService.ForDomain(q, domain.Current);
             if (!string.IsNullOrWhiteSpace(entityType)) q = q.Where(e => e.EntityType == entityType);
             var total = await q.CountAsync();
             var items = await q.OrderByDescending(e => e.Id).Skip((p - 1) * size).Take(size).ToListAsync();
@@ -55,35 +61,51 @@ public static class MiscEndpoints
 
         api.MapGet("/settings", (SettingsService s, CancellationToken ct) => s.GetAsync(ct));
 
-        api.MapPut("/settings", async (UpdateSettingsRequest r, HttpContext ctx, SettingsService s, ChangeLogService log, AppDbContext db) =>
+        api.MapPut("/settings", async (UpdateSettingsRequest r, HttpContext ctx, SettingsService s, ChangeLogService log, AppDbContext db,
+            Domains.DomainRegistry registry, Domains.DomainContext domain) =>
         {
             var errors = new Dictionary<string, string[]>();
             r = r with { DefaultPreferredDc = r.DefaultPreferredDc?.Trim() ?? "", AdmlLanguage = r.AdmlLanguage?.Trim() ?? "" };
             if (!string.IsNullOrWhiteSpace(r.DefaultPreferredDc)
                 && RunValidation.Validate(new RunRequest(r.DefaultPreferredDc.Trim(), DeployScope.FullDeployment, false, false, false, false, null)).ContainsKey("preferredDc"))
-                errors["defaultPreferredDc"] = ["Ungültiger Hostname."];
+                errors["defaultPreferredDc"] = [L.T("Ungültiger Hostname.")];
             // An empty language would be passed as -AdmlLanguage "" and fail every run at parameter binding.
             if (r.AdmlLanguage.Length == 0 || RunValidation.Validate(new RunRequest("dc", DeployScope.FullDeployment, false, false, false, false, r.AdmlLanguage)).ContainsKey("admlLanguage"))
-                errors["admlLanguage"] = ["Sprache im Format xx-XX angeben."];
-            if (r.RunRetentionDays is < 0 or > 3650) errors["runRetentionDays"] = ["0 bis 3650 Tage (0 = unbegrenzt)."];
-            if (r.ApprovalTimeoutHours is < 1 or > 720) errors["approvalTimeoutHours"] = ["1 bis 720 Stunden."];
+                errors["admlLanguage"] = [L.T("Sprache im Format xx-XX angeben.")];
+            if (r.RunRetentionDays is < 0 or > 3650) errors["runRetentionDays"] = [L.T("0 bis 3650 Tage (0 = unbegrenzt).")];
+            if (r.ApprovalTimeoutHours is < 1 or > 720) errors["approvalTimeoutHours"] = [L.T("1 bis 720 Stunden.")];
+            if (r.PlanMaxAgeHours is < 1 or > 720) errors["planMaxAgeHours"] = [L.T("1 bis 720 Stunden.")];
+            if (r.StaleDays is < 1 or > 3650) errors["staleDays"] = [L.T("1 bis 3650 Tage.")];
+            if (r.PasswordMaxAgeDays is < 1 or > 3650) errors["passwordMaxAgeDays"] = [L.T("1 bis 3650 Tage.")];
             if (!string.IsNullOrWhiteSpace(r.PublicBaseUrl)
                 && !(Uri.TryCreate(r.PublicBaseUrl.Trim(), UriKind.Absolute, out var url) && url.Scheme is "https" or "http"))
-                errors["publicBaseUrl"] = ["Vollständige Adresse angeben, z. B. https://tiermodel01.contoso.com:8443"];
+                errors["publicBaseUrl"] = [L.T("Vollständige Adresse angeben, z. B. https://tiermodel01.contoso.com:8443")];
+            if (r.DefaultLanguage is not null && L.Normalize(r.DefaultLanguage) is null)
+                errors["defaultLanguage"] = [L.T("Unterstützt werden „de“ und „en“.")];
             if (errors.Count > 0) return Results.ValidationProblem(errors);
 
             var before = await s.GetAsync();
             await s.UpdateAsync(r);
             var approvalText = r.RequireApproval is { } ra && ra != before.RequireApproval
-                ? ra ? ", Vier-Augen-Prinzip EIN" : ", Vier-Augen-Prinzip AUS" : "";
+                ? ra ? L.P(", Vier-Augen-Prinzip EIN") : L.P(", Vier-Augen-Prinzip AUS") : "";
+            if (r.RequirePlanBeforeApply is { } rp && rp != before.RequirePlanBeforeApply)
+                approvalText += rp ? L.P(", Anwenden nur nach Planung EIN") : L.P(", Anwenden nur nach Planung AUS");
+            if (r.PlanMaxAgeHours is { } ph && ph != before.PlanMaxAgeHours) approvalText += L.PF(", Planung gültig {0} Stunden", ph);
+            if (r.StaleDays is { } sd && sd != before.StaleDays) approvalText += L.PF(", inaktive Konten ab {0} Tagen", sd);
+            if (r.PasswordMaxAgeDays is { } pa && pa != before.PasswordMaxAgeDays) approvalText += L.PF(", maximales Passwortalter {0} Tage", pa);
+            if (L.Normalize(r.DefaultLanguage) is { } dl && dl != before.DefaultLanguage) approvalText += L.PF(", Standardsprache {0}", dl);
             log.Add(ctx.User.UserName(), "settings.update", "settings", null,
-                $"Einstellungen geändert: DC '{r.DefaultPreferredDc}', ADML {r.AdmlLanguage}, Aufbewahrung {r.RunRetentionDays} Tage{approvalText}");
+                L.PF("Einstellungen geändert: DC '{0}', ADML {1} (Domäne {2}), Aufbewahrung {3} Tage{4}", r.DefaultPreferredDc, r.AdmlLanguage, domain.Key, r.RunRetentionDays, approvalText),
+                new { domain = domain.Key });
             await db.SaveChangesAsync();
+            await registry.ReloadAsync(db);
             return Results.Ok(await s.GetAsync());
         }).RequireAuthorization(nameof(Role.Admin));
 
-        api.MapGet("/dashboard", async (AppDbContext db, ConfigService config, CancellationToken ct) =>
+        api.MapGet("/dashboard", async (AppDbContext db, ConfigService config, Domains.DomainContext domain, CancellationToken ct) =>
         {
+            var domainId = domain.Id;
+            var runs = db.Runs.AsNoTracking().Where(r => r.DomainId == domainId);
             var content = await config.CurrentContentAsync(ct);
             int Count(string key, string prop) => content.GetValueOrDefault(key)?[prop] is JsonArray a ? a.Count : 0;
 
@@ -100,15 +122,15 @@ public static class MiscEndpoints
                             }
 
             var issues = ConfigValidator.Validate(content);
-            var lastAudit = await db.Runs.AsNoTracking().Where(r => r.Kind == RunKind.Audit && r.FinishedAt != null && r.Status != RunStatus.Cancelled).OrderByDescending(r => r.Id).FirstOrDefaultAsync(ct);
-            var lastDeploy = await db.Runs.AsNoTracking().Where(r => r.Kind == RunKind.Deploy && r.FinishedAt != null && r.Status != RunStatus.Cancelled).OrderByDescending(r => r.Id).FirstOrDefaultAsync(ct);
-            var trend = await db.Runs.AsNoTracking()
+            var lastAudit = await runs.Where(r => r.Kind == RunKind.Audit && r.FinishedAt != null && r.Status != RunStatus.Cancelled).OrderByDescending(r => r.Id).FirstOrDefaultAsync(ct);
+            var lastDeploy = await runs.Where(r => r.Kind == RunKind.Deploy && r.FinishedAt != null && r.Status != RunStatus.Cancelled).OrderByDescending(r => r.Id).FirstOrDefaultAsync(ct);
+            var trend = await runs
                 .Where(r => r.Kind == RunKind.Audit && r.Status == RunStatus.Succeeded && r.DriftCount != null)
                 .OrderByDescending(r => r.Id).Take(30)
                 .Select(r => new { runId = r.Id, at = r.FinishedAt, driftCount = r.DriftCount })
                 .ToListAsync(ct);
-            var recentRuns = await db.Runs.AsNoTracking().OrderByDescending(r => r.Id).Take(8).ToListAsync(ct);
-            var recentChanges = await db.ChangeLog.AsNoTracking().Where(e => e.EntityType != "auth").OrderByDescending(e => e.Id).Take(8).ToListAsync(ct);
+            var recentRuns = await runs.OrderByDescending(r => r.Id).Take(8).ToListAsync(ct);
+            var recentChanges = await ChangeLogService.ForDomain(db.ChangeLog.AsNoTracking(), domain.Current).Where(e => e.EntityType != "auth").OrderByDescending(e => e.Id).Take(8).ToListAsync(ct);
 
             return new
             {
@@ -126,13 +148,15 @@ public static class MiscEndpoints
                 driftTrend = trend.AsEnumerable().Reverse(),
                 recentRuns = recentRuns.Select(RunSummaryDto.From),
                 recentChanges = recentChanges.Select(ChangeEntryDto.From),
-                pendingApprovals = (await db.Runs.AsNoTracking().Where(r => r.Status == RunStatus.AwaitingApproval).OrderBy(r => r.Id).ToListAsync(ct))
+                pendingApprovals = (await runs.Where(r => r.Status == RunStatus.AwaitingApproval).OrderBy(r => r.Id).ToListAsync(ct))
                     .Select(RunSummaryDto.From),
                 queue = new
                 {
                     running = await db.Runs.CountAsync(r => r.Status == RunStatus.Running, ct),
                     queued = await db.Runs.CountAsync(r => r.Status == RunStatus.Queued, ct),
                 },
+                // The queue is shared by all domains (runs execute one at a time).
+                domain = new { domain.Current.Id, domain.Current.Key, domain.Current.DisplayName, domain.Current.DnsName },
                 validation = new
                 {
                     errors = issues.Count(i => i.Severity == "Error"),

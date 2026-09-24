@@ -1,16 +1,34 @@
 import type {
+  AdCompare,
+  AdObject,
+  AdTree,
+  PrefixPreview,
+  SetupState,
   AdGroups,
   DomainControllers,
   GpoBackup,
   TemplateFiles,
   ApproveRequest,
   AuthOptions,
+  EntraAuthSettings,
+  EntraAuthUpdate,
+  EntraMetadataCheck,
+  ReportSchedule,
+  ReportScheduleInput,
+  ReportType,
+  ReportTypeInfo,
   ChangeEntry,
   ChannelInput,
+  Compliance,
+  PrivilegedChanges,
+  PrivilegedOverview,
   ChangePasswordRequest,
   CreateUserRequest,
   Dashboard,
+  DeployPlan,
   DeployRequest,
+  HealthDetails,
+  PlanCandidates,
   LoginRequest,
   LogResponse,
   MeResponse,
@@ -40,6 +58,8 @@ import type {
   WindowsAuthSettings,
   WindowsAuthUpdate,
 } from './types'
+import { DOMAIN_HEADER, getDomainKey, withDomain } from '@/lib/domain'
+import { currentLanguage, t } from '@/i18n'
 
 export class ApiError extends Error {
   readonly status: number
@@ -69,14 +89,14 @@ export class ApiError extends Error {
 
 function defaultTitle(status: number): string {
   switch (status) {
-    case 400: return 'Ungültige Anfrage'
-    case 401: return 'Nicht angemeldet'
-    case 403: return 'Keine Berechtigung'
-    case 404: return 'Nicht gefunden'
-    case 409: return 'Konflikt'
-    case 423: return 'Konto gesperrt'
-    case 0: return 'Server nicht erreichbar'
-    default: return status >= 500 ? 'Serverfehler' : `Fehler ${status}`
+    case 400: return t('api.client.invalidRequest')
+    case 401: return t('api.client.notSignedIn')
+    case 403: return t('api.client.accessDenied')
+    case 404: return t('api.client.notFound')
+    case 409: return t('api.client.conflict')
+    case 423: return t('api.client.accountLocked')
+    case 0: return t('api.client.serverUnreachable')
+    default: return status >= 500 ? t('api.client.serverError') : t('api.client.errorStatus', { status })
   }
 }
 
@@ -113,12 +133,21 @@ export interface RequestOptions {
   signal?: AbortSignal
   /** Suppress the automatic redirect on 401. */
   noRedirect?: boolean
+  /** Raw request body (e.g. an uploaded file) sent with its own content type instead of JSON. */
+  raw?: Blob
+  /** Managed domain for this request instead of the selected one (e.g. applying a plan of another domain). */
+  domain?: string | null
 }
 
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const method = (opts.method ?? 'GET').toUpperCase()
-  const headers: Record<string, string> = { Accept: 'application/json' }
+  // The service answers in the active UI language (messages, validation, on-demand reports).
+  const headers: Record<string, string> = { Accept: 'application/json', 'Accept-Language': currentLanguage() }
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
+  if (opts.raw) headers['Content-Type'] = opts.raw.type || 'application/octet-stream'
+  // Domain-bound data of the selected domain (roadmap 17); without the header the service uses its default domain.
+  const domain = opts.domain !== undefined ? opts.domain : getDomainKey()
+  if (domain) headers[DOMAIN_HEADER] = domain
   if (UNSAFE.has(method)) {
     const token = readCookie('XSRF-TOKEN')
     if (token) headers['X-XSRF-TOKEN'] = token
@@ -130,12 +159,12 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
       method,
       headers,
       credentials: 'same-origin',
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      body: opts.raw ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
       signal: opts.signal,
     })
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw e
-    throw new ApiError(0, { detail: 'Die Verbindung zum Server ist fehlgeschlagen.' })
+    throw new ApiError(0, { detail: t('api.client.theConnectionToTheServer') })
   }
 
   if (res.status === 401 && !opts.noRedirect && !isAuthPath(path)) {
@@ -182,12 +211,16 @@ const enc = encodeURIComponent
 export const api = {
   auth: {
     me: () => request<MeResponse>('/api/auth/me', { noRedirect: true }),
+    /** UI language of the current user; null = browser default. */
+    setLanguage: (language: 'de' | 'en' | null) => put<User>('/api/auth/me/language', { language }),
     login: (body: LoginRequest) => post<User>('/api/auth/login', body),
     logout: () => post<void>('/api/auth/logout'),
     changePassword: (body: ChangePasswordRequest) => post<void>('/api/auth/change-password', body),
     options: () => request<AuthOptions>('/api/auth/options', { noRedirect: true }),
     /** Browser navigation (Negotiate), never fetch. */
     windowsLoginUrl: (returnUrl: string) => `/api/auth/windows?returnUrl=${enc(returnUrl)}`,
+    /** Browser navigation to Microsoft Entra ID (OpenID Connect), never fetch. */
+    entraLoginUrl: (returnUrl: string) => `/api/auth/entra?returnUrl=${enc(returnUrl)}`,
   },
   users: {
     list: () => get<User[]>('/api/users'),
@@ -201,7 +234,9 @@ export const api = {
   lookup: {
     gpoBackups: () => get<GpoBackup[]>('/api/lookup/gpo-backups'),
     templateFiles: () => get<TemplateFiles>('/api/lookup/template-files'),
-    domainControllers: () => get<DomainControllers>('/api/lookup/domain-controllers'),
+    /** DCs of the selected domain, or of <domain> (domain form). */
+    domainControllers: (domain?: unknown) =>
+      request<DomainControllers>('/api/lookup/domain-controllers', typeof domain === 'string' ? { domain } : {}),
     adGroups: (q: string, signal?: AbortSignal) => request<AdGroups>(`/api/lookup/ad-groups?q=${enc(q)}`, { signal }),
   },
   config: {
@@ -216,19 +251,43 @@ export const api = {
     restore: (key: string, version: number, body: RestoreRequest) =>
       post<Section>(`/api/config/sections/${enc(key)}/versions/${version}/restore`, body),
     validate: () => get<ValidationIssue[]>('/api/config/validate'),
-    exportUrl: '/api/config/export',
+    /** Browser download: names the selected domain in the query string. */
+    get exportUrl() {
+      return withDomain('/api/config/export')
+    },
   },
   runs: {
     list: (p: { kind?: RunKind | ''; status?: RunStatus | ''; page?: number; pageSize?: number }) =>
       get<Paged<RunSummary>>(`/api/runs${qs({ kind: p.kind, status: p.status, page: p.page ?? 1, pageSize: p.pageSize ?? 25 })}`),
-    deploy: (body: DeployRequest) => post<RunSummary>('/api/runs/deploy', body),
+    /** <domain>: e.g. applying a plan in the plan's domain, whatever domain is selected. */
+    deploy: (body: DeployRequest, domain?: unknown) =>
+      request<RunSummary>('/api/runs/deploy', typeof domain === 'string' ? { method: 'POST', body, domain } : { method: 'POST', body }),
     audit: (body: RunRequest) => post<RunSummary>('/api/runs/audit', body),
+    monitor: (preferredDc: string) => post<RunSummary>('/api/runs/monitor', { preferredDc }),
+    /** Planning run for one area of an audit's findings (Operator). */
+    remediate: (auditId: number, area: string) => post<RunSummary>(`/api/runs/${auditId}/remediate`, { area }),
     get: (id: number) => get<RunDetail>(`/api/runs/${id}`),
     log: (id: number, after: number, signal?: AbortSignal) =>
       get<LogResponse>(`/api/runs/${id}/log?after=${after}`, signal),
     cancel: (id: number) => post<void>(`/api/runs/${id}/cancel`),
     approve: (id: number, body: ApproveRequest) => post<RunSummary>(`/api/runs/${id}/approve`, body),
     reject: (id: number, body: RejectRequest) => post<RunSummary>(`/api/runs/${id}/reject`, body),
+    plan: (id: number) => get<DeployPlan>(`/api/runs/${id}/plan`),
+    planCandidates: (r: RunRequest) =>
+      get<PlanCandidates>(
+        `/api/runs/plan-candidates${qs({
+          preferredDc: r.preferredDc.trim(),
+          scope: r.scope,
+          includeMsa: r.includeMsa ? 'true' : undefined,
+          includeGmsa: r.includeGmsa ? 'true' : undefined,
+          includeDmsa: r.includeDmsa ? 'true' : undefined,
+          includeWinLaps: r.includeWinLaps ? 'true' : undefined,
+          admlLanguage: r.admlLanguage,
+        })}`,
+      ),
+  },
+  health: {
+    details: () => get<HealthDetails>('/api/health/details'),
   },
   schedules: {
     list: () => get<Schedule[]>('/api/schedules'),
@@ -238,15 +297,35 @@ export const api = {
     run: (id: number) => post<RunSummary>(`/api/schedules/${id}/run`),
   },
   changelog: {
-    list: (p: { entityType?: string; page?: number; pageSize?: number }) =>
-      get<Paged<ChangeEntry>>(`/api/changelog${qs({ entityType: p.entityType, page: p.page ?? 1, pageSize: p.pageSize ?? 50 })}`),
+    list: (p: { entityType?: string; page?: number; pageSize?: number; currentDomain?: boolean }) =>
+      get<Paged<ChangeEntry>>(
+        `/api/changelog${qs({ entityType: p.entityType, page: p.page ?? 1, pageSize: p.pageSize ?? 50, currentDomain: p.currentDomain ? 'true' : undefined })}`,
+      ),
   },
   dashboard: () => get<Dashboard>('/api/dashboard'),
+  privileged: {
+    overview: () => get<PrivilegedOverview>('/api/privileged'),
+    changes: (limit = 50) => get<PrivilegedChanges>(`/api/privileged/changes?limit=${limit}`),
+  },
+  compliance: () => get<Compliance>('/api/compliance'),
+  ad: {
+    tree: (refresh = false) => get<AdTree>(`/api/ad/tree${refresh ? '?refresh=true' : ''}`),
+    object: (dn: string) => get<AdObject>(`/api/ad/object?dn=${enc(dn)}`),
+    compare: (refresh = false) => get<AdCompare>(`/api/ad/compare${refresh ? '?refresh=true' : ''}`),
+  },
+  setup: {
+    state: () => get<SetupState>('/api/setup/state'),
+    prefixPreview: (prefix: string) => post<PrefixPreview>('/api/setup/gpo-prefix/preview', { prefix }),
+    complete: (skipped: boolean) => post<void>('/api/setup/complete', { skipped }),
+  },
   settings: {
     get: () => get<Settings>('/api/settings'),
     update: (body: SettingsUpdate) => put<Settings>('/api/settings', body),
     windowsAuth: () => get<WindowsAuthSettings>('/api/settings/windows-auth'),
     updateWindowsAuth: (body: WindowsAuthUpdate) => put<WindowsAuthSettings>('/api/settings/windows-auth', body),
+    entraAuth: () => get<EntraAuthSettings>('/api/settings/entra-auth'),
+    updateEntraAuth: (body: EntraAuthUpdate) => put<EntraAuthSettings>('/api/settings/entra-auth', body),
+    checkEntraAuth: (tenantId: string) => post<EntraMetadataCheck>('/api/settings/entra-auth/check', { tenantId }),
   },
   notifications: {
     channels: () => get<NotificationChannel[]>('/api/notifications/channels'),
@@ -256,5 +335,14 @@ export const api = {
     testChannel: (id: number) => post<void>(`/api/notifications/channels/${id}/test`),
     smtp: () => get<SmtpSettings>('/api/notifications/smtp'),
     updateSmtp: (body: SmtpUpdate) => put<SmtpSettings>('/api/notifications/smtp', body),
+  },
+  reports: {
+    types: () => get<ReportTypeInfo[]>('/api/reports'),
+    /** Document URL (iframe preview or download). from/to: yyyy-MM-dd. */
+    url: (type: ReportType, p: { from?: string; to?: string; format: 'pdf' | 'html'; download?: boolean }) =>
+      withDomain(`/api/reports/${enc(type)}${qs({ from: p.from, to: p.to, format: p.format, download: p.download === undefined ? undefined : String(p.download), lang: currentLanguage() })}`),
+    schedules: () => get<ReportSchedule[]>('/api/reports/schedules'),
+    updateSchedules: (body: ReportScheduleInput[]) => put<ReportSchedule[]>('/api/reports/schedules', body),
+    sendSchedule: (id: string) => post<void>(`/api/reports/schedules/${enc(id)}/send`),
   },
 }

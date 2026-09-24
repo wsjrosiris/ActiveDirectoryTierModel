@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { cn, formatTime } from '@/lib/utils'
 import { ApiError } from '@/api/client'
+import { t } from '@/i18n'
 
 const ACTIVE: RunStatus[] = ['Queued', 'Running']
 
@@ -152,23 +153,23 @@ export function RunLog({
           <span className="size-2.5 rounded-full bg-emerald-400/80" />
         </div>
         <Terminal className="size-3.5 opacity-60" />
-        <span className="text-xs font-medium opacity-80">Protokoll · Lauf #{runId}</span>
+        <span className="text-xs font-medium opacity-80">{t('runs.runLog.logRun')}{runId}</span>
         {active && (
           <span className="flex items-center gap-1.5 rounded-full bg-sky-400/15 px-2 py-0.5 text-[11px] font-medium text-sky-300">
-            <span className="size-1.5 animate-pulse rounded-full bg-sky-400" /> live
+            <span className="size-1.5 animate-pulse rounded-full bg-sky-400" /> {t('runs.runLog.live')}
           </span>
         )}
-        <span className="text-[11px] opacity-50">{lines.length} Zeilen</span>
-        {counts.warn > 0 && <span className="text-[11px] text-amber-300">{counts.warn} Warnungen</span>}
-        {counts.error > 0 && <span className="text-[11px] text-rose-400">{counts.error} Fehler</span>}
+        <span className="text-[11px] opacity-50">{lines.length} {t('runs.runLog.lines', { count: lines.length })}</span>
+        {counts.warn > 0 && <span className="text-[11px] text-amber-300">{counts.warn} {t('runs.runLog.warnings', { count: counts.warn })}</span>}
+        {counts.error > 0 && <span className="text-[11px] text-rose-400">{counts.error} {t('runs.runLog.errors', { count: counts.error })}</span>}
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 opacity-50" />
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filtern …"
-              aria-label="Protokoll filtern"
+              placeholder={t('runs.runLog.filter')}
+              aria-label={t('runs.runLog.filterLog')}
               className="h-7 w-40 rounded-md border border-white/10 bg-white/5 pr-2 pl-7 text-xs text-terminal-foreground outline-none placeholder:text-white/35 focus:border-white/25"
             />
           </div>
@@ -178,12 +179,12 @@ export function RunLog({
             aria-pressed={level === 'problems'}
             className={cn('h-7 rounded-md border border-white/10 px-2 text-[11px] transition-colors hover:bg-white/10', level === 'problems' && 'border-amber-300/40 bg-amber-300/10 text-amber-200')}
           >
-            Nur Probleme
+            {t('runs.runLog.problemsOnly')}
           </button>
-          <TermButton label={wrap ? 'Umbruch aus' : 'Umbruch ein'} onClick={() => setWrap((w) => !w)} active={wrap}><WrapText /></TermButton>
-          <TermButton label="Kopieren" onClick={() => navigator.clipboard.writeText(asText()).then(() => toast.success('Protokoll kopiert'))}><Copy /></TermButton>
+          <TermButton label={wrap ? t('runs.runLog.wrapOff') : t('runs.runLog.wrapOn')} onClick={() => setWrap((w) => !w)} active={wrap}><WrapText /></TermButton>
+          <TermButton label={t('runs.runLog.copy')} onClick={() => navigator.clipboard.writeText(asText()).then(() => toast.success(t('runs.runLog.logCopied')))}><Copy /></TermButton>
           <TermButton
-            label="Herunterladen"
+            label={t('runs.runLog.download')}
             onClick={() => {
               const url = URL.createObjectURL(new Blob([asText()], { type: 'text/plain' }))
               const a = document.createElement('a')
@@ -196,8 +197,8 @@ export function RunLog({
             <Download />
           </TermButton>
           <label className="ml-1 flex cursor-pointer items-center gap-1.5 text-[11px] opacity-80">
-            <Switch checked={follow} onCheckedChange={setFollow} className="h-4 w-7 data-[state=unchecked]:bg-white/20 [&>span]:size-3 [&>span]:data-[state=checked]:translate-x-3" aria-label="Automatisch mitlaufen" />
-            Folgen
+            <Switch checked={follow} onCheckedChange={setFollow} className="h-4 w-7 data-[state=unchecked]:bg-white/20 [&>span]:size-3 [&>span]:data-[state=checked]:translate-x-3" aria-label={t('runs.runLog.followAutomatically')} />
+            {t('runs.runLog.follow')}
           </label>
         </div>
       </div>
@@ -208,12 +209,12 @@ export function RunLog({
           className="h-[min(62vh,640px)] overflow-auto px-0 py-2 font-mono text-[12px] leading-[1.6]"
           role="log"
           aria-live={active && follow ? 'polite' : 'off'}
-          aria-label="Laufprotokoll"
+          aria-label={t('runs.runLog.runLog')}
         >
           {!loaded ? (
-            <p className="px-4 text-white/40">Protokoll wird geladen …</p>
+            <p className="px-4 text-white/40">{t('runs.runLog.loadingLog')}</p>
           ) : shown.length === 0 ? (
-            <p className="px-4 text-white/40">{lines.length === 0 ? (active ? 'Warte auf Ausgabe …' : emptyText ?? 'Keine Ausgabe vorhanden.') : 'Keine Zeilen entsprechen dem Filter.'}</p>
+            <p className="px-4 text-white/40">{lines.length === 0 ? (active ? t('runs.runLog.waitingForOutput') : emptyText ?? t('runs.runLog.noOutputAvailable')) : t('runs.runLog.noLinesMatchTheFilter')}</p>
           ) : (
             shown.map((l) => (
               <div key={l.seq} className={cn('group flex gap-3 px-4 hover:bg-white/[0.04]', l.level === 'error' && 'bg-rose-500/[0.07]')}>
@@ -233,7 +234,7 @@ export function RunLog({
             className="absolute right-4 bottom-4 shadow-lg"
             onClick={() => setFollow(true)}
           >
-            <ArrowDownToLine /> Zum Ende
+            <ArrowDownToLine /> {t('runs.runLog.toTheEnd')}
           </Button>
         )}
       </div>

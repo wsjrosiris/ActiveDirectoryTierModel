@@ -4,7 +4,9 @@ import type { Section } from '@/api/types'
 /* A tiny global store holding local (unsaved) drafts for config sections, with a
  * shared undo/redo history. History entries are snapshots of the whole drafts map
  * so that multi-section operations (e.g. OU rename) undo atomically. Contents are
- * treated as immutable: every edit produces a new object. */
+ * treated as immutable: every edit produces a new object.
+ * Several domains (roadmap 17): every domain has its own drafts, bases and history;
+ * switching the domain parks the current state and restores the other one. */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = any
@@ -31,7 +33,13 @@ interface State {
 /** Sections whose JSON editor currently holds text that does not parse (not part of history). */
 const invalidJson = new Set<string>()
 
-let state: State = { bases: {}, drafts: {}, draftBase: {}, past: [], future: [], lastTag: null, lastAt: 0 }
+const emptyState = (): State => ({ bases: {}, drafts: {}, draftBase: {}, past: [], future: [], lastTag: null, lastAt: 0 })
+
+let state: State = emptyState()
+/** Domain the current state belongs to ('' = default domain before the domains are known). */
+let stateDomain = ''
+/** Parked states of the other domains. */
+const parked = new Map<string, State>()
 
 const snap = (s: State): Snapshot => ({ drafts: s.drafts, draftBase: s.draftBase })
 const listeners = new Set<() => void>()
@@ -69,6 +77,31 @@ function isDirtyIn(s: State, key: string) {
 
 export const draftStore = {
   getState: () => state,
+
+  /** Parks the drafts of the current domain and continues with those of <domain> (roadmap 17). */
+  switchDomain(domain: string) {
+    if (domain === stateDomain) return
+    parked.set(stateDomain, state)
+    stateDomain = domain
+    invalidJson.clear()
+    emit(parked.get(domain) ?? emptyState())
+    parked.delete(domain)
+  },
+
+  /** Declares the state loaded before the domain was known as belonging to <domain> (first load). */
+  adoptDomain(domain: string) {
+    if (stateDomain === '' && !parked.has(domain)) stateDomain = domain
+    else this.switchDomain(domain)
+  },
+
+  /** Number of sections with unsaved changes per domain, including the current one. */
+  dirtyCounts(): Record<string, number> {
+    const counts: Record<string, number> = {}
+    const count = (s: State) => Object.keys(s.drafts).filter((k) => isDirtyIn(s, k)).length
+    for (const [d, s] of parked) if (count(s) > 0) counts[d] = count(s)
+    if (count(state) > 0) counts[stateDomain] = count(state)
+    return counts
+  },
 
   setBase(section: Section) {
     const prev = state.bases[section.key]

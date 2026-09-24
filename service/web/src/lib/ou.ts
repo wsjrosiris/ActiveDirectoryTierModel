@@ -6,6 +6,7 @@
  * OUs by FULL DN including `,{{DOMAIN_DN}}`.
  */
 
+import { t } from '../i18n/index.ts'
 export const DOMAIN = '{{DOMAIN_DN}}'
 
 export interface OuItem {
@@ -49,7 +50,7 @@ export const builtinTargets = [DOMAIN, `OU=Domain Controllers,${DOMAIN}`]
 export function ouDnOptions(ous: OuItem[]) {
   const list = ous.map((o) => ({ value: ouFullDn(o), label: o.name }))
   return [
-    { value: DOMAIN, label: 'Domänenstamm' },
+    { value: DOMAIN, label: t('lib.ou.domainRoot') },
     { value: `OU=Domain Controllers,${DOMAIN}`, label: 'Domain Controllers' },
     ...list.sort((a, b) => a.value.split(',').reverse().join(',').localeCompare(b.value.split(',').reverse().join(','))),
   ]
@@ -57,7 +58,7 @@ export function ouDnOptions(ous: OuItem[]) {
 
 /** Parent path options for the ous section (relative form). */
 export function ouParentOptions(ous: OuItem[], excludeFullDn?: string) {
-  const opts = [{ value: DOMAIN, label: 'Domänenstamm', hint: DOMAIN }]
+  const opts = [{ value: DOMAIN, label: t('lib.ou.domainRoot'), hint: DOMAIN }]
   for (const o of ous) {
     const full = ouFullDn(o)
     if (excludeFullDn && (full === excludeFullDn || full.endsWith(',' + excludeFullDn))) continue
@@ -138,7 +139,7 @@ export function planOuRename(
   const conflicts: string[] = []
   const parentFull = toFullDn(path).toLowerCase()
   if (parentFull === oldFull.toLowerCase() || parentFull.endsWith(',' + oldFull.toLowerCase()))
-    conflicts.push('Eine OU kann nicht unter sich selbst oder eine ihrer Unter-OUs verschoben werden.')
+    conflicts.push(t('lib.ou.anOuCannotBeMoved'))
   const updated: Record<string, Json> = {}
 
   const clone = (v: Json) => JSON.parse(JSON.stringify(v))
@@ -204,8 +205,8 @@ export function planOuRename(
       if (r && r !== k) {
         // Another GPO target already uses the new DN and is not itself renamed: merging would lose one of them.
         const occupant = r in c.gpos ? rebaseDn(r, oldFull, newFull) : null
-        if (r in c.gpos && (!occupant || occupant === r)) conflicts.push(`GPO-Verknüpfungsziel „${r}“ existiert bereits.`)
-        changes.push({ section: 'gpos', label: (v as Json)?.displayName ?? k, field: 'Schlüssel', before: k, after: r })
+        if (r in c.gpos && (!occupant || occupant === r)) conflicts.push(t('lib.ou.gpoLinkTargetRAlready', { r }))
+        changes.push({ section: 'gpos', label: (v as Json)?.displayName ?? k, field: t('lib.ou.key'), before: k, after: r })
         next[r] = v
         touched = true
       } else next[k] = v

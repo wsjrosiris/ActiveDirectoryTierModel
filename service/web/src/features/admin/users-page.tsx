@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
-import { Copy, Info, KeyRound, Lock, MonitorCheck, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2, Unlock, UserPlus, Users } from 'lucide-react'
+import { Cloud, Copy, Info, KeyRound, Lock, MonitorCheck, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2, Unlock, UserPlus, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import type { Role, User } from '@/api/types'
@@ -30,6 +30,7 @@ import { RequireAuth, useUser } from '@/features/auth/auth'
 import { generatePassword, PasswordStrength } from '@/features/auth/password-strength'
 import { roleDescriptions, roleLabels, roles } from '@/lib/roles'
 import { cn, formatDateTime, formatRelative } from '@/lib/utils'
+import { t } from '@/i18n'
 
 export function Component() {
   return (
@@ -52,11 +53,15 @@ function isLocked(u: User) {
 
 function AuthTypeBadge({ user }: { user: User }) {
   return user.authType === 'Windows' ? (
-    <Tooltip content="Anmeldung per Kerberos/NTLM – Rolle aus AD-Gruppen">
+    <Tooltip content={t('admin.users.signInViaKerberosNtlm')}>
       <Badge variant="info"><MonitorCheck /> Windows</Badge>
     </Tooltip>
+  ) : user.authType === 'Entra' ? (
+    <Tooltip content={t('admin.users.signInWithMicrosoftEntra')}>
+      <Badge variant="info"><Cloud /> Entra ID</Badge>
+    </Tooltip>
   ) : (
-    <Badge variant="outline"><KeyRound /> Lokal</Badge>
+    <Badge variant="outline"><KeyRound /> {t('admin.users.local')}</Badge>
   )
 }
 
@@ -69,33 +74,33 @@ function UsersPage() {
   const [resetFor, setResetFor] = React.useState<User | null>(null)
   const invalidate = () => qc.invalidateQueries({ queryKey: ['users'] })
 
-  const unlock = useMutation({ mutationFn: (u: User) => api.users.unlock(u.id), onSuccess: (_d, u) => { toast.success(`${u.username} entsperrt`); invalidate() } })
-  const remove = useMutation({ mutationFn: (u: User) => api.users.remove(u.id), onSuccess: (_d, u) => { toast.success(`${u.username} gelöscht`); invalidate() } })
+  const unlock = useMutation({ mutationFn: (u: User) => api.users.unlock(u.id), onSuccess: (_d, u) => { toast.success(t('admin.users.unlockedToast', { name: u.username })); invalidate() } })
+  const remove = useMutation({ mutationFn: (u: User) => api.users.remove(u.id), onSuccess: (_d, u) => { toast.success(t('admin.users.usernameDeleted', { username: u.username })); invalidate() } })
 
   return (
     <Page>
       <PageHeader
         icon={<Users />}
-        title="Benutzer"
-        description="Konten und Rollen für den Zugriff auf den Tier Model Service."
-        actions={<Button onClick={() => setEditing('new')}><UserPlus /> Benutzer anlegen</Button>}
+        title={t('admin.users.users')}
+        description={t('admin.users.accountsAndRolesForAccess')}
+        actions={<Button onClick={() => setEditing('new')}><UserPlus /> {t('admin.users.createUser')}</Button>}
       />
       <Card className="overflow-hidden">
         {q.isLoading ? (
           <div className="grid gap-2 p-5">{Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-12" />)}</div>
         ) : !q.data?.length ? (
-          <EmptyState icon={<Users />} title="Keine Benutzer" />
+          <EmptyState icon={<Users />} title={t('admin.users.noUsers')} />
         ) : (
           <Table>
             <THead>
               <TR>
-                <TH>Benutzer</TH>
-                <TH>Rolle</TH>
-                <TH className="hidden sm:table-cell">Anmeldung</TH>
-                <TH>Status</TH>
-                <TH className="hidden md:table-cell">Letzte Anmeldung</TH>
-                <TH className="hidden xl:table-cell">Angelegt</TH>
-                <TH className="w-10"><span className="sr-only">Aktionen</span></TH>
+                <TH>{t('admin.users.user')}</TH>
+                <TH>{t('common.role')}</TH>
+                <TH className="hidden sm:table-cell">{t('admin.users.signIn')}</TH>
+                <TH>{t('common.status')}</TH>
+                <TH className="hidden md:table-cell">{t('admin.users.lastSignIn')}</TH>
+                <TH className="hidden xl:table-cell">{t('admin.users.created')}</TH>
+                <TH className="w-10"><span className="sr-only">{t('common.actions')}</span></TH>
               </TR>
             </THead>
             <TBody>
@@ -109,15 +114,15 @@ function UsersPage() {
                       <div className="min-w-0">
                         <p className="truncate font-medium text-foreground">
                           {u.displayName || u.username}
-                          {u.id === me.id && <span className="ml-2 text-xs font-normal text-muted-foreground">(Sie)</span>}
+                          {u.id === me.id && <span className="ml-2 text-xs font-normal text-muted-foreground">{t('admin.users.you')}</span>}
                         </p>
                         <p className="truncate font-mono text-xs text-muted-foreground">{u.username}</p>
                       </div>
                     </div>
                   </TD>
                   <TD>
-                    {u.authType === 'Windows' ? (
-                      <Tooltip content="Wird bei jeder Anmeldung aus den AD-Gruppen bestimmt">
+                    {u.authType !== 'Local' ? (
+                      <Tooltip content={u.authType === 'Entra' ? t('admin.users.determinedFromEntraIdAt') : t('admin.users.determinedFromTheAdGroups')}>
                         <Badge variant={roleVariant[u.role]}>{roleLabels[u.role]}</Badge>
                       </Tooltip>
                     ) : (
@@ -127,34 +132,34 @@ function UsersPage() {
                   <TD className="hidden sm:table-cell"><AuthTypeBadge user={u} /></TD>
                   <TD>
                     <div className="flex flex-wrap gap-1">
-                      {!u.isActive ? <Badge variant="muted">Deaktiviert</Badge> : isLocked(u) ? (
-                        <Tooltip content={`Gesperrt bis ${formatDateTime(u.lockedUntil)}`}><Badge variant="danger"><Lock /> Gesperrt</Badge></Tooltip>
-                      ) : <Badge variant="success">Aktiv</Badge>}
-                      {u.mustChangePassword && u.authType !== 'Windows' && <Badge variant="warning">Passwortwechsel</Badge>}
+                      {!u.isActive ? <Badge variant="muted">{t('admin.users.disabled')}</Badge> : isLocked(u) ? (
+                        <Tooltip content={t('admin.users.lockedUntilLockeduntil', { lockedUntil: formatDateTime(u.lockedUntil) })}><Badge variant="danger"><Lock /> {t('admin.users.locked')}</Badge></Tooltip>
+                      ) : <Badge variant="success">{t('common.active')}</Badge>}
+                      {u.mustChangePassword && u.authType === 'Local' && <Badge variant="warning">{t('admin.users.passwordChange')}</Badge>}
                     </div>
                   </TD>
-                  <TD className="hidden text-[13px] md:table-cell" title={formatDateTime(u.lastLoginAt)}>{u.lastLoginAt ? formatRelative(u.lastLoginAt) : 'Nie'}</TD>
+                  <TD className="hidden text-[13px] md:table-cell" title={formatDateTime(u.lastLoginAt)}>{u.lastLoginAt ? formatRelative(u.lastLoginAt) : t('admin.users.never')}</TD>
                   <TD className="hidden text-[13px] text-muted-foreground xl:table-cell">{formatDateTime(u.createdAt)}</TD>
                   <TD>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon-xs" aria-label={`Aktionen für ${u.username}`}><MoreHorizontal /></Button>
+                        <Button variant="ghost" size="icon-xs" aria-label={t('admin.users.actionsForUsername', { username: u.username })}><MoreHorizontal /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={() => setEditing(u)}><Pencil /> Bearbeiten</DropdownMenuItem>
-                        {u.authType !== 'Windows' && <DropdownMenuItem onSelect={() => setResetFor(u)}><KeyRound /> Passwort zurücksetzen</DropdownMenuItem>}
-                        {isLocked(u) && <DropdownMenuItem onSelect={() => unlock.mutate(u)}><Unlock /> Entsperren</DropdownMenuItem>}
+                        <DropdownMenuItem onSelect={() => setEditing(u)}><Pencil /> {t('common.edit')}</DropdownMenuItem>
+                        {u.authType === 'Local' && <DropdownMenuItem onSelect={() => setResetFor(u)}><KeyRound /> {t('admin.users.resetPassword')}</DropdownMenuItem>}
+                        {isLocked(u) && <DropdownMenuItem onSelect={() => unlock.mutate(u)}><Unlock /> {t('admin.users.unlock')}</DropdownMenuItem>}
                         {u.id !== me.id && (
                           <>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               destructive
                               onSelect={async () => {
-                                if (await confirm({ title: `Benutzer „${u.username}“ löschen?`, description: 'Das Konto wird dauerhaft entfernt. Einträge im Änderungsprotokoll bleiben erhalten.', confirmText: 'Löschen', destructive: true }))
+                                if (await confirm({ title: t('admin.users.deleteUserUsername', { username: u.username }), description: t('admin.users.theAccountIsRemovedPermanently'), confirmText: t('common.delete'), destructive: true }))
                                   remove.mutate(u)
                               }}
                             >
-                              <Trash2 /> Löschen
+                              <Trash2 /> {t('common.delete')}
                             </DropdownMenuItem>
                           </>
                         )}
@@ -179,13 +184,13 @@ function PasswordField({ id, value, onChange }: { id: string; value: string; onC
     <div className="grid gap-2">
       <div className="flex gap-2">
         <Input id={id} type={show ? 'text' : 'password'} autoComplete="new-password" className="font-mono" value={value} onChange={(e) => onChange(e.target.value)} />
-        <Tooltip content="Sicheres Passwort generieren">
-          <Button type="button" variant="outline" size="icon" onClick={() => { onChange(generatePassword()); setShow(true) }} aria-label="Passwort generieren">
+        <Tooltip content={t('admin.users.generateASecurePassword')}>
+          <Button type="button" variant="outline" size="icon" onClick={() => { onChange(generatePassword()); setShow(true) }} aria-label={t('admin.users.generatePassword')}>
             <RefreshCw />
           </Button>
         </Tooltip>
-        <Tooltip content="Kopieren">
-          <Button type="button" variant="outline" size="icon" disabled={!value} onClick={() => navigator.clipboard.writeText(value).then(() => toast.success('Passwort kopiert'))} aria-label="Passwort kopieren">
+        <Tooltip content={t('admin.users.copy')}>
+          <Button type="button" variant="outline" size="icon" disabled={!value} onClick={() => navigator.clipboard.writeText(value).then(() => toast.success(t('admin.users.passwordCopied')))} aria-label={t('admin.users.copyPassword')}>
             <Copy />
           </Button>
         </Tooltip>
@@ -222,28 +227,29 @@ function UserSheet({ value, onClose, selfId }: { value: User | 'new' | null; onC
         : api.users.update(user!.id, { displayName: displayName.trim(), role, isActive }),
     onSuccess: (u) => {
       qc.invalidateQueries({ queryKey: ['users'] })
-      toast.success(isNew ? `Benutzer ${u.username} angelegt` : 'Änderungen gespeichert', {
-        description: isNew ? 'Der Benutzer muss das Passwort bei der ersten Anmeldung ändern.' : undefined,
+      toast.success(isNew ? t('admin.users.userUsernameCreated', { username: u.username }) : t('admin.users.changesSaved'), {
+        description: isNew ? t('admin.users.theUserMustChangeThe') : undefined,
       })
       onClose()
     },
   })
   const self = user?.id === selfId
   const windows = user?.authType === 'Windows'
-  const error = isNew && !username.trim() ? 'Benutzername erforderlich.' : isNew && password.length < 12 ? 'Passwort muss mindestens 12 Zeichen haben.' : null
+  const entra = user?.authType === 'Entra'
+  const error = isNew && !username.trim() ? t('admin.users.userNameRequired') : isNew && password.length < 12 ? t('admin.users.passwordMustHaveAtLeast') : null
 
   return (
     <Sheet open={!!value} onOpenChange={(o) => !o && onClose()}>
       <SheetContent>
         <form className="flex h-full flex-col" onSubmit={(e) => { e.preventDefault(); if (!error) save.mutate() }}>
           <SheetHeader>
-            <SheetTitle>{isNew ? 'Lokalen Benutzer anlegen' : `${user?.username} bearbeiten`}</SheetTitle>
+            <SheetTitle>{isNew ? t('admin.users.createLocalUser') : t('admin.users.editTitle', { name: user?.username })}</SheetTitle>
             <SheetDescription>
               {isNew
-                ? 'Das initiale Passwort muss bei der ersten Anmeldung geändert werden.'
-                : windows
-                  ? 'Windows-Konto: Anzeigename und Status.'
-                  : 'Rolle und Status des Kontos.'}
+                ? t('admin.users.theInitialPasswordMustBe')
+                : windows || entra
+                  ? t('admin.users.valueAccountDisplayNameAnd', { value: entra ? t('admin.users.entraId') : 'Windows' })
+                  : t('admin.users.roleAndStatusOfThe')}
             </SheetDescription>
           </SheetHeader>
           <SheetBody className="grid content-start gap-5">
@@ -251,28 +257,27 @@ function UserSheet({ value, onClose, selfId }: { value: User | 'new' | null; onC
               <div className="flex gap-2.5 rounded-lg border bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
                 <Info className="mt-px size-4 shrink-0" />
                 <p>
-                  Hier werden nur lokale Konten angelegt. Windows-Konten entstehen automatisch bei der ersten Windows-Anmeldung;
-                  ihre Rolle folgt aus den AD-Gruppen unter{' '}
-                  <Link to="/admin/windows-anmeldung" className="font-medium text-primary hover:underline" onClick={onClose}>Windows-Anmeldung</Link>.
+                  {t('admin.users.onlyLocalAccountsAreCreated')}{' '}
+                  <Link to="/admin/windows-anmeldung" className="font-medium text-primary hover:underline" onClick={onClose}>{t('admin.users.windowsSignIn')}</Link>.
                 </p>
               </div>
             )}
-            <Field label="Benutzername" htmlFor="u-username" required={isNew}>
+            <Field label={t('admin.users.userName')} htmlFor="u-username" required={isNew}>
               <Input id="u-username" value={username} onChange={(e) => setUsername(e.target.value)} readOnly={!isNew} autoComplete="off" className="font-mono" autoFocus={isNew} />
             </Field>
-            <Field label="Anzeigename" htmlFor="u-display">
-              <Input id="u-display" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Vorname Nachname" />
+            <Field label={t('admin.users.displayName')} htmlFor="u-display">
+              <Input id="u-display" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={t('admin.users.firstNameLastName')} />
             </Field>
             <div className="grid gap-2">
-              <p className="text-[13px] font-medium">Rolle</p>
-              <div role="radiogroup" aria-label="Rolle" className="grid gap-2">
+              <p className="text-[13px] font-medium">{t('common.role')}</p>
+              <div role="radiogroup" aria-label={t('common.role')} className="grid gap-2">
                 {roles.map((r) => (
                   <button
                     key={r}
                     type="button"
                     role="radio"
                     aria-checked={role === r}
-                    disabled={windows ? r !== role : self && r !== 'Admin'}
+                    disabled={windows || entra ? r !== role : self && r !== 'Admin'}
                     onClick={() => setRole(r)}
                     className={cn(
                       'flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45',
@@ -293,24 +298,31 @@ function UserSheet({ value, onClose, selfId }: { value: User | 'new' | null; onC
                 <div className="flex gap-2.5 rounded-lg border border-sky-500/25 bg-sky-500/5 px-3 py-2.5 text-xs text-sky-900 dark:text-sky-200">
                   <MonitorCheck className="mt-px size-4 shrink-0" />
                   <p>
-                    Die Rolle eines Windows-Kontos wird bei jeder Anmeldung aus seinen AD-Gruppen bestimmt und kann hier nicht geändert werden.
-                    Die Zuordnung Gruppe → Rolle pflegen Sie unter{' '}
-                    <Link to="/admin/windows-anmeldung" className="font-medium underline underline-offset-2" onClick={onClose}>Windows-Anmeldung</Link>.
+                    {t('admin.users.theRoleOfAWindows')}{' '}
+                    <Link to="/admin/windows-anmeldung" className="font-medium underline underline-offset-2" onClick={onClose}>{t('admin.users.windowsSignIn')}</Link>.
+                  </p>
+                </div>
+              ) : entra ? (
+                <div className="flex gap-2.5 rounded-lg border border-sky-500/25 bg-sky-500/5 px-3 py-2.5 text-xs text-sky-900 dark:text-sky-200">
+                  <Cloud className="mt-px size-4 shrink-0" />
+                  <p>
+                    {t('admin.users.theRoleOfAnEntra')}{' '}
+                    <Link to="/admin/entra-anmeldung" className="font-medium underline underline-offset-2" onClick={onClose}>{t('admin.users.entraIdSignIn')}</Link>.
                   </p>
                 </div>
               ) : self ? (
-                <p className="text-xs text-muted-foreground">Die eigene Admin-Rolle kann nicht entzogen werden.</p>
+                <p className="text-xs text-muted-foreground">{t('admin.users.youCannotRemoveYourOwn')}</p>
               ) : null}
             </div>
             {isNew ? (
-              <Field label="Initiales Passwort" htmlFor="u-pw" required>
+              <Field label={t('admin.users.initialPassword')} htmlFor="u-pw" required>
                 <PasswordField id="u-pw" value={password} onChange={setPassword} />
               </Field>
             ) : (
               <label htmlFor="u-active" className="flex items-center justify-between gap-4 rounded-lg border px-3.5 py-3">
                 <span className="grid">
-                  <span className="text-[13px] font-medium">Konto aktiv</span>
-                  <span className="text-xs text-muted-foreground">Deaktivierte Konten können sich nicht anmelden.</span>
+                  <span className="text-[13px] font-medium">{t('admin.users.accountActive')}</span>
+                  <span className="text-xs text-muted-foreground">{t('admin.users.disabledAccountsCannotSignIn')}</span>
                 </span>
                 <Switch id="u-active" checked={isActive} disabled={self} onCheckedChange={setActive} />
               </label>
@@ -318,8 +330,8 @@ function UserSheet({ value, onClose, selfId }: { value: User | 'new' | null; onC
           </SheetBody>
           <SheetFooter>
             {error && <span className="mr-auto text-xs text-muted-foreground">{error}</span>}
-            <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
-            <Button type="submit" disabled={!!error} loading={save.isPending}>{isNew ? <><Plus /> Anlegen</> : 'Speichern'}</Button>
+            <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button type="submit" disabled={!!error} loading={save.isPending}>{isNew ? <><Plus /> {t('admin.users.create')}</> : t('common.save')}</Button>
           </SheetFooter>
         </form>
       </SheetContent>
@@ -336,7 +348,7 @@ function ResetPasswordDialog({ user, onClose }: { user: User | null; onClose: ()
   const reset = useMutation({
     mutationFn: () => api.users.resetPassword(user!.id, pw),
     onSuccess: () => {
-      toast.success('Passwort zurückgesetzt', { description: 'Der Benutzer muss es bei der nächsten Anmeldung ändern.' })
+      toast.success(t('admin.users.passwordReset'), { description: t('admin.users.theUserMustChangeIt') })
       qc.invalidateQueries({ queryKey: ['users'] })
       onClose()
     },
@@ -345,16 +357,16 @@ function ResetPasswordDialog({ user, onClose }: { user: User | null; onClose: ()
     <Dialog open={!!user} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Passwort zurücksetzen</DialogTitle>
-          <DialogDescription>Neues temporäres Passwort für <span className="font-medium text-foreground">{user?.username}</span>. Teilen Sie es auf sicherem Weg mit.</DialogDescription>
+          <DialogTitle>{t('admin.users.resetPassword')}</DialogTitle>
+          <DialogDescription>{t('admin.users.newTemporaryPasswordFor')} <span className="font-medium text-foreground">{user?.username}</span>{t('admin.users.shareItSecurely')}</DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); if (pw.length >= 12) reset.mutate() }}>
-          <Field label="Neues Passwort" htmlFor="reset-pw">
+          <Field label={t('admin.users.newPassword')} htmlFor="reset-pw">
             <PasswordField id="reset-pw" value={pw} onChange={setPw} />
           </Field>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
-            <Button type="submit" disabled={pw.length < 12} loading={reset.isPending}>Zurücksetzen</Button>
+            <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button type="submit" disabled={pw.length < 12} loading={reset.isPending}>{t('common.reset')}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

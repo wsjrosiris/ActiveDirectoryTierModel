@@ -3,7 +3,38 @@
 Base URL: `/api`. JSON in camelCase, Enums als Strings. Fehler kommen als
 RFC 7807 ProblemDetails (`{ title, detail, status, errors? }`).
 
+## Sprache
+
+Meldungen (Validierung, Fehler, Berichte) richten sich nach `Accept-Language` (`de`, `en`) oder `?lang=`; ohne Angabe
+Deutsch. `GET /api/auth/me` liefert `language` (`de`, `en` oder `null` = Browser-Standard),
+`PUT /api/auth/me/language` `{ language }` setzt sie. Einstellung `defaultLanguage` (Instanz) bestimmt die Sprache
+gespeicherter und versendeter Texte.
+
+## Domäne wählen
+
+Domänengebundene Aufrufe (Konfiguration, Läufe, Zeitpläne, Überwachung, Compliance, AD-Ansicht, Einrichtung,
+Import/Export, Berichte, JIT, domänenbezogene Einstellungen) wirken auf die Domäne aus dem Header
+`X-TierModel-Domain: <key>`; ohne Header gilt die Standard-Domäne (bestehende Skripte funktionieren unverändert).
+Bei `GET` geht auch `?domain=<key>` (Downloads, Berichtsvorschau). Unbekannter Schlüssel → 400, deaktivierte Domäne
+→ 409 bei Änderungen. IDs sind global: Detail-, Abbruch- und Freigabe-Aufrufe per ID wirken auf die Domäne des
+Objekts (`domain` in Laufdetails, `domainId` in Listen). Eine Planung aus einer anderen Domäne lässt sich nicht
+anwenden.
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| GET | `/api/domains` | alle Domänen (alle Rollen) |
+| GET | `/api/domains/overview` | je Domäne letzter Audit/Überwachung und Compliance-Wert |
+| POST/PUT/DELETE | `/api/domains[/{id}]` (Admin) | Pflege; `GET /api/domains/{id}/deletion` sagt, ob Löschen möglich ist |
+| POST | `/api/domains/check` (Admin) | Verbindung zu DC/Domäne prüfen |
+
+`GET/PUT /api/settings` lesen und schreiben `defaultPreferredDc` und `admlLanguage` der aktuellen Domäne; alle anderen
+Einstellungen gelten für die ganze Instanz. Wartungsfenster und Sperrzeiten haben optional `domainIds`.
+
 ## Sicherheit
+
+**API-Tokens:** Skripte melden sich mit `Authorization: Bearer tmk_…` an (Benutzermenü › API-Tokens). Mit Token ist
+kein CSRF-Token nötig; Token in URL oder Cookie werden abgelehnt. `/api/tokens` ist nur mit Browser-Sitzung
+nutzbar (`GET`, `POST { name, role, expiresInDays }` → Token einmalig, `POST /api/tokens/{id}/revoke`).
 
 - Anmeldung per Cookie (`TierModel.Auth`, HttpOnly, Secure, SameSite=Strict).
 - CSRF: `GET /api/auth/me` setzt das lesbare Cookie `XSRF-TOKEN`. Jeder
@@ -112,14 +143,17 @@ ist ein Platzhalter, den das Framework zur Laufzeit ersetzt.
 Läufe werden in eine Warteschlange gestellt und nacheinander ausgeführt.
 
 ```ts
-type Scope = 'FullDeployment' | 'OuOnly' | 'GroupOnly' | 'UserOnly' | 'GposOnly' | 'OuAclsOnly' | 'AdmxOnly'
+type Scope = 'FullDeployment' | 'OuOnly' | 'GroupOnly' | 'UserOnly' | 'GposOnly' | 'OuAclsOnly' | 'AdmxOnly' | 'AuthSilosOnly'
 interface RunRequest {
   preferredDc: string; scope: Scope | null      // null nur erlaubt, wenn mind. ein include* gesetzt ist;
                                                  // include* nur mit scope 'FullDeployment' oder null (wie in den Skripten)
   includeMsa: boolean; includeGmsa: boolean; includeDmsa: boolean; includeWinLaps: boolean
   admlLanguage?: string                          // Standard aus Einstellungen
 }
-interface DeployRequest extends RunRequest { confirmApply: boolean }   // true erfordert Operator
+interface DeployRequest extends RunRequest {
+  confirmApply: boolean                          // true erfordert Operator
+  planRunId?: number                             // Pflicht für confirmApply, wenn requirePlanBeforeApply aktiv ist
+}
 
 type RunKind = 'Deploy' | 'Audit'
 type RunStatus = 'AwaitingApproval' | 'Queued' | 'Running' | 'Succeeded' | 'Failed' | 'Cancelled' | 'Rejected'
@@ -137,12 +171,26 @@ interface RunSummary {
   approvedBy: string | null; approvedAt: string | null     // bei Ablehnung: wer/wann abgelehnt hat
   approvalComment: string | null
   approvalExpiresAt: string | null                          // nur solange 'AwaitingApproval'
+  planRunId: number | null                                  // Anwenden: Planungslauf, aus dem angewendet wurde
+  admlLanguage: string | null
 }
 interface Finding { type: string; resourceType: string; identifier: string; details: string; [k: string]: any }
 interface RunDetail extends RunSummary {
   summary: Record<string, number> | null   // auditSummary aus dem Report
   findings: Finding[]
   configVersions: Record<string, number>   // Section-Key → verwendete Version
+  plan: DeployPlan | null                  // nur Deploy/Planung
+  planApplicability: { applicable: boolean; reason: string | null; expiresAt: string | null } | null
+}
+interface DeployPlan {
+  metadata: { version: string; scope: string; preferredDc: string; timestamp: string; includes: string[] }
+  summary: { totalActions: number; create: number; update: number; link: number; configure: number; existing: number }
+  phases: { phase: number; name: string; area: string; actionCount: number; existingCount: number }[]
+  actions: { phase: number; area: string; action: string; resourceType: string; name: string; path: string | null;
+             details: Record<string, string | number | boolean | string[]> | null }[]
+  actionCounts: Record<string, number>     // je Aktionsart, vor dem Kürzen gezählt
+  warnings: string[]; errors: string[]
+  truncated: boolean                       // mehr als 5000 Aktionen: Liste gekürzt
 }
 interface LogLine { seq: number; at: string; stream: 'stdout' | 'stderr' | 'system'; level: 'info' | 'warn' | 'error' | 'success'; text: string }
 ```
@@ -153,6 +201,10 @@ interface LogLine { seq: number; at: string; stream: 'stdout' | 'stderr' | 'syst
 | POST | `/api/runs/deploy` | `DeployRequest` → `RunSummary` (202) |
 | POST | `/api/runs/audit` | `RunRequest` → `RunSummary` (202) |
 | GET  | `/api/runs/{id}` | → `RunDetail` |
+| POST | `/api/runs/monitor` | `{ preferredDc }` → `RunSummary` (202, Operator) – Überwachungslauf (`kind: 'Monitor'`) |
+| POST | `/api/runs/{id}/remediate` | `{ area }` → `RunSummary` (Operator) – Planungslauf für den Bereich eines Audit-Befunds (`ous`→`OuOnly`, `groups`→`GroupOnly`, `users`→`UserOnly`, `gpos`→`GposOnly`, `acls`→`OuAclsOnly`, `admx`→`AdmxOnly`, `msa`/`gmsa`/`dmsa`/`winlaps`→ nur das Add-on) |
+| GET  | `/api/runs/{id}/plan` | → `DeployPlan`; 404 ohne Planung |
+| GET  | `/api/runs/plan-candidates?preferredDc&scope&includeMsa&…&admlLanguage` | → `{ requirePlan, maxAgeHours, candidate: { id, requestedBy, finishedAt, expiresAt, summary, changes } \| null, latestPlanRunId, reason }` – passende Planung zum Anwenden |
 | GET  | `/api/runs/{id}/log?after=0` | → `{ status: RunStatus, lines: LogLine[] }` (Zeilen mit `seq > after`, max. 2000) |
 | POST | `/api/runs/{id}/cancel` | → 204 (Operator; bei `AwaitingApproval` darf auch der Antragsteller zurückziehen); 404 unbekannt, 409 bereits beendet |
 | POST | `/api/runs/{id}/approve` | `{ comment?: string }` → `RunSummary` (Operator, **nicht** der Antragsteller → 403); 409 wenn nicht `AwaitingApproval` |
@@ -163,11 +215,89 @@ Die Konfigurationsversionen werden dabei **festgeschrieben** (`configVersions` i
 der Stand, den die freigebende Person sieht, auch wenn die Konfiguration inzwischen weiter bearbeitet wurde. Nach der
 Freigabe → `Queued`. Ablehnung oder Ablauf (`approvalTimeoutHours`) → `Rejected`.
 
+**Anwenden nur nach Planung:** Ist `requirePlanBeforeApply` aktiv, verlangt `confirmApply: true` eine `planRunId`. Der
+Planungslauf muss erfolgreich sein und in Bereich, Add-ons, DC (ohne Groß-/Kleinschreibung), ADML-Sprache und den
+Konfigurationsversionen mit dem aktuellen Stand übereinstimmen und darf nicht älter als `planMaxAgeHours` sein;
+sonst 400 mit Meldung zu `planRunId`. Der Anwenden-Lauf übernimmt die Versionen des Planungslaufs (auch bei Freigabe).
+
+## Privilegierte Zugriffe und Compliance (alle angemeldeten Benutzer)
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| GET | `/api/privileged` | letzte Überwachung: Gruppen mit Mitgliedern und Bewertung, nicht erwartete Mitglieder, Hygiene-Befunde, Angriffspfade, Zähler |
+| GET | `/api/privileged/changes?limit=` | hinzugefügte/entfernte Mitglieder je Überwachungslauf |
+| GET | `/api/compliance` | Wert je Tier mit Abzügen, Tagesverlauf (30 Tage, UTC) und die verwendeten Gewichte |
+
+## Active Directory (Ist-Zustand, alle angemeldeten Benutzer)
+
+Nur auf einem Windows-Server in der Domäne; sonst `available: false`. Ergebnisse 60 s zwischengespeichert,
+`refresh=true` umgeht den Cache.
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| GET | `/api/ad/tree` | OU-Baum: DN, Name, Anzahl Unter-OUs, Löschschutz, GPO-Vererbung blockiert, verknüpfte GPOs |
+| GET | `/api/ad/object?dn=` | OU: Unter-OUs, Anzahl Benutzer/Gruppen/Computer, GPO-Verknüpfungen, explizite ACEs; Gruppe: Mitglieder |
+| GET | `/api/ad/compare` | Soll/Ist je OU: `missing` / `extra` / `different` / `same` mit Unterschieden bei ACEs und GPO-Verknüpfungen |
+
+## Einrichtung (Admin)
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| GET | `/api/setup/state` | ob die Einrichtung angeboten wird, erkannte Domäne, DCs |
+| POST | `/api/setup/gpo-prefix/preview` | `{ prefix }` → Liste der GPO-Umbenennungen |
+| POST | `/api/setup/complete` | Einrichtung abgeschlossen bzw. übersprungen |
+
+## Wartungsfenster (Lesen: alle, Schreiben: Admin)
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| GET | `/api/maintenance` | Fenster (Name, Wochentage, von/bis, Zeitzone, aktiv) und Sperrzeiten (von/bis, Grund, aktiv) |
+| GET | `/api/maintenance/status` | ob *Anwenden* jetzt erlaubt ist, nächstes Fenster, aktive Sperrzeit |
+| POST/PUT/DELETE | `/api/maintenance/windows[/{id}]`, `/api/maintenance/freezes[/{id}]` | Pflege |
+
+`RunStatus` kennt zusätzlich `Scheduled` mit `scheduledFor` (Start zu Beginn des nächsten Fensters).
+
+## Berichte (alle angemeldeten Benutzer)
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| GET | `/api/reports` | verfügbare Berichte |
+| GET | `/api/reports/{soll-ist\|aenderungen\|privilegiert}?from&to&format=pdf\|html` | Bericht als PDF oder HTML |
+| GET/PUT | `/api/reports/schedules` (Admin) | E-Mail-Versand wöchentlich/monatlich |
+| POST | `/api/reports/schedules/{id}/send` (Admin) | sofort senden |
+
+## Import (Bearbeiter) und Git (Admin)
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| POST | `/api/config/import/file` | ZIP als Rohdaten → Vorschau (max. 20 MB, 500 Einträge; Pfade außerhalb werden abgelehnt) |
+| POST | `/api/config/import/remote` | `{ instanceId }` → Vorschau aus einer anderen Instanz |
+| GET | `/api/config/import/{id}` | Vorschau je Bereich (unverändert, geändert, neu), Validierung |
+| POST | `/api/config/import/{id}/replacements` | Suchen → Ersetzen-Regeln anwenden |
+| POST | `/api/config/import/{id}/validate` | Validierung der Auswahl |
+| POST | `/api/config/import/{id}/apply` | `{ sections, comment }` → neue Versionen; 409, wenn sich ein Bereich seit der Vorschau geändert hat |
+| GET/POST/PUT/DELETE | `/api/config/remote-instances[/{id}]`, `POST …/{id}/check` | andere Instanzen (Pflege: Admin) |
+| GET/PUT | `/api/settings/git` | Git-Einstellungen und Status |
+| POST | `/api/settings/git/sync`, `/api/settings/git/resolve` | jetzt synchronisieren; Konflikt durch Übernahme des Remote-Stands lösen |
+
+## Befristeter Zugriff (JIT)
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| GET | `/api/jit/overview`, `/api/jit/requests` | Übersicht, Voraussetzungen; Anfragen (Operatoren alle, sonst eigene) |
+| POST | `/api/jit/requests` | `{ groupId, minutes, member?, justification }` |
+| POST | `/api/jit/requests/{id}/approve \| reject \| withdraw \| revoke` | Freigabe durch einen anderen Operator; Zurückziehen; vorzeitig entziehen |
+| POST | `/api/jit/prerequisite/check` (Operator) | PAM-Feature und Gesamtstrukturebene prüfen |
+| GET/POST/PUT/DELETE | `/api/jit/groups[/{id}]` (Admin) | JIT-Gruppen |
+
+`RunKind` kennt zusätzlich `Jit` (Aufnahme bzw. Entzug als Lauf mit Protokoll).
+
 ## Zeitpläne (geplante Audits)
 
 ```ts
 interface Schedule extends RunRequest {
   id: number; name: string; cron: string   // 5-Feld-Cron, z. B. "0 2 * * *"
+  kind: 'Audit' | 'Monitor'                // Standard 'Audit'; 'Monitor' ignoriert Bereich und Add-ons
   timeZone: string                         // IANA, z. B. "Europe/Berlin"
   enabled: boolean
   nextRunAt: string | null; lastRunAt: string | null; lastRunId: number | null
@@ -228,6 +358,10 @@ interface Settings {
   requireApproval: boolean        // Vier-Augen-Prinzip für Deploy/Anwenden
   approvalTimeoutHours: number    // 1–720, danach verfällt ein Antrag
   publicBaseUrl: string           // z. B. https://tiermodel01.contoso.com:8443 – für Links in Benachrichtigungen; leer erlaubt
+  requirePlanBeforeApply: boolean // Anwenden nur aus passendem Planungslauf (Standard true)
+  planMaxAgeHours: number         // 1–720, Gültigkeit einer Planung (Standard 24)
+  staleDays: number               // Hygiene: Konto ohne Anmeldung (Standard 90)
+  passwordMaxAgeDays: number      // Hygiene: Passwortalter (Standard 365)
   frameworkPath: string           // nur lesen
   pwshPath: string                // nur lesen
 }
@@ -255,11 +389,11 @@ Bei Mitgliedschaft in mehreren zugeordneten Gruppen gilt die höchste Rolle.
 ## Benachrichtigungen (Admin)
 
 ```ts
-type ChannelType = 'Email' | 'Teams' | 'Webhook'
+type ChannelType = 'Email' | 'Teams' | 'Webhook' | 'Syslog' | 'LogAnalytics'   // Syslog/LogAnalytics: Felder je Typ, Geheimnisse nur schreibend
 interface NotificationChannel {
   id: number; name: string; type: ChannelType; enabled: boolean
   target: string       // Email: Empfänger, durch Komma getrennt · Teams/Webhook: URL (in Antworten gekürzt: nur Schema+Host+"…")
-  events: { drift: boolean; failure: boolean; apply: boolean; approval: boolean }
+  events: { drift: boolean; failure: boolean; apply: boolean; approval: boolean; certificate: boolean; privileged: boolean }
   lastSentAt: string | null; lastError: string | null; createdAt: string
 }
 interface SmtpSettings {
@@ -281,7 +415,7 @@ interface SmtpSettings {
 | PUT    | `/api/notifications/smtp` | `SmtpSettings` → `SmtpSettings` |
 
 Ereignisse: **drift** (Audit mit Abweichungen), **failure** (Lauf fehlgeschlagen), **apply** (Deploy/Anwenden erfolgreich
-abgeschlossen), **approval** (Freigabe angefordert). Geheimnisse (SMTP-Passwort, Webhook-URLs) werden verschlüsselt gespeichert.
+abgeschlossen), **approval** (Freigabe angefordert, mit Anzahl der geplanten Änderungen), **certificate** (HTTPS-Zertifikat läuft in weniger als 30 Tagen ab; täglich geprüft). Geheimnisse (SMTP-Passwort, Webhook-URLs) werden verschlüsselt gespeichert.
 
 ## Vorschläge für Eingabefelder (alle angemeldeten Benutzer)
 
@@ -297,4 +431,9 @@ Damit keine Werte aus dem Gedächtnis getippt oder als JSON eingegeben werden m�
 ## Sonstiges
 
 - `GET /healthz`: 200 wenn die Datenbank erreichbar ist.
+- `GET /api/changelog/verify` (Admin): prüft die Hash-Kette des Änderungsprotokolls (`ok`, erster fehlerhafter Eintrag, Anzahl, letzter Hash); `GET /api/changelog/chain`: zwischengespeichertes Ergebnis (10 min) für die Anzeige.
+- Entra ID: `GET /api/auth/entra?returnUrl=` startet die Anmeldung (Rückruf `/signin-oidc`); `GET/PUT /api/settings/entra-auth`, `POST /api/settings/entra-auth/check` (Admin); `/api/auth/options` enthält `entraAuth`.
+- `GET /api/health/details` (Admin): `{ status, checkedAt, version, items: { key, title, status: 'ok' | 'warn' | 'error', message, facts: { label, value }[] }[] }`
+  – Anwendung, Zertifikat, Datenbank, Warteschlange, letzte Läufe, Arbeitsverzeichnis, PowerShell, Framework,
+  Hintergrunddienste, Schlüsselspeicher.
 - Alles außerhalb von `/api` liefert die SPA aus (Fallback auf `index.html`).

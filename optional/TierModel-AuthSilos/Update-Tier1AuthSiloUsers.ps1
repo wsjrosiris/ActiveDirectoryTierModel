@@ -1,3 +1,8 @@
+# NOTE: Superseded by the config-driven implementation in the TierModel module
+#       (config/tiermodel-authsilos.json, Deploy-TierModel.ps1 -AuthSilosOnly / -FullDeployment,
+#       Audit-TierModel.ps1 -AuthSilosOnly; see docs/authentication-silos.md). This script is kept
+#       for existing scheduled tasks and keeps working, but new deployments should use the
+#       config-driven implementation, which also creates real authentication policy silos.
 [cmdletbinding(SupportsShouldProcess=$true)]
 param (
     [Parameter(Mandatory=$false)]

@@ -1,3 +1,11 @@
+# NOTE: Superseded by the config-driven implementation in the TierModel module
+#       (config/tiermodel-authsilos.json, Deploy-TierModel.ps1 -AuthSilosOnly / -FullDeployment,
+#       Audit-TierModel.ps1 -AuthSilosOnly; see docs/authentication-silos.md). This script is kept
+#       for existing scheduled tasks and keeps working, but new deployments should use the
+#       config-driven implementation, which also creates real authentication policy silos.
+#       Policies that already exist are NOT changed by this script: a policy created by an older
+#       version still carries the '&&' condition - update it (Set-ADAuthenticationPolicy) or let
+#       Deploy-TierModel.ps1 -AuthSilosOnly manage it under the same name.
 param (
     [Parameter(Mandatory=$true)]
     [string]$PreferredDC
@@ -52,7 +60,10 @@ try {
     $T0MemberServerSID = (Get-ADGroup -Identity 'Tier0MemberServers' -Properties ObjectSid -Server $PreferredDC).ObjectSid.Value
 
     #SDDL for the AuthSilo EA = Enterprise Domain Controllers, Tier0PAWDevices, and Tier0MemberServers
-    $T0AllowToAuthenticateFromSDDL = "O:SYG:SYD:(XA;OICI;CR;;;WD;((Member_of {SID(ED)}) || ((Member_of {SID($T0PawDeviceSID)}) && (Member_of {SID($T0MemberServerSID)}))))"
+    # Fixed: a device is allowed when it is a domain controller OR a member of ANY of the device groups.
+    # The former condition joined the groups with && (device had to be in BOTH groups), which
+    # blocked sign-in from PAWs that are not also Tier 0 member servers (and vice versa).
+    $T0AllowToAuthenticateFromSDDL = "O:SYG:SYD:(XA;OICI;CR;;;WD;((Member_of {SID(ED)}) || (Member_of_any {SID($T0PawDeviceSID), SID($T0MemberServerSID)})))"
 
     #Create the Authentication Policies for Tier 0
     New-ADAuthenticationPolicy -Name $T0KerberosAuthenticationPolicy `
@@ -84,8 +95,9 @@ try {
     $T1PawDeviceSID = (Get-ADGroup -Identity 'Tier1PAWDevices' -Properties ObjectSid -Server $PreferredDC).ObjectSid.Value
     $T1MemberServerSID = (Get-ADGroup -Identity 'Tier1MemberServers' -Properties ObjectSid -Server $PreferredDC).ObjectSid.Value
 
-    #SDDL for the AuthSilo EA = Enterprise Domain Controllers, Tier0PAWDevices, and Tier0MemberServers
-    $T1AllowToAuthenticateFromSDDL = "O:SYG:SYD:(XA;OICI;CR;;;WD;((Member_of {SID($T1PawDeviceSID)}) && (Member_of {SID($T1MemberServerSID)})))"
+    #SDDL for the AuthSilo EA = Tier1PAWDevices OR Tier1MemberServers
+    # Fixed: OR semantics - a device in ANY of the Tier 1 device groups is allowed (was && = both groups).
+    $T1AllowToAuthenticateFromSDDL = "O:SYG:SYD:(XA;OICI;CR;;;WD;(Member_of_any {SID($T1PawDeviceSID), SID($T1MemberServerSID)}))"
 
     #Create the Authentication Policies for Tier 1
     New-ADAuthenticationPolicy -Name $T1KerberosAuthenticationPolicy `

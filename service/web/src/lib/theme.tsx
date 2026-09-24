@@ -6,7 +6,7 @@ const KEY = 'tm-theme'
 interface ThemeCtx {
   theme: ThemePref
   resolved: 'light' | 'dark'
-  setTheme: (t: ThemePref) => void
+  setTheme: (tt: ThemePref) => void
   toggle: () => void
 }
 
@@ -43,10 +43,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.style.colorScheme = resolved
   }, [resolved])
 
-  const setTheme = React.useCallback((t: ThemePref) => {
-    setThemeState(t)
+  const setTheme = React.useCallback((tt: ThemePref) => {
+    setThemeState(tt)
     try {
-      localStorage.setItem(KEY, t)
+      localStorage.setItem(KEY, tt)
     } catch {
       /* ignore */
     }

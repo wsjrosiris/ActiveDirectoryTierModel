@@ -3,8 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
   Bell,
+  CloudUpload,
+  FileClock,
+  Radio,
   CheckCircle2,
   Hourglass,
+  KeySquare,
   Mail,
   MessagesSquare,
   MoreHorizontal,
@@ -19,10 +23,25 @@ import {
   Undo2,
   Webhook,
   XCircle,
+  ShieldUser,
+  Timer,
+  KeyRound,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, ApiError } from '@/api/client'
-import type { ChannelEvents, ChannelInput, ChannelType, NotificationChannel, SmtpSecurity, SmtpSettings, SmtpUpdate } from '@/api/types'
+import type {
+  ChannelEvents,
+  ChannelInput,
+  ChannelType,
+  LogAnalyticsInput,
+  NotificationChannel,
+  SmtpSecurity,
+  SmtpSettings,
+  SmtpUpdate,
+  SyslogFormat,
+  SyslogProtocol,
+  SyslogSettings,
+} from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -49,6 +68,7 @@ import { Page, PageHeader } from '@/components/shared/page-header'
 import { RequireAuth } from '@/features/auth/auth'
 import { errorMessage } from '@/lib/query'
 import { cn, formatDateTime, formatRelative } from '@/lib/utils'
+import { t } from '@/i18n'
 
 export function Component() {
   return (
@@ -62,16 +82,32 @@ const channelsKey = ['notifications', 'channels'] as const
 const smtpKey = ['notifications', 'smtp'] as const
 
 const typeMeta: Record<ChannelType, { label: string; icon: React.ReactNode; tone: string; targetLabel: string }> = {
-  Email: { label: 'E-Mail', icon: <Mail />, tone: 'bg-sky-500/10 text-sky-600 dark:text-sky-300', targetLabel: 'Empfänger' },
-  Teams: { label: 'Microsoft Teams', icon: <MessagesSquare />, tone: 'bg-violet-500/10 text-violet-600 dark:text-violet-300', targetLabel: 'Webhook-URL' },
-  Webhook: { label: 'Webhook', icon: <Webhook />, tone: 'bg-amber-500/10 text-amber-700 dark:text-amber-300', targetLabel: 'URL' },
+  Email: { label: t('admin.notifications.eMail'), icon: <Mail />, tone: 'bg-sky-500/10 text-sky-600 dark:text-sky-300', targetLabel: t('admin.notifications.recipients') },
+  Teams: { label: t('admin.notifications.microsoftTeams'), icon: <MessagesSquare />, tone: 'bg-violet-500/10 text-violet-600 dark:text-violet-300', targetLabel: t('admin.notifications.webhookUrl') },
+  Webhook: { label: t('admin.notifications.webhook'), icon: <Webhook />, tone: 'bg-amber-500/10 text-amber-700 dark:text-amber-300', targetLabel: t('admin.notifications.url') },
+  Syslog: { label: t('admin.notifications.syslogSiem'), icon: <Radio />, tone: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300', targetLabel: t('admin.notifications.server') },
+  LogAnalytics: { label: t('admin.notifications.logAnalytics'), icon: <CloudUpload />, tone: 'bg-blue-500/10 text-blue-700 dark:text-blue-300', targetLabel: t('admin.notifications.dataCollectionEndpoint') },
 }
 
+const typeHints: Record<ChannelType, string> = {
+  Email: t('admin.notifications.messageToMailboxesViaThe'),
+  Teams: t('admin.notifications.cardInATeamsChannel'),
+  Webhook: t('admin.notifications.jsonViaHttpPost'),
+  Syslog: t('admin.notifications.cefOrRfc5424To'),
+  LogAnalytics: t('admin.notifications.microsoftSentinelViaTheLogs'),
+}
+
+const isSiem = (tt: ChannelType) => tt === 'Syslog' || tt === 'LogAnalytics'
+
 const eventMeta: { key: keyof ChannelEvents; label: string; description: string; icon: React.ReactNode }[] = [
-  { key: 'drift', label: 'Drift', description: 'Ein Audit hat Abweichungen vom Soll-Zustand gefunden.', icon: <ScanSearch /> },
-  { key: 'failure', label: 'Fehler', description: 'Ein Deploy oder Audit ist fehlgeschlagen.', icon: <XCircle /> },
-  { key: 'apply', label: 'Angewendet', description: 'Ein Deploy im Modus „Anwenden“ wurde erfolgreich abgeschlossen.', icon: <Rocket /> },
-  { key: 'approval', label: 'Freigabe', description: 'Ein Deploy wartet auf die Freigabe durch eine zweite Person.', icon: <Hourglass /> },
+  { key: 'drift', label: t('admin.notifications.drift'), description: t('admin.notifications.anAuditFoundDeviationsFrom'), icon: <ScanSearch /> },
+  { key: 'failure', label: t('admin.notifications.error'), description: t('admin.notifications.aDeploymentOrAuditFailed'), icon: <XCircle /> },
+  { key: 'apply', label: t('admin.notifications.applied'), description: t('admin.notifications.aDeploymentInApplyMode'), icon: <Rocket /> },
+  { key: 'approval', label: t('admin.notifications.approval'), description: t('admin.notifications.aDeploymentIsWaitingFor'), icon: <Hourglass /> },
+  { key: 'privileged', label: t('admin.notifications.privilegedGroups'), description: t('admin.notifications.monitoringFoundNewOrRemoved'), icon: <ShieldUser /> },
+  { key: 'jitRequested', label: t('admin.notifications.justInTimeAccessRequested'), description: t('admin.notifications.someoneRequestsATimeLimited'), icon: <Timer /> },
+  { key: 'jitGranted', label: t('admin.notifications.justInTimeAccessGranted'), description: t('admin.notifications.aTimeLimitedMembershipWas'), icon: <KeyRound /> },
+  { key: 'certificate', label: t('admin.notifications.certificate'), description: t('admin.notifications.theServiceSHttpsCertificate'), icon: <KeySquare /> },
 ]
 
 function NotificationsPage() {
@@ -84,20 +120,20 @@ function NotificationsPage() {
     <Page wide className="max-w-[1400px]">
       <PageHeader
         icon={<Bell />}
-        title="Benachrichtigungen"
-        description="E-Mail, Microsoft Teams oder Webhooks bei Drift, Fehlern, Anwendungen und Freigaben."
-        actions={<Button onClick={() => setEditing('new')}><Plus /> Kanal hinzufügen</Button>}
+        title={t('admin.notifications.notifications')}
+        description={t('admin.notifications.eMailMicrosoftTeamsWebhooks')}
+        actions={<Button onClick={() => setEditing('new')}><Plus /> {t('admin.notifications.addChannel')}</Button>}
       />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <section aria-label="Kanäle" className="grid gap-3">
+        <section aria-label={t('admin.notifications.channels')} className="grid gap-3">
           {q.isLoading ? (
             Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-36" />)
           ) : !q.data?.length ? (
             <Card>
               <EmptyState
                 icon={<Bell />}
-                title="Noch keine Kanäle"
-                description="Legen Sie einen Kanal an, um bei folgenden Ereignissen informiert zu werden:"
+                title={t('admin.notifications.noChannelsYet')}
+                description={t('admin.notifications.createAChannelToBe')}
                 action={
                   <div className="grid gap-4">
                     <ul className="mx-auto grid max-w-xl gap-2 text-left sm:grid-cols-2">
@@ -111,7 +147,7 @@ function NotificationsPage() {
                         </li>
                       ))}
                     </ul>
-                    <div><Button onClick={() => setEditing('new')}><Plus /> Ersten Kanal anlegen</Button></div>
+                    <div><Button onClick={() => setEditing('new')}><Plus /> {t('admin.notifications.createFirstChannel')}</Button></div>
                   </div>
                 }
               />
@@ -137,16 +173,16 @@ function ChannelCard({ channel: c, onEdit, smtpMissing }: { channel: Notificatio
     mutationFn: (enabled: boolean) =>
       api.notifications.updateChannel(c.id, { name: c.name, type: c.type, enabled, target: c.type === 'Email' ? c.target : null, events: c.events }),
     onSuccess: (u) => {
-      toast.success(u.enabled ? `„${u.name}“ aktiviert` : `„${u.name}“ deaktiviert`)
+      toast.success(u.enabled ? t('admin.notifications.nameEnabled', { name: u.name }) : t('admin.notifications.nameDisabled', { name: u.name }))
       invalidate()
     },
   })
   const test = useMutation({
     mutationFn: () => api.notifications.testChannel(c.id),
     meta: { silent: true },
-    onSuccess: () => toast.success('Testnachricht zugestellt', { description: `Kanal „${c.name}“ · ${meta.label}` }),
+    onSuccess: () => toast.success(t('admin.notifications.testMessageDelivered'), { description: t('admin.notifications.channelNameLabel', { name: c.name, label: meta.label }) }),
     onError: (e) =>
-      toast.error('Testnachricht fehlgeschlagen', {
+      toast.error(t('admin.notifications.testMessageFailed'), {
         description: e instanceof ApiError ? (e.detail || e.title) : errorMessage(e),
         duration: 10_000,
       }),
@@ -155,7 +191,7 @@ function ChannelCard({ channel: c, onEdit, smtpMissing }: { channel: Notificatio
   const remove = useMutation({
     mutationFn: () => api.notifications.removeChannel(c.id),
     onSuccess: () => {
-      toast.success(`Kanal „${c.name}“ gelöscht`)
+      toast.success(t('admin.notifications.channelNameDeleted', { name: c.name }))
       invalidate()
     },
   })
@@ -169,7 +205,7 @@ function ChannelCard({ channel: c, onEdit, smtpMissing }: { channel: Notificatio
           <div className="flex flex-wrap items-center gap-2">
             <h3 className={cn('truncate text-sm font-semibold', !c.enabled && 'text-muted-foreground')}>{c.name}</h3>
             <Badge variant="outline">{meta.label}</Badge>
-            {!c.enabled && <Badge variant="muted">Deaktiviert</Badge>}
+            {!c.enabled && <Badge variant="muted">{t('admin.notifications.disabled')}</Badge>}
           </div>
           <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground" title={c.target}>{c.target || '–'}</p>
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -182,33 +218,40 @@ function ChannelCard({ channel: c, onEdit, smtpMissing }: { channel: Notificatio
                   </span>
                 </Tooltip>
               ))
-            ) : (
-              <span className="text-xs text-muted-foreground">Keine Ereignisse ausgewählt</span>
+            ) : null}
+            {c.forwardChangeLog && (
+              <Tooltip content={t('admin.notifications.everyChangeLogEntryIs')}>
+                <span className="inline-flex items-center gap-1 rounded-full border bg-card px-2 py-0.5 text-xs font-medium [&_svg]:size-3 [&_svg]:text-muted-foreground">
+                  <FileClock />
+                  {t('admin.notifications.changeLog')}
+                </span>
+              </Tooltip>
             )}
+            {!active.length && !c.forwardChangeLog && <span className="text-xs text-muted-foreground">{t('admin.notifications.noEventsSelected')}</span>}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <Tooltip content={c.enabled ? 'Deaktivieren' : 'Aktivieren'}>
+          <Tooltip content={c.enabled ? t('admin.notifications.disable') : t('admin.notifications.enable')}>
             <span className="mr-1 inline-flex">
-              <Switch checked={c.enabled} disabled={toggle.isPending} onCheckedChange={(v) => toggle.mutate(v)} aria-label={`Kanal ${c.name} aktiv`} />
+              <Switch checked={c.enabled} disabled={toggle.isPending} onCheckedChange={(v) => toggle.mutate(v)} aria-label={t('admin.notifications.channelNameActive', { name: c.name })} />
             </span>
           </Tooltip>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-xs" aria-label={`Aktionen für ${c.name}`}><MoreHorizontal /></Button>
+              <Button variant="ghost" size="icon-xs" aria-label={t('admin.notifications.actionsForName', { name: c.name })}><MoreHorizontal /></Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={onEdit}><Pencil /> Bearbeiten</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => test.mutate()}><Send /> Testnachricht senden</DropdownMenuItem>
+              <DropdownMenuItem onSelect={onEdit}><Pencil /> {t('common.edit')}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => test.mutate()}><Send /> {t('admin.notifications.sendTestMessage')}</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 destructive
                 onSelect={async () => {
-                  if (await confirm({ title: `Kanal „${c.name}“ löschen?`, description: 'Über diesen Kanal werden keine Benachrichtigungen mehr versendet.', confirmText: 'Löschen', destructive: true }))
+                  if (await confirm({ title: t('admin.notifications.deleteChannelName', { name: c.name }), description: t('admin.notifications.noMoreNotificationsWillBe'), confirmText: t('common.delete'), destructive: true }))
                     remove.mutate()
                 }}
               >
-                <Trash2 /> Löschen
+                <Trash2 /> {t('common.delete')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -219,31 +262,38 @@ function ChannelCard({ channel: c, onEdit, smtpMissing }: { channel: Notificatio
           <Tooltip content={c.lastError}>
             <span className="flex min-w-0 items-center gap-1.5 text-rose-600 dark:text-rose-400">
               <XCircle className="size-3.5 shrink-0" />
-              <span className="truncate">Letzter Fehler: {c.lastError}</span>
+              <span className="truncate">{t('admin.notifications.lastError')} {c.lastError}</span>
             </span>
           </Tooltip>
         ) : c.lastSentAt ? (
           <span className="flex items-center gap-1.5" title={formatDateTime(c.lastSentAt)}>
-            <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" /> Zuletzt gesendet {formatRelative(c.lastSentAt)}
+            <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" /> {t('admin.notifications.lastSent')} {formatRelative(c.lastSentAt)}
           </span>
         ) : (
-          <span>Noch nichts gesendet</span>
+          <span>{t('admin.notifications.nothingSentYet')}</span>
         )}
-        {c.lastError && c.lastSentAt && <span title={formatDateTime(c.lastSentAt)}>Zuletzt erfolgreich {formatRelative(c.lastSentAt)}</span>}
+        {c.lastError && c.lastSentAt && <span title={formatDateTime(c.lastSentAt)}>{t('admin.notifications.lastSuccess', { when: formatRelative(c.lastSentAt) })}</span>}
+        {isSiem(c.type) && (c.droppedEvents ?? 0) > 0 && (
+          <Tooltip content={t('admin.notifications.eventsThatCouldNotBe')}>
+            <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300">
+              <AlertTriangle className="size-3.5" /> {t('admin.notifications.eventsDropped', { count: c.droppedEvents ?? 0 })}
+            </span>
+          </Tooltip>
+        )}
         {c.type === 'Email' && smtpMissing && (
           <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300">
-            <AlertTriangle className="size-3.5" /> SMTP-Server nicht konfiguriert
+            <AlertTriangle className="size-3.5" /> {t('admin.notifications.smtpServerNotConfigured')}
           </span>
         )}
         <Button variant="outline" size="xs" className="ml-auto" loading={test.isPending} onClick={() => test.mutate()}>
-          {!test.isPending && <Send />} Testnachricht senden
+          {!test.isPending && <Send />} {t('admin.notifications.sendTestMessage')}
         </Button>
       </div>
     </Card>
   )
 }
 
-const emptyEvents: ChannelEvents = { drift: true, failure: true, apply: false, approval: false }
+const emptyEvents: ChannelEvents = { drift: true, failure: true, apply: false, approval: false, certificate: true, privileged: true, jitRequested: true, jitGranted: true }
 
 const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+$/
 
@@ -252,19 +302,62 @@ function splitAddresses(v: string) {
 }
 
 function targetError(type: ChannelType, target: string, required: boolean): string | null {
-  const t = target.trim()
-  if (!t) return required ? (type === 'Email' ? 'Mindestens einen Empfänger angeben.' : 'URL erforderlich.') : null
+  const tt = target.trim()
+  if (!tt) return required ? (type === 'Email' ? t('admin.notifications.enterAtLeastOneRecipient') : t('admin.notifications.urlRequired')) : null
   if (type === 'Email') {
-    const bad = t.split(/[,;]/).map((x) => x.trim()).filter(Boolean).find((x) => !/^[^\s@]+@[^\s@]+$/.test(x))
-    return bad ? `„${bad}“ ist keine gültige E-Mail-Adresse.` : null
+    const bad = tt.split(/[,;]/).map((x) => x.trim()).filter(Boolean).find((x) => !/^[^\s@]+@[^\s@]+$/.test(x))
+    return bad ? t('admin.notifications.badIsNotAValid', { bad }) : null
   }
   try {
-    const u = new URL(t)
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') return 'Die URL muss mit https:// beginnen.'
+    const u = new URL(tt)
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return t('admin.notifications.theUrlMustStartWith')
     return null
   } catch {
-    return 'Bitte eine vollständige URL angeben (https://…).'
+    return t('admin.notifications.pleaseEnterACompleteUrl')
   }
+}
+
+const defaultSyslog: SyslogSettings = { host: '', port: 514, protocol: 'Udp', format: 'Cef', validateCertificate: true }
+const defaultPorts: Record<SyslogProtocol, number> = { Udp: 514, Tcp: 514, Tls: 6514 }
+type LaForm = Omit<LogAnalyticsInput, 'clientSecret'> & { clientSecret: string }
+
+const emptyLa: LaForm = { tenantId: '', clientId: '', endpointUrl: '', dcrImmutableId: '', streamName: 'Custom-TierModel_CL', clientSecret: '' }
+
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const HOST_RE = /^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,62})(?:\.[A-Za-z0-9-]{1,63})*$|^[0-9a-fA-F:.]+$/
+
+function syslogErrors(s: SyslogSettings): Partial<Record<'host' | 'port', string>> {
+  const e: Partial<Record<'host' | 'port', string>> = {}
+  if (!s.host.trim()) e.host = t('admin.notifications.enterAServer')
+  else if (!HOST_RE.test(s.host.trim())) e.host = t('admin.notifications.enterAValidHostName')
+  if (!Number.isInteger(s.port) || s.port < 1 || s.port > 65535) e.port = '1–65535'
+  return e
+}
+
+type LaField = 'tenantId' | 'clientId' | 'endpointUrl' | 'dcrImmutableId' | 'streamName' | 'clientSecret'
+
+function laErrors(l: LaForm, secretRequired: boolean): Partial<Record<LaField, string>> {
+  const e: Partial<Record<LaField, string>> = {}
+  if (!GUID_RE.test(l.tenantId.trim())) e.tenantId = t('admin.notifications.enterTheTenantIdAs')
+  if (!GUID_RE.test(l.clientId.trim())) e.clientId = t('admin.notifications.enterTheApplicationIdAs')
+  try {
+    const u = new URL(l.endpointUrl.trim())
+    if (u.protocol !== 'https:') e.endpointUrl = t('admin.notifications.theAddressMustStartWith')
+  } catch {
+    e.endpointUrl = t('admin.notifications.enterTheCompleteAddressHttps')
+  }
+  if (!/^dcr-[0-9a-f]{32}$/i.test(l.dcrImmutableId.trim())) e.dcrImmutableId = t('admin.notifications.formatDcrFollowedBy32')
+  if (!/^(Custom|Microsoft)-[A-Za-z0-9_]{1,100}$/.test(l.streamName.trim())) e.streamName = t('admin.notifications.formatCustomTableEG')
+  if (secretRequired && !l.clientSecret) e.clientSecret = t('admin.notifications.enterTheClientSecret')
+  return e
+}
+
+/** Server field names ("syslog.host", "logAnalytics.tenantId") → the form's keys. */
+function serverFieldErrors(e: unknown): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (e instanceof ApiError && e.errors)
+    for (const [k, v] of Object.entries(e.errors)) out[k.replace(/^(syslog|logAnalytics)\./i, '').replace(/^./, (c) => c.toLowerCase())] = v[0]
+  return out
 }
 
 function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' | null; onClose: () => void }) {
@@ -276,6 +369,10 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
   const [enabled, setEnabled] = React.useState(true)
   const [target, setTarget] = React.useState('')
   const [events, setEvents] = React.useState<ChannelEvents>(emptyEvents)
+  const [syslog, setSyslog] = React.useState<SyslogSettings>(defaultSyslog)
+  const [la, setLa] = React.useState<LaForm>(emptyLa)
+  const [forwardChangeLog, setForwardChangeLog] = React.useState(false)
+  const [serverErrors, setServerErrors] = React.useState<Record<string, string>>({})
   const [touched, setTouched] = React.useState(false)
   const allChannels = useQuery({ queryKey: channelsKey, queryFn: api.notifications.channels })
   const smtpData = useQuery({ queryKey: smtpKey, queryFn: api.notifications.smtp })
@@ -283,7 +380,7 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
   const addressOptions = React.useMemo(() => {
     const set = new Map<string, string>()
     for (const c of allChannels.data ?? [])
-      if (c.type === 'Email') for (const a of splitAddresses(c.target)) if (!set.has(a.toLowerCase())) set.set(a.toLowerCase(), `Kanal „${c.name}“`)
+      if (c.type === 'Email') for (const a of splitAddresses(c.target)) if (!set.has(a.toLowerCase())) set.set(a.toLowerCase(), t('admin.notifications.channelName', { name: c.name }))
     const from = smtpData.data?.from?.trim()
     if (from && !set.has(from.toLowerCase())) set.set(from.toLowerCase(), 'Absenderadresse (SMTP)')
     return [...set.entries()].map(([value, hint]) => ({ value, hint, icon: <Mail className="size-4 text-muted-foreground" /> }))
@@ -297,17 +394,30 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
     // Teams/Webhook URLs are never returned in full: the field stays empty unless a new URL is typed.
     setTarget(channel?.type === 'Email' ? channel.target : '')
     setEvents(channel?.events ?? emptyEvents)
+    setSyslog(channel?.syslog ?? defaultSyslog)
+    setLa(channel?.logAnalytics ? { ...channel.logAnalytics, clientSecret: '' } : emptyLa)
+    setForwardChangeLog(channel?.forwardChangeLog ?? isNew)
+    setServerErrors({})
     setTouched(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value])
 
-  const secretTarget = type !== 'Email'
+  const siem = isSiem(type)
+  const secretTarget = type !== 'Email' && !siem
   const typeChanged = !!channel && channel.type !== type
   // A kept URL is only meaningful for an unchanged Teams/Webhook channel.
   const keepsStoredUrl = !!channel && secretTarget && !typeChanged && !target.trim()
   const targetRequired = isNew || typeChanged || type === 'Email'
-  const tError = targetError(type, target, targetRequired)
-  const error = !name.trim() ? 'Name erforderlich.' : tError
+  const hasStoredSecret = !!channel && channel.type === 'LogAnalytics' && !typeChanged && !!channel.logAnalytics?.hasClientSecret
+  const sErr = type === 'Syslog' ? syslogErrors(syslog) : {}
+  const lErr = type === 'LogAnalytics' ? laErrors(la, !hasStoredSecret) : {}
+  const fieldError = (k: string) => (touched ? ((sErr as Record<string, string>)[k] ?? (lErr as Record<string, string>)[k]) : undefined) ?? serverErrors[k]
+  const tError = siem ? null : targetError(type, target, targetRequired)
+  const error = !name.trim()
+    ? t('admin.notifications.nameRequired')
+    : siem
+      ? (Object.values(sErr)[0] ?? Object.values(lErr)[0] ?? null)
+      : tError
 
   const save = useMutation({
     mutationFn: () => {
@@ -315,17 +425,34 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
         name: name.trim(),
         type,
         enabled,
-        target: keepsStoredUrl ? null : target.trim(),
+        target: siem ? null : keepsStoredUrl ? null : target.trim(),
         events,
       }
+      if (type === 'Syslog') body.syslog = { ...syslog, host: syslog.host.trim() }
+      if (type === 'LogAnalytics')
+        body.logAnalytics = {
+          tenantId: la.tenantId.trim(),
+          clientId: la.clientId.trim(),
+          endpointUrl: la.endpointUrl.trim(),
+          dcrImmutableId: la.dcrImmutableId.trim(),
+          streamName: la.streamName.trim(),
+          clientSecret: la.clientSecret || null,
+        }
+      if (siem) body.forwardChangeLog = forwardChangeLog
       return isNew ? api.notifications.createChannel(body) : api.notifications.updateChannel(channel!.id, body)
     },
+    meta: { silent: true },
     onSuccess: (c) => {
       qc.invalidateQueries({ queryKey: channelsKey })
-      toast.success(isNew ? `Kanal „${c.name}“ angelegt` : 'Änderungen gespeichert', {
-        description: isNew ? 'Mit „Testnachricht senden“ können Sie die Zustellung prüfen.' : undefined,
+      toast.success(isNew ? t('admin.notifications.channelNameCreated', { name: c.name }) : t('admin.notifications.changesSaved'), {
+        description: isNew ? t('admin.notifications.useSendTestMessageTo') : undefined,
       })
       onClose()
+    },
+    onError: (e) => {
+      const fields = serverFieldErrors(e)
+      setServerErrors(fields)
+      toast.error(t('admin.notifications.notSaved'), { description: Object.values(fields)[0] ?? errorMessage(e) })
     },
   })
 
@@ -337,6 +464,15 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
         : type === 'Teams'
           ? 'https://contoso.webhook.office.com/…'
           : 'https://monitoring.contoso.com/hooks/tiermodel'
+
+  const setS = <K extends keyof SyslogSettings>(k: K, v: SyslogSettings[K]) => {
+    setSyslog((s) => ({ ...s, [k]: v }))
+    setServerErrors((e) => ({ ...e, [k]: '' }))
+  }
+  const setL = (k: LaField, v: string) => {
+    setLa((s) => ({ ...s, [k]: v }))
+    setServerErrors((e) => ({ ...e, [k]: '' }))
+  }
 
   return (
     <Sheet open={!!value} onOpenChange={(o) => !o && onClose()}>
@@ -350,68 +486,182 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
           }}
         >
           <SheetHeader>
-            <SheetTitle>{isNew ? 'Kanal hinzufügen' : `„${channel?.name}“ bearbeiten`}</SheetTitle>
-            <SheetDescription>Wohin und bei welchen Ereignissen benachrichtigt wird.</SheetDescription>
+            <SheetTitle>{isNew ? t('admin.notifications.addChannel') : t('admin.notifications.editName', { name: channel?.name })}</SheetTitle>
+            <SheetDescription>{t('admin.notifications.whereToNotifyAndFor')}</SheetDescription>
           </SheetHeader>
           <SheetBody className="grid content-start gap-5">
-            <Field label="Name" htmlFor="ch-name" required error={touched && !name.trim() ? 'Name erforderlich.' : undefined}>
-              <Input id="ch-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="z. B. Tier-0-Team" autoFocus={isNew} autoComplete="off" />
+            <Field label={t('common.name')} htmlFor="ch-name" required error={touched && !name.trim() ? t('admin.notifications.nameRequired') : undefined}>
+              <Input id="ch-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('admin.notifications.eGTier0Team')} autoFocus={isNew} autoComplete="off" />
             </Field>
             <div className="grid gap-1.5">
-              <p className="text-[13px] font-medium">Typ</p>
-              <Segmented<ChannelType>
-                aria-label="Typ"
-                value={type}
-                onValueChange={(t) => {
-                  setType(t)
-                  setTarget(channel && channel.type === t && t === 'Email' ? channel.target : '')
-                }}
-                options={(Object.keys(typeMeta) as ChannelType[]).map((t) => ({ value: t, label: typeMeta[t].label, icon: typeMeta[t].icon }))}
-              />
+              <p id="ch-type-label" className="text-[13px] font-medium">{t('admin.notifications.type')}</p>
+              <div role="radiogroup" aria-labelledby="ch-type-label" className="grid grid-cols-2 gap-2">
+                {(Object.keys(typeMeta) as ChannelType[]).map((tt) => (
+                  <button
+                    key={tt}
+                    type="button"
+                    role="radio"
+                    aria-checked={type === tt}
+                    onClick={() => {
+                      setType(tt)
+                      setTarget(channel && channel.type === tt && tt === 'Email' ? channel.target : '')
+                      setServerErrors({})
+                    }}
+                    className={cn(
+                      'flex min-w-0 items-start gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-all outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring',
+                      type === tt && 'border-primary/50 bg-primary/5 ring-1 ring-primary/30',
+                    )}
+                  >
+                    <span className={cn('mt-0.5 grid size-7 shrink-0 place-content-center rounded-md [&_svg]:size-4', typeMeta[tt].tone)}>{typeMeta[tt].icon}</span>
+                    <span className="grid min-w-0">
+                      <span className="text-[13px] font-medium">{typeMeta[tt].label}</span>
+                      <span className="text-[11.5px] leading-snug text-muted-foreground">{typeHints[tt]}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <Field
-              label={typeMeta[type].targetLabel}
-              htmlFor="ch-target"
-              required={targetRequired}
-              error={touched || target ? tError ?? undefined : undefined}
-              hint={
-                type === 'Email'
-                  ? 'Adressen eingeben oder vorschlagen lassen, mit Enter oder Komma übernehmen. Versand über den SMTP-Server rechts.'
-                  : channel && !typeChanged
-                    ? 'Die gespeicherte URL wird aus Sicherheitsgründen nur gekürzt angezeigt. Leer lassen, um sie beizubehalten.'
-                    : type === 'Teams'
-                      ? 'Webhook-URL eines Teams-Kanals (Workflows → „Beim Empfang einer Webhookanforderung posten“).'
-                      : 'Der Dienst sendet ein JSON-Dokument per HTTP POST an diese Adresse.'
-              }
-            >
-              {type === 'Email' ? (
-                <MultiCombobox
-                  id="ch-target"
-                  values={splitAddresses(target)}
-                  onChange={(v) => setTarget(v.join(', '))}
-                  options={addressOptions}
-                  mono
-                  placeholder="admin@contoso.com"
-                  emptyText="Adresse eingeben und mit Enter übernehmen"
-                  validateCustom={(v) => (EMAIL_RE.test(v) ? null : `„${v}“ ist keine gültige E-Mail-Adresse`)}
-                  invalid={(touched || !!target) && !!tError}
-                />
-              ) : (
-                <Input
-                  id="ch-target"
-                  value={target}
-                  onChange={(e) => setTarget(e.target.value)}
-                  placeholder={placeholder}
-                  className="font-mono text-[13px]"
-                  autoComplete="off"
-                  spellCheck={false}
-                  inputMode="url"
-                  aria-invalid={(touched || !!target) && !!tError ? true : undefined}
-                />
-              )}
-            </Field>
+            {type === 'Syslog' ? (
+              <div className="grid gap-4 rounded-lg border bg-muted/20 p-3.5">
+                <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-3">
+                  <Field label={t('admin.notifications.server')} htmlFor="ch-sys-host" required error={fieldError('host')} hint={t('admin.notifications.hostNameOrIpAddress')}>
+                    <Input id="ch-sys-host" value={syslog.host} onChange={(e) => setS('host', e.target.value)} placeholder="siem-collector.contoso.com" className="font-mono text-[13px]" autoComplete="off" spellCheck={false} aria-invalid={!!fieldError('host') || undefined} />
+                  </Field>
+                  <Field label={t('admin.notifications.port')} htmlFor="ch-sys-port" error={fieldError('port')}>
+                    <Input id="ch-sys-port" type="number" min={1} max={65535} value={Number.isNaN(syslog.port) ? '' : syslog.port} onChange={(e) => setS('port', e.target.valueAsNumber)} aria-invalid={!!fieldError('port') || undefined} />
+                  </Field>
+                </div>
+                <div className="grid gap-1.5">
+                  <p className="text-[13px] font-medium">{t('admin.notifications.transport')}</p>
+                  <Segmented<SyslogProtocol>
+                    aria-label={t('admin.notifications.transport')}
+                    value={syslog.protocol}
+                    onValueChange={(p) => setSyslog((s) => ({ ...s, protocol: p, port: s.port === defaultPorts[s.protocol] || Number.isNaN(s.port) ? defaultPorts[p] : s.port }))}
+                    options={[
+                      { value: 'Udp', label: 'UDP' },
+                      { value: 'Tcp', label: 'TCP' },
+                      { value: 'Tls', label: t('admin.notifications.tcpTls') },
+                    ]}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {syslog.protocol === 'Udp'
+                      ? t('admin.notifications.fastButWithoutDeliveryConfirmation')
+                      : syslog.protocol === 'Tcp'
+                        ? t('admin.notifications.reliableDeliveryWithLengthPrefix')
+                        : t('admin.notifications.encryptedAccordingToRfc5425')}
+                  </p>
+                </div>
+                {syslog.protocol === 'Tls' && (
+                  <label htmlFor="ch-sys-validate" className="flex items-center justify-between gap-4 rounded-lg border bg-card px-3 py-2.5">
+                    <span className="grid">
+                      <span className="text-[13px] font-medium">{t('admin.notifications.validateCertificate')}</span>
+                      <span className="text-xs text-muted-foreground">{t('admin.notifications.onlyTurnOffForTest')}</span>
+                    </span>
+                    <Switch id="ch-sys-validate" checked={syslog.validateCertificate} onCheckedChange={(v) => setS('validateCertificate', v)} />
+                  </label>
+                )}
+                <div className="grid gap-1.5">
+                  <p className="text-[13px] font-medium">{t('admin.notifications.format')}</p>
+                  <Segmented<SyslogFormat>
+                    aria-label={t('admin.notifications.format')}
+                    value={syslog.format}
+                    onValueChange={(f) => setS('format', f)}
+                    options={[
+                      { value: 'Cef', label: 'CEF' },
+                      { value: 'Rfc5424', label: t('admin.notifications.rfc5424') },
+                    ]}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {syslog.format === 'Cef'
+                      ? t('admin.notifications.commonEventFormatForMicrosoft')
+                      : t('admin.notifications.structuredDataAccordingToRfc')}
+                  </p>
+                </div>
+              </div>
+            ) : type === 'LogAnalytics' ? (
+              <div className="grid gap-4 rounded-lg border bg-muted/20 p-3.5">
+                <p className="text-xs text-muted-foreground">
+                  {t('admin.notifications.anAppRegistrationWithThe')}
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label={t('admin.notifications.tenantId')} htmlFor="ch-la-tenant" required error={fieldError('tenantId')}>
+                    <Input id="ch-la-tenant" value={la.tenantId} onChange={(e) => setL('tenantId', e.target.value)} placeholder="00000000-0000-0000-0000-000000000000" className="font-mono text-[12.5px]" autoComplete="off" spellCheck={false} aria-invalid={!!fieldError('tenantId') || undefined} />
+                  </Field>
+                  <Field label={t('admin.notifications.applicationIdClient')} htmlFor="ch-la-client" required error={fieldError('clientId')}>
+                    <Input id="ch-la-client" value={la.clientId} onChange={(e) => setL('clientId', e.target.value)} placeholder="00000000-0000-0000-0000-000000000000" className="font-mono text-[12.5px]" autoComplete="off" spellCheck={false} aria-invalid={!!fieldError('clientId') || undefined} />
+                  </Field>
+                </div>
+                <Field
+                  label={t('admin.notifications.clientSecret')}
+                  htmlFor="ch-la-secret"
+                  required={!hasStoredSecret}
+                  error={fieldError('clientSecret')}
+                  hint={hasStoredSecret ? t('admin.notifications.aSecretIsSavedLeave') : t('admin.notifications.storedEncryptedAndNeverDisplayed')}
+                >
+                  <Input id="ch-la-secret" type="password" autoComplete="new-password" value={la.clientSecret} onChange={(e) => setL('clientSecret', e.target.value)} placeholder={hasStoredSecret ? t('admin.notifications.unchanged') : ''} aria-invalid={!!fieldError('clientSecret') || undefined} />
+                </Field>
+                <Field label={t('admin.notifications.dataCollectionEndpointDce')} htmlFor="ch-la-dce" required error={fieldError('endpointUrl')} hint={t('admin.notifications.logsIngestionUrlOfThe')}>
+                  <Input id="ch-la-dce" value={la.endpointUrl} onChange={(e) => setL('endpointUrl', e.target.value)} placeholder="https://tiermodel-dce-abcd.westeurope-1.ingest.monitor.azure.com" className="font-mono text-[12.5px]" autoComplete="off" spellCheck={false} inputMode="url" aria-invalid={!!fieldError('endpointUrl') || undefined} />
+                </Field>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label={t('admin.notifications.immutableIdOfTheRule')} htmlFor="ch-la-dcr" required error={fieldError('dcrImmutableId')}>
+                    <Input id="ch-la-dcr" value={la.dcrImmutableId} onChange={(e) => setL('dcrImmutableId', e.target.value)} placeholder="dcr-0123456789abcdef…" className="font-mono text-[12.5px]" autoComplete="off" spellCheck={false} aria-invalid={!!fieldError('dcrImmutableId') || undefined} />
+                  </Field>
+                  <Field label={t('admin.notifications.stream')} htmlFor="ch-la-stream" required error={fieldError('streamName')}>
+                    <Input id="ch-la-stream" value={la.streamName} onChange={(e) => setL('streamName', e.target.value)} placeholder="Custom-TierModel_CL" className="font-mono text-[12.5px]" autoComplete="off" spellCheck={false} aria-invalid={!!fieldError('streamName') || undefined} />
+                  </Field>
+                </div>
+              </div>
+            ) : (
+              <Field
+                label={typeMeta[type].targetLabel}
+                htmlFor="ch-target"
+                required={targetRequired}
+                error={touched || target ? tError ?? undefined : undefined}
+                hint={
+                  type === 'Email'
+                    ? t('admin.notifications.enterAddressesOrPickSuggestions')
+                    : channel && !typeChanged
+                      ? t('admin.notifications.forSecurityReasonsTheSaved')
+                      : type === 'Teams'
+                        ? t('admin.notifications.webhookUrlOfATeams')
+                        : t('admin.notifications.theServiceSendsAJson')
+                }
+              >
+                {type === 'Email' ? (
+                  <MultiCombobox
+                    id="ch-target"
+                    values={splitAddresses(target)}
+                    onChange={(v) => setTarget(v.join(', '))}
+                    options={addressOptions}
+                    mono
+                    placeholder="admin@contoso.com"
+                    emptyText={t('admin.notifications.enterAnAddressAndConfirm')}
+                    validateCustom={(v) => (EMAIL_RE.test(v) ? null : t('admin.notifications.vIsNotAValid', { v }))}
+                    invalid={(touched || !!target) && !!tError}
+                  />
+                ) : (
+                  <Input
+                    id="ch-target"
+                    value={target}
+                    onChange={(e) => setTarget(e.target.value)}
+                    placeholder={placeholder}
+                    className="font-mono text-[13px]"
+                    autoComplete="off"
+                    spellCheck={false}
+                    inputMode="url"
+                    aria-invalid={(touched || !!target) && !!tError ? true : undefined}
+                  />
+                )}
+              </Field>
+            )}
             <div className="grid gap-2">
-              <p className="text-[13px] font-medium">Ereignisse</p>
+              <p className="text-[13px] font-medium">{t('admin.notifications.events')}</p>
+              {siem && (
+                <p className="-mt-1 text-xs text-muted-foreground">
+                  {t('admin.notifications.everyEventIsSentAs')}
+                </p>
+              )}
               <div className="grid gap-2">
                 {eventMeta.map((e) => (
                   <label
@@ -429,20 +679,37 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
                     </span>
                   </label>
                 ))}
+                {siem && (
+                  <label
+                    htmlFor="ch-ev-changelog"
+                    className={cn(
+                      'flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors hover:bg-accent/40',
+                      forwardChangeLog && 'border-primary/40 bg-primary/[0.04]',
+                    )}
+                  >
+                    <Checkbox id="ch-ev-changelog" checked={forwardChangeLog} onCheckedChange={(v) => setForwardChangeLog(v === true)} className="mt-0.5" />
+                    <span className="grid">
+                      <span className="flex items-center gap-1.5 text-[13px] font-medium [&_svg]:size-3.5 [&_svg]:text-muted-foreground"><FileClock />{t('admin.notifications.forwardChangeLog')}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {t('admin.notifications.everyEntrySignInsUsers')}
+                      </span>
+                    </span>
+                  </label>
+                )}
               </div>
             </div>
             <label htmlFor="ch-enabled" className="flex items-center justify-between gap-4 rounded-lg border px-3.5 py-3">
               <span className="grid">
-                <span className="text-[13px] font-medium">Kanal aktiv</span>
-                <span className="text-xs text-muted-foreground">Deaktivierte Kanäle erhalten keine Benachrichtigungen.</span>
+                <span className="text-[13px] font-medium">{t('admin.notifications.channelActive')}</span>
+                <span className="text-xs text-muted-foreground">{t('admin.notifications.disabledChannelsReceiveNoNotifications')}</span>
               </span>
               <Switch id="ch-enabled" checked={enabled} onCheckedChange={setEnabled} />
             </label>
           </SheetBody>
           <SheetFooter>
             {touched && error && <span className="mr-auto text-xs text-destructive">{error}</span>}
-            <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
-            <Button type="submit" loading={save.isPending}>{isNew ? <><Plus /> Anlegen</> : 'Speichern'}</Button>
+            <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button type="submit" loading={save.isPending}>{isNew ? <><Plus /> {t('admin.notifications.create')}</> : t('common.save')}</Button>
           </SheetFooter>
         </form>
       </SheetContent>
@@ -451,9 +718,9 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
 }
 
 const securityOptions: { value: SmtpSecurity; label: string; description: string; port: number }[] = [
-  { value: 'StartTls', label: 'STARTTLS', description: 'Verschlüsselung nach Verbindungsaufbau (meist Port 587)', port: 587 },
-  { value: 'SslOnConnect', label: 'SSL/TLS', description: 'Verschlüsselte Verbindung von Beginn an (meist Port 465)', port: 465 },
-  { value: 'None', label: 'Keine', description: 'Unverschlüsselt (Port 25) – nur im internen Netz', port: 25 },
+  { value: 'StartTls', label: t('admin.notifications.starttls'), description: t('admin.notifications.encryptionAfterConnectingUsuallyPort'), port: 587 },
+  { value: 'SslOnConnect', label: t('admin.notifications.sslTls'), description: t('admin.notifications.encryptedConnectionFromTheStart'), port: 465 },
+  { value: 'None', label: t('admin.notifications.none'), description: t('admin.notifications.unencryptedPort25InternalNetwork'), port: 25 },
 ]
 
 type PasswordAction = 'keep' | 'set' | 'clear'
@@ -485,7 +752,7 @@ function SmtpCard() {
     onSuccess: (s) => {
       qc.setQueryData(smtpKey, s)
       reset(s)
-      toast.success('SMTP-Einstellungen gespeichert')
+      toast.success(t('admin.notifications.smtpSettingsSaved'))
     },
   })
 
@@ -508,20 +775,20 @@ function SmtpCard() {
       >
         <CardHeader>
           <div>
-            <CardTitle className="flex items-center gap-2"><Server className="size-4 text-muted-foreground" /> SMTP-Server</CardTitle>
-            <CardDescription>Für Kanäle vom Typ E-Mail. Leer lassen, wenn kein E-Mail-Versand gewünscht ist.</CardDescription>
+            <CardTitle className="flex items-center gap-2"><Server className="size-4 text-muted-foreground" /> {t('admin.notifications.smtpServer')}</CardTitle>
+            <CardDescription>{t('admin.notifications.forChannelsOfTypeE')}</CardDescription>
           </div>
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-3">
-            <Field label="Server" htmlFor="smtp-host">
+            <Field label={t('admin.notifications.server')} htmlFor="smtp-host">
               <Input id="smtp-host" className="font-mono text-[13px]" placeholder="smtp.contoso.com" value={form.host} onChange={(e) => set('host', e.target.value)} autoComplete="off" spellCheck={false} />
             </Field>
-            <Field label="Port" htmlFor="smtp-port" error={portInvalid ? '1–65535' : undefined}>
+            <Field label={t('admin.notifications.port')} htmlFor="smtp-port" error={portInvalid ? '1–65535' : undefined}>
               <Input id="smtp-port" type="number" min={1} max={65535} value={Number.isNaN(form.port) ? '' : form.port} onChange={(e) => set('port', e.target.valueAsNumber)} aria-invalid={portInvalid || undefined} />
             </Field>
           </div>
-          <Field label="Verschlüsselung" htmlFor="smtp-sec">
+          <Field label={t('admin.notifications.encryption')} htmlFor="smtp-sec">
             <Select
               id="smtp-sec"
               value={form.security}
@@ -534,23 +801,23 @@ function SmtpCard() {
               options={securityOptions.map((o) => ({ value: o.value, label: o.label, description: o.description }))}
             />
           </Field>
-          <Field label="Absender" htmlFor="smtp-from" error={fromInvalid ? 'Absenderadresse erforderlich, wenn ein Server eingetragen ist.' : undefined} hint="z. B. tiermodel@contoso.com">
+          <Field label={t('admin.notifications.sender')} htmlFor="smtp-from" error={fromInvalid ? t('admin.notifications.senderAddressRequiredIfA') : undefined} hint={t('admin.notifications.eGTiermodelContosoCom')}>
             <Input id="smtp-from" className="font-mono text-[13px]" placeholder="tiermodel@contoso.com" value={form.from} onChange={(e) => set('from', e.target.value)} autoComplete="off" aria-invalid={fromInvalid || undefined} />
           </Field>
-          <Field label="Benutzername" htmlFor="smtp-user" hint="Leer lassen für anonymen Versand.">
+          <Field label={t('admin.notifications.userName')} htmlFor="smtp-user" hint={t('admin.notifications.leaveEmptyForAnonymousDelivery')}>
             <Input id="smtp-user" className="font-mono text-[13px]" value={form.username} onChange={(e) => set('username', e.target.value)} autoComplete="off" spellCheck={false} />
           </Field>
           <div className="grid gap-1.5">
             <div className="flex items-center justify-between gap-2">
-              <label htmlFor="smtp-pw" className="text-[13px] font-medium">Passwort</label>
+              <label htmlFor="smtp-pw" className="text-[13px] font-medium">{t('admin.notifications.password')}</label>
               {q.data.hasPassword && pwAction !== 'clear' && pwAction !== 'set' && (
-                <Badge variant="success"><CheckCircle2 /> gespeichert</Badge>
+                <Badge variant="success"><CheckCircle2 /> {t('admin.notifications.saved')}</Badge>
               )}
             </div>
             {pwAction === 'clear' ? (
               <div className="flex items-center justify-between gap-2 rounded-md border border-dashed border-rose-500/40 bg-rose-500/5 px-3 py-1.5 text-[13px] text-rose-700 dark:text-rose-300">
-                Wird beim Speichern entfernt
-                <Button type="button" variant="ghost" size="xs" onClick={() => setPwAction('keep')}><Undo2 /> Rückgängig</Button>
+                {t('admin.notifications.willBeRemovedOnSave')}
+                <Button type="button" variant="ghost" size="xs" onClick={() => setPwAction('keep')}><Undo2 /> {t('admin.notifications.undo')}</Button>
               </div>
             ) : (
               <Input
@@ -558,7 +825,7 @@ function SmtpCard() {
                 type="password"
                 autoComplete="new-password"
                 value={password}
-                placeholder={q.data.hasPassword ? '•••••••• (unverändert)' : 'Kein Passwort gespeichert'}
+                placeholder={q.data.hasPassword ? t('admin.notifications.unchanged') : t('admin.notifications.noPasswordSaved')}
                 onChange={(e) => {
                   setPassword(e.target.value)
                   setPwAction(e.target.value ? 'set' : 'keep')
@@ -566,18 +833,18 @@ function SmtpCard() {
               />
             )}
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">Wird verschlüsselt gespeichert und nie angezeigt.</p>
+              <p className="text-xs text-muted-foreground">{t('admin.notifications.storedEncryptedAndNeverDisplayed2')}</p>
               {q.data.hasPassword && pwAction !== 'clear' && (
                 <Button type="button" variant="link" size="xs" className="h-auto px-0 text-rose-600 dark:text-rose-400" onClick={() => { setPassword(''); setPwAction('clear') }}>
-                  Passwort entfernen
+                  {t('admin.notifications.removePassword')}
                 </Button>
               )}
             </div>
           </div>
         </CardContent>
         <CardFooter className="justify-end">
-          <Button type="button" variant="ghost" disabled={!dirty} onClick={() => reset(q.data!)}>Zurücksetzen</Button>
-          <Button type="submit" disabled={!dirty || portInvalid || fromInvalid} loading={save.isPending}>{!save.isPending && <Save />} Speichern</Button>
+          <Button type="button" variant="ghost" disabled={!dirty} onClick={() => reset(q.data!)}>{t('common.reset')}</Button>
+          <Button type="submit" disabled={!dirty || portInvalid || fromInvalid} loading={save.isPending}>{!save.isPending && <Save />} {t('common.save')}</Button>
         </CardFooter>
       </form>
     </Card>

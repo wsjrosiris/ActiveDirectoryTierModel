@@ -175,12 +175,35 @@ Revision=1
                     }
                 }
                 
+                # forestRootOnly principals exist only in the forest ROOT domain. Built-in ones
+                # (Schema Admins, Enterprise Admins, Enterprise Key Admins, Enterprise RODCs) are
+                # resolved by Resolve-TierModelPrincipalSid from the forest root domain SID via the
+                # well-known table; any other forestRootOnly name is looked up on the root domain.
+                $forestRootNames = @()
+                if ($ura.PSObject.Properties['rights'] -and $ura.rights) {
+                    if ($ura.principalGroups.PSObject.Properties['forestRootOnly'] -and $ura.principalGroups.forestRootOnly) {
+                        $forestRootNames = @($ura.principalGroups.forestRootOnly)
+                    }
+                } elseif ($ura.PSObject.Properties['right'] -and $ura.right) {
+                    if ($ura.principals.PSObject.Properties['forestRootOnly'] -and $ura.principals.forestRootOnly) {
+                        $forestRootNames = @($ura.principals.forestRootOnly)
+                    }
+                }
+                
                 # Convert resolvable groups to SIDs using proper TierModel SID resolution
                 $principalSids = @()
                 foreach ($principal in $resolvableGroups) {
                     try {
-                        # Use TierModel SID resolution that handles Administrator account properly
-                        $sidResult = Resolve-TierModelPrincipalSid -Principal $principal -DomainController $DomainController -CorrelationId $CorrelationId
+                        $principalDc = $DomainController
+                        if ($forestRootNames -contains $principal -and -not (Get-TierModelWellKnownPrincipal -Name $principal)) {
+                            try {
+                                $principalDc = (Get-TierModelForestRootDomain -DomainController $DomainController).Server
+                            } catch {
+                                $principalDc = $DomainController
+                            }
+                        }
+                        # Use TierModel SID resolution (well-known SIDs/RIDs first, then AD lookup)
+                        $sidResult = Resolve-TierModelPrincipalSid -Principal $principal -DomainController $principalDc -CorrelationId $CorrelationId
                         if ($sidResult.Success) {
                             $principalSids += "*$($sidResult.Sid)"
                         } else {

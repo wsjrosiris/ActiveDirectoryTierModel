@@ -19,6 +19,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   forms; the JSON editor is gone. Pickers with search and suggestions (GPO backups, template files with MD5, domain
   controllers, AD groups via `/api/lookup/*`).
 - Save dialog, versions and change log show a readable list of changes instead of a JSON diff.
+- **Localized domains**: built-in principals are resolved via well-known SIDs/RIDs (`Get-TierModelWellKnownPrincipal`);
+  enterprise-wide groups via the forest root domain SID. Deploy and audit work on domains with translated group names
+  (e.g. `Domänen-Admins`) and in child domains.
+- `Deploy-TierModel.ps1` writes the plan as JSON (`-PlanOutputPath`, or `<LogPath>/<OutputFileBase>-plan.json` with
+  `-Logging`); new helpers `Export-TierModelPlan`, `Merge-TierModelAuditResult`.
+- Audit findings carry `Area` and `Severity`.
+- Service: **readable plan** per planning run (grouped by phase, filters, details), also shown to approvers and counted
+  in approval notifications.
+- Service: **apply only from a matching plan** (same scope, add-ons, DC, ADML language and configuration versions,
+  within `planMaxAgeHours`); the apply run executes the plan's configuration versions.
+- Service: **tier rules** in validation and as live hints in the forms (lower tier with write access to a higher tier,
+  cross-tier group membership, LAPS groups, GPO links).
+- Service: **system status** page (`/api/health/details`) and a daily certificate-expiry notification.
+- `Watch-TierModelPrivilegedGroups.ps1`: read-only snapshot of protected and Tier 0 groups, privileged account
+  attributes, adminCount orphans and dangerous ACEs on Tier 0 objects (`docs/privileged-access-monitoring.md`).
+- Service: **privileged access monitoring** (run kind Monitor, schedules of kind Monitor): members by SID, change
+  history, unexpected members, account hygiene, attack paths; notification on changes.
+- Service: **remediation by click** – a plan run for the area of an audit finding.
+- **Authentication policies and silos from configuration** (`config/tiermodel-authsilos.json`): policies with generated
+  `UserAllowedToAuthenticateFrom` SDDL (domain controllers OR any listed device group), silos, silo membership by OU
+  and device-group sync; new scope `-AuthSilosOnly` in Deploy and Audit, last phase of `-FullDeployment`
+  (`docs/authentication-silos.md`). The optional scripts are superseded; their Tier 0 SDDL used AND instead of OR.
+- Service: **authentication silos** section with form editor (policies, silos, device-group sync, rule shown as a
+  sentence), scope *Nur Authentication Silos*.
+- Service: **desired / actual / compare** view for OUs (`/api/ad/*`, Windows; fake directory in development).
+- Service: **wizards** for a new server area, a new admin account and a new delegation (one undo step, tier checks).
+- Service: **setup wizard** on first start (domain and DC, GPO prefix preview, adopt existing OUs, first plan).
+- Service: **maintenance windows and freeze periods** for applies (run status `Scheduled`).
+- Service: **API tokens** (Bearer, hashed, role-capped, rate-limited) and the PowerShell module
+  `TierModel.Service.Client` in the release package.
+- Service: **tamper-evident change log** (SHA-256 chain, verification on the system status page).
+- Service: **SIEM** channels Syslog (RFC 5424, CEF, UDP/TCP/TLS) and Azure Monitor Log Analytics; change-log forwarding.
+- Service: **Entra ID sign-in** (OIDC with PKCE, roles by group object IDs or app roles).
+- Service: **reports** (desired/actual, changes in a period, privileged access) as PDF or HTML, e-mail schedules.
+- **JIT access**: `Grant-TierModelJitAccess.ps1` (grant/revoke/check/list, TTL group membership via the PAM feature;
+  never enables PAM) and the service page *Befristeter Zugriff* with four-eyes approval, countdown, early revoke,
+  JIT groups, notifications and monitoring integration (`docs/jit-access.md`).
+- Service: **import** from an export ZIP or another instance with preview, search/replace rules and validation.
+- Service: **Git integration** (LibGit2Sharp): every saved version is committed and pushed; conflict handling.
+- Service: **multiple domains** per instance (header `X-TierModel-Domain`, default domain fallback), domain
+  switcher, per-domain configuration, runs, schedules, monitoring, JIT, setup, Git subfolders; migration assigns
+  existing data to the first domain; PowerShell client `-Domain`.
+- `Audit-TierModel.ps1 -OutputFormat Html` (self-contained, print-friendly report) and `-OutputFormat NUnitXml`
+  (NUnit 3, one suite per area) – previously placeholders.
+- Service: **English user interface** (i18next, 3,800+ keys) and server-side localization (Accept-Language);
+  language per user, instance default language for persisted texts; migration UserLanguage.
+- Service: **compliance score** per tier on the dashboard with 30-day history and breakdown.
+- Roadmap for the next features (`docs/service/roadmap.md`).
+
+### Fixed
+- `Audit-TierModel.ps1 -FullDeployment` (and include audits) kept only the findings of the last entity in the JSON
+  report and left `auditSummary` at zero.
+- Domain Admins prerequisite check aborted on domains with localized group names.
+- `Test-TierModelPrerequisites`: the elevation check no longer aborts the whole check on hosts without
+  WindowsIdentity; AD language detection compares case-sensitively (pt-BR was reported as es-ES).
+- Pester tests of the prerequisite/language check describe the current behaviour.
 
 ## [1.4.0] - 2026-09-24
 

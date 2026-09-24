@@ -26,6 +26,7 @@ import {
   setListKeep,
   type Obj,
 } from './gpo-model'
+import { t } from '@/i18n'
 
 /* Building blocks of the GPO edit sheet. Every section is memoized and receives a stable
  * functional updater, so typing in one field does not re-render the (large) other sections. */
@@ -47,8 +48,8 @@ export const GpoSuggestionsContext = React.createContext<GpoSuggestions>({ princ
 /** Collects principals already used anywhere in the section, offered as suggestions. */
 export function collectSuggestions(content: Obj | undefined): GpoSuggestions {
   const p = new Set<string>(), l = new Set<string>(), f = new Set<string>(), c = new Set<string>()
-  for (const t of Object.values((content?.gpos ?? {}) as Obj)) {
-    for (const g of [...(Array.isArray(t?.PostConfigureGpo) ? t.PostConfigureGpo : []), ...(Array.isArray(t?.ImportOnlyGpo) ? t.ImportOnlyGpo : [])]) {
+  for (const tt of Object.values((content?.gpos ?? {}) as Obj)) {
+    for (const g of [...(Array.isArray(tt?.PostConfigureGpo) ? tt.PostConfigureGpo : []), ...(Array.isArray(tt?.ImportOnlyGpo) ? tt.ImportOnlyGpo : [])]) {
       strings(g?.denyApplyGroupPolicy).forEach((x) => p.add(x))
       for (const r of Array.isArray(g?.userRightsAssignments) ? g.userRightsAssignments : []) {
         strings(r?.principals?.resolvableGroups).forEach((x) => p.add(x))
@@ -83,7 +84,7 @@ export const PrincipalPicker = React.memo(function PrincipalPicker({
   onChange,
   id,
   disabled,
-  placeholder = 'Gruppe suchen oder eingeben …',
+  placeholder = t('config.gpoFields.searchOrEnterGroup'),
   extra,
 }: {
   values: string[]
@@ -99,9 +100,9 @@ export const PrincipalPicker = React.memo(function PrincipalPicker({
   const merged = React.useMemo(
     () =>
       mergeOptions(options, [
-        ...(extra ?? []).map((v) => ({ value: v, hint: 'In GPOs verwendet', icon: usedIcon })),
-        ...GPO_BUILTIN_PRINCIPALS.map((v) => ({ value: v, hint: 'Integriert' })),
-        ...used.principals.map((v) => ({ value: v, hint: 'In GPOs verwendet', icon: usedIcon })),
+        ...(extra ?? []).map((v) => ({ value: v, hint: t('config.gpoFields.usedInGpos'), icon: usedIcon })),
+        ...GPO_BUILTIN_PRINCIPALS.map((v) => ({ value: v, hint: t('config.gpoFields.builtIn') })),
+        ...used.principals.map((v) => ({ value: v, hint: t('config.gpoFields.usedInGpos'), icon: usedIcon })),
       ]),
     [options, used.principals, extra],
   )
@@ -173,8 +174,8 @@ export const DenyApplySection = React.memo(function DenyApplySection({ values, u
   const onChange = React.useCallback((v: string[]) => update((g) => setListKeep(g, 'denyApplyGroupPolicy', v)), [update])
   return (
     <Collapsible
-      title="Anwenden verweigern für"
-      description="Diese Gruppen erhalten im GPO-ACL „Gruppenrichtlinie übernehmen: Verweigern“."
+      title={t('config.gpoFields.denyApplyFor')}
+      description={t('config.gpoFields.theseGroupsGetApplyGroup')}
       count={values.length}
       icon={<ShieldCheck />}
       defaultOpen={values.length > 0}
@@ -219,14 +220,14 @@ export const UserRightsSection = React.memo(function UserRightsSection({
 
   return (
     <Collapsible
-      title="Benutzerrechte"
-      description="Zuweisen von Benutzerrechten (User Rights Assignment) in dieser GPO."
+      title={t('config.gpoFields.userRights')}
+      description={t('config.gpoFields.userRightsAssignmentInThis')}
       count={rights.length}
       icon={<UserCog />}
       defaultOpen={rights.length > 0 && rights.length <= 3}
       error={error}
     >
-      {rights.length === 0 && <p className="text-xs text-muted-foreground">Keine Benutzerrechte konfiguriert.</p>}
+      {rights.length === 0 && <p className="text-xs text-muted-foreground">{t('config.gpoFields.noUserRightsConfigured')}</p>}
       <div className="grid min-w-0 gap-3 [&>*]:min-w-0">
         {rights.map((r, i) => (
           <RightCard key={i} index={i} right={r} usedKey={usedKey} updateRight={updateRight} removeRight={removeRight} disabled={disabled} />
@@ -234,7 +235,7 @@ export const UserRightsSection = React.memo(function UserRightsSection({
       </div>
       {!disabled && (
         <div className="max-w-md">
-          <Combobox key={usedKey} value="" onChange={addRight} options={addOptions} placeholder="+ Benutzerrecht hinzufügen …" searchPlaceholder="Recht oder Konstante suchen …" emptyText="Kein weiteres Recht verfügbar" />
+          <Combobox key={usedKey} value="" onChange={addRight} options={addOptions} placeholder={t('config.gpoFields.addUserRight')} searchPlaceholder={t('config.gpoFields.searchRightOrConstant')} emptyText={t('config.gpoFields.noFurtherRightAvailable')} />
         </div>
       )}
     </Collapsible>
@@ -244,12 +245,12 @@ export const UserRightsSection = React.memo(function UserRightsSection({
 const literalOptions = (used: string[]): ComboOption[] =>
   mergeOptions(
     LITERAL_SUGGESTIONS.map((l) => ({ value: l.value, label: l.label, hint: l.value })),
-    used.map((v) => ({ value: v, hint: 'In GPOs verwendet' })),
+    used.map((v) => ({ value: v, hint: t('config.gpoFields.usedInGpos') })),
   )
 const forestRootOptions = (used: string[]): ComboOption[] =>
   mergeOptions(
     FOREST_ROOT_SUGGESTIONS.map((l) => ({ value: l.value, label: l.label, hint: l.value })),
-    used.map((v) => ({ value: v, hint: 'In GPOs verwendet' })),
+    used.map((v) => ({ value: v, hint: t('config.gpoFields.usedInGpos') })),
   )
 
 const RightCard = React.memo(function RightCard({
@@ -279,7 +280,7 @@ const RightCard = React.memo(function RightCard({
   const rightOptions = React.useMemo(() => {
     const taken = usedKey.split('|')
     const opts = rightOptionsAll.filter((o) => o.value === right?.right || !taken.includes(o.value))
-    if (right?.right && !opts.some((o) => o.value === right.right)) opts.unshift({ value: right.right, hint: 'Unbekanntes Recht' })
+    if (right?.right && !opts.some((o) => o.value === right.right)) opts.unshift({ value: right.right, hint: t('config.gpoFields.unknownRight') })
     return opts
   }, [usedKey, right?.right])
   const litOpts = React.useMemo(() => literalOptions(suggestions.literals), [suggestions.literals])
@@ -307,7 +308,7 @@ const RightCard = React.memo(function RightCard({
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
-          aria-label={open ? 'Zuklappen' : 'Aufklappen'}
+          aria-label={open ? t('config.gpoFields.collapse') : t('config.gpoFields.expand')}
           className="grid size-6 shrink-0 place-content-center rounded text-muted-foreground hover:bg-accent"
         >
           <ChevronRight className={cn('size-4 transition-transform', open && 'rotate-90')} />
@@ -319,16 +320,16 @@ const RightCard = React.memo(function RightCard({
             value={String(right?.right ?? '')}
             onChange={(v) => v && updateRight(index, (r) => ({ ...r, right: v }))}
             options={rightOptions}
-            placeholder="Benutzerrecht wählen"
-            searchPlaceholder="Recht oder Konstante suchen …"
+            placeholder={t('config.gpoFields.selectUserRight')}
+            searchPlaceholder={t('config.gpoFields.searchRightOrConstant')}
             disabled={disabled}
           />
         </div>
-        <Badge variant={total ? 'secondary' : 'muted'} className="hidden tabular sm:inline-flex" title="Einträge">
+        <Badge variant={total ? 'secondary' : 'muted'} className="hidden tabular sm:inline-flex" title={t('config.gpoFields.entries')}>
           {total}
         </Badge>
         {!disabled && (
-          <Button type="button" variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" onClick={() => removeRight(index)} aria-label="Benutzerrecht entfernen">
+          <Button type="button" variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" onClick={() => removeRight(index)} aria-label={t('config.gpoFields.removeUserRight')}>
             <Trash2 />
           </Button>
         )}
@@ -336,19 +337,19 @@ const RightCard = React.memo(function RightCard({
       {!open && total > 0 && (
         <button type="button" onClick={() => setOpen(true)} className="block w-full truncate px-11 pb-2 text-left text-xs text-muted-foreground hover:text-foreground">
           {[...resolvable, ...literals.map((l) => LITERAL_SUGGESTIONS.find((x) => x.value === l)?.label ?? l), ...forest].join(', ')}
-          {conditional.length > 0 && ` · ${conditional.length} bedingt`}
+          {conditional.length > 0 && t('config.gpoFields.lengthConditional', { length: conditional.length })}
         </button>
       )}
       {open && (
         <div className="grid min-w-0 gap-4 border-t bg-card px-3 py-4 sm:px-4 [&>*]:min-w-0">
-          <Field label="Gruppen (werden aufgelöst)" htmlFor={`${idp}-res`} hint="Werden beim Deployment über den Namen im AD aufgelöst.">
+          <Field label={t('config.gpoFields.groupsResolved')} htmlFor={`${idp}-res`} hint={t('config.gpoFields.resolvedByNameInAd')}>
             <PrincipalPicker id={`${idp}-res`} values={resolvable} onChange={onResolvable} disabled={disabled} />
           </Field>
-          <Field label="Feste Einträge" htmlFor={`${idp}-lit`} hint="Werden unverändert übernommen: SIDs mit *-Präfix oder lokale Konten wie NT SERVICE\…">
-            <MultiCombobox id={`${idp}-lit`} values={literals} onChange={onLiterals} options={litOpts} disabled={disabled} placeholder="SID oder Konto wählen oder eingeben …" />
+          <Field label={t('config.gpoFields.fixedEntries')} htmlFor={`${idp}-lit`} hint={t('config.gpoFields.takenOverUnchangedSidsWith')}>
+            <MultiCombobox id={`${idp}-lit`} values={literals} onChange={onLiterals} options={litOpts} disabled={disabled} placeholder={t('config.gpoFields.selectOrEnterSidOr')} />
           </Field>
-          <Field label="Nur in der Stammdomäne der Gesamtstruktur" htmlFor={`${idp}-fr`} hint="Gruppen, die nur in der Forest-Root-Domäne existieren.">
-            <MultiCombobox id={`${idp}-fr`} values={forest} onChange={onForest} options={frOpts} disabled={disabled} placeholder="Gruppe wählen …" />
+          <Field label={t('config.gpoFields.onlyInTheForestRoot')} htmlFor={`${idp}-fr`} hint={t('config.gpoFields.groupsThatOnlyExistIn')}>
+            <MultiCombobox id={`${idp}-fr`} values={forest} onChange={onForest} options={frOpts} disabled={disabled} placeholder={t('config.gpoFields.selectGroup')} />
           </Field>
           <ConditionalGroups items={conditional} onChange={onConditional} disabled={disabled} idPrefix={idp} />
         </div>
@@ -362,18 +363,18 @@ function ConditionalGroups({ items, onChange, disabled, idPrefix }: { items: Obj
   const set = (i: number, next: Obj) => onChange(items.map((x, j) => (j === i ? next : x)))
   return (
     <div className="grid min-w-0 gap-2 [&>*]:min-w-0">
-      <Label>Bedingte Gruppen</Label>
-      <p className="-mt-1 text-xs text-muted-foreground">Werden nur eingetragen, wenn die Bedingung erfüllt ist.</p>
+      <Label>{t('config.gpoFields.conditionalGroups')}</Label>
+      <p className="-mt-1 text-xs text-muted-foreground">{t('config.gpoFields.onlyAddedIfTheCondition')}</p>
       {items.map((c, i) => {
         const conds: Obj[] = Array.isArray(c?.conditions) ? c.conditions : []
         return (
           <div key={i} className="grid gap-3 rounded-md border bg-muted/20 p-3">
             <div className="flex items-start gap-2">
-              <Field label="Gruppen" htmlFor={`${idPrefix}-cg-${i}`} className="min-w-0 flex-1">
+              <Field label={t('config.gpoFields.groups')} htmlFor={`${idPrefix}-cg-${i}`} className="min-w-0 flex-1">
                 <PrincipalPicker id={`${idPrefix}-cg-${i}`} values={strings(c?.names)} onChange={(v) => set(i, { ...c, names: v })} disabled={disabled} extra={suggestions.conditional} />
               </Field>
               {!disabled && (
-                <Button type="button" variant="ghost" size="icon-sm" className="mt-5 text-muted-foreground hover:text-destructive" onClick={() => onChange(items.filter((_, j) => j !== i))} aria-label="Bedingte Gruppe entfernen">
+                <Button type="button" variant="ghost" size="icon-sm" className="mt-5 text-muted-foreground hover:text-destructive" onClick={() => onChange(items.filter((_, j) => j !== i))} aria-label={t('config.gpoFields.removeConditionalGroup')}>
                   <Trash2 />
                 </Button>
               )}
@@ -385,13 +386,13 @@ function ConditionalGroups({ items, onChange, disabled, idPrefix }: { items: Obj
                 const opts = CONDITIONS.map((x) => ({ value: `${x.type}|${x.operator}`, label: x.label }))
                 if (cond && !known) opts.push({ value: cur, label: `${cond.type} ${cond.operator}` })
                 return (
-                  <Field key={k} label={conds.length > 1 ? `Bedingung ${k + 1}` : 'Bedingung'} htmlFor={`${idPrefix}-cg-${i}-c${k}`}>
+                  <Field key={k} label={conds.length > 1 ? t('config.gpoFields.conditionValue', { value: k + 1 }) : t('config.gpoFields.condition')} htmlFor={`${idPrefix}-cg-${i}-c${k}`}>
                     <Select
                       id={`${idPrefix}-cg-${i}-c${k}`}
                       value={cur}
                       disabled={disabled}
                       options={opts}
-                      placeholder="Bedingung wählen"
+                      placeholder={t('config.gpoFields.selectCondition')}
                       onValueChange={(v) => {
                         if (v === cur) return
                         const [type, operator] = v.split('|')
@@ -402,14 +403,14 @@ function ConditionalGroups({ items, onChange, disabled, idPrefix }: { items: Obj
                   </Field>
                 )
               })}
-              <Field label="Kommentar" htmlFor={`${idPrefix}-cg-${i}-cm`}>
-                <Input id={`${idPrefix}-cg-${i}-cm`} value={c?.comment ?? ''} disabled={disabled} onChange={(e) => set(i, { ...c, comment: e.target.value })} placeholder="Warum ist die Gruppe bedingt?" />
+              <Field label={t('config.gpoFields.comment')} htmlFor={`${idPrefix}-cg-${i}-cm`}>
+                <Input id={`${idPrefix}-cg-${i}-cm`} value={c?.comment ?? ''} disabled={disabled} onChange={(e) => set(i, { ...c, comment: e.target.value })} placeholder={t('config.gpoFields.whyIsTheGroupConditional')} />
               </Field>
             </div>
           </div>
         )
       })}
-      {items.length === 0 && <p className="text-xs text-muted-foreground">Keine bedingten Gruppen.</p>}
+      {items.length === 0 && <p className="text-xs text-muted-foreground">{t('config.gpoFields.noConditionalGroups')}</p>}
       {!disabled && (
         <Button
           type="button"
@@ -418,7 +419,7 @@ function ConditionalGroups({ items, onChange, disabled, idPrefix }: { items: Obj
           className="justify-self-start"
           onClick={() => onChange([...items, { names: [], conditions: [{ type: 'groupExists', operator: 'exists' }], comment: '' }])}
         >
-          <Plus /> Bedingte Gruppe hinzufügen
+          <Plus /> {t('config.gpoFields.addConditionalGroup')}
         </Button>
       )}
     </div>
@@ -450,16 +451,16 @@ export const RestrictedGroupsSection = React.memo(function RestrictedGroupsSecti
 
   return (
     <Collapsible
-      title="Eingeschränkte Gruppen"
-      description="Lokale Gruppen leeren oder ihre Mitgliedschaften festlegen (Restricted Groups)."
+      title={t('config.gpoFields.restrictedGroups')}
+      description={t('config.gpoFields.emptyLocalGroupsOrDefine')}
       count={empty.length + memberships.length}
       icon={<Users />}
       error={error}
     >
       <EmptyGroupsPicker values={empty} onChange={(v) => setRg((r) => ({ ...r, emptyGroups: v }))} disabled={disabled} />
       <div className="grid min-w-0 gap-2 [&>*]:min-w-0">
-        <Label>Mitgliedschaften festlegen</Label>
-        <p className="-mt-1 text-xs text-muted-foreground">Legt fest, welche Gruppen Mitglied einer lokalen Gruppe sind (bzw. wovon sie Mitglied ist).</p>
+        <Label>{t('config.gpoFields.defineMemberships')}</Label>
+        <p className="-mt-1 text-xs text-muted-foreground">{t('config.gpoFields.definesWhichGroupsAreMembers')}</p>
         {memberships.map((m, i) => (
           <MembershipRow
             key={i}
@@ -470,7 +471,7 @@ export const RestrictedGroupsSection = React.memo(function RestrictedGroupsSecti
             onRemove={() => setRg((r) => ({ ...r, membershipGroups: (r.membershipGroups as Obj[]).filter((_, j) => j !== i) }))}
           />
         ))}
-        {memberships.length === 0 && <p className="text-xs text-muted-foreground">Keine Mitgliedschaften festgelegt.</p>}
+        {memberships.length === 0 && <p className="text-xs text-muted-foreground">{t('config.gpoFields.noMembershipsDefined')}</p>}
         {!disabled && (
           <Button
             type="button"
@@ -479,7 +480,7 @@ export const RestrictedGroupsSection = React.memo(function RestrictedGroupsSecti
             className="justify-self-start"
             onClick={() => setRg((r) => ({ ...r, membershipGroups: [...(Array.isArray(r.membershipGroups) ? r.membershipGroups : []), { groupSidOrName: '__Members', memberGroups: [] }] }))}
           >
-            <Plus /> Mitgliedschaft hinzufügen
+            <Plus /> {t('config.gpoFields.addMembership')}
           </Button>
         )}
       </div>
@@ -489,11 +490,11 @@ export const RestrictedGroupsSection = React.memo(function RestrictedGroupsSecti
 
 function RelationSelect({ id, value, onChange, disabled }: { id?: string; value: string; onChange: (v: string) => void; disabled?: boolean }) {
   const opts = [
-    { value: 'Members', label: 'Mitglieder' },
-    { value: 'Memberof', label: 'Mitglied von' },
+    { value: 'Members', label: t('config.gpoFields.members') },
+    { value: 'Memberof', label: t('config.gpoFields.memberOf') },
   ]
   if (value && !opts.some((o) => o.value === value)) opts.push({ value, label: value })
-  return <Select id={id} value={value} onValueChange={onChange} options={opts} disabled={disabled} placeholder="Beziehung" />
+  return <Select id={id} value={value} onValueChange={onChange} options={opts} disabled={disabled} placeholder={t('config.gpoFields.relation')} />
 }
 
 function MembershipRow({ item, index, onChange, onRemove, disabled }: { item: Obj; index: number; onChange: (v: Obj) => void; onRemove: () => void; disabled: boolean }) {
@@ -505,29 +506,29 @@ function MembershipRow({ item, index, onChange, onRemove, disabled }: { item: Ob
     <div className="grid min-w-0 gap-3 rounded-md border bg-muted/20 p-3 [&>*]:min-w-0">
       <div className="flex items-end gap-2">
         <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-[1fr_11rem]">
-          <Field label="Gruppe" htmlFor={`${id}-g`}>
+          <Field label={t('config.gpoFields.group')} htmlFor={`${id}-g`}>
             <Combobox
               id={`${id}-g`}
               value={group}
               onChange={(g) => onChange({ ...item, groupSidOrName: formatGroupRelation(g, relation || 'Members') })}
               options={builtinGroupOptions}
-              placeholder="Lokale Gruppe wählen"
-              searchPlaceholder="Gruppe oder SID suchen …"
+              placeholder={t('config.gpoFields.selectLocalGroup')}
+              searchPlaceholder={t('config.gpoFields.searchGroupOrSid')}
               invalid={!group}
               disabled={disabled}
             />
           </Field>
-          <Field label="Beziehung" htmlFor={`${id}-r`}>
+          <Field label={t('config.gpoFields.relation')} htmlFor={`${id}-r`}>
             <RelationSelect id={`${id}-r`} value={relation} onChange={(r) => onChange({ ...item, groupSidOrName: formatGroupRelation(group, r) })} disabled={disabled} />
           </Field>
         </div>
         {!disabled && (
-          <Button type="button" variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" onClick={onRemove} aria-label="Mitgliedschaft entfernen">
+          <Button type="button" variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" onClick={onRemove} aria-label={t('config.gpoFields.removeMembership')}>
             <Trash2 />
           </Button>
         )}
       </div>
-      <Field label={relation === 'Memberof' ? 'Ist Mitglied von' : 'Mitglieder'} htmlFor={`${id}-mem`}>
+      <Field label={relation === 'Memberof' ? t('config.gpoFields.isMemberOf') : t('config.gpoFields.members')} htmlFor={`${id}-mem`}>
         <PrincipalPicker id={`${id}-mem`} values={members} onChange={onMembers} disabled={disabled} />
       </Field>
     </div>
@@ -549,8 +550,8 @@ function EmptyGroupsPicker({ values, onChange, disabled }: { values: string[]; o
   }
   return (
     <div className="grid min-w-0 gap-2 [&>*]:min-w-0">
-      <Label>Leeren</Label>
-      <p className="-mt-1 text-xs text-muted-foreground">Die Mitglieder dieser lokalen Gruppen bzw. deren Mitgliedschaften werden geleert.</p>
+      <Label>{t('config.gpoFields.empty')}</Label>
+      <p className="-mt-1 text-xs text-muted-foreground">{t('config.gpoFields.theMembersOfTheseLocal')}</p>
       {values.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {values.map((v) => (
@@ -559,7 +560,7 @@ function EmptyGroupsPicker({ values, onChange, disabled }: { values: string[]; o
               {!disabled && (
                 <button
                   type="button"
-                  aria-label={`${describeGroupRelation(v)} entfernen`}
+                  aria-label={t('config.gpoFields.removeValue', { value: describeGroupRelation(v) })}
                   className="grid size-4 place-content-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
                   onClick={() => onChange(values.filter((x) => x !== v))}
                 >
@@ -570,21 +571,21 @@ function EmptyGroupsPicker({ values, onChange, disabled }: { values: string[]; o
           ))}
         </div>
       ) : (
-        <p className="text-xs text-muted-foreground">Keine Gruppen werden geleert.</p>
+        <p className="text-xs text-muted-foreground">{t('config.gpoFields.noGroupsAreEmptied')}</p>
       )}
       {!disabled && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-dashed p-2">
           <div className="min-w-56 flex-1">
-            <Combobox value={group} onChange={setGroup} options={builtinGroupOptions} placeholder="Lokale Gruppe wählen …" searchPlaceholder="Gruppe oder SID suchen …" />
+            <Combobox value={group} onChange={setGroup} options={builtinGroupOptions} placeholder={t('config.gpoFields.selectLocalGroup2')} searchPlaceholder={t('config.gpoFields.searchGroupOrSid')} />
           </div>
           <label className="flex items-center gap-2 text-[13px]">
-            <Checkbox checked={members} onCheckedChange={(c) => setMembers(c === true)} /> Mitglieder
+            <Checkbox checked={members} onCheckedChange={(c) => setMembers(c === true)} /> {t('config.gpoFields.members')}
           </label>
           <label className="flex items-center gap-2 text-[13px]">
-            <Checkbox checked={memberOf} onCheckedChange={(c) => setMemberOf(c === true)} /> Mitglied von
+            <Checkbox checked={memberOf} onCheckedChange={(c) => setMemberOf(c === true)} /> {t('config.gpoFields.memberOf')}
           </label>
           <Button type="button" size="sm" variant="secondary" onClick={add} disabled={!toAdd.length}>
-            <Plus /> Hinzufügen
+            <Plus /> {t('common.add')}
           </Button>
         </div>
       )}

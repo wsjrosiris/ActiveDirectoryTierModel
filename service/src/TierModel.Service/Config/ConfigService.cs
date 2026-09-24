@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Config;
 
@@ -20,8 +21,12 @@ public record SectionDto(string Key, string FileName, string Title, string Descr
 
 public record VersionInfoDto(int Version, DateTimeOffset CreatedAt, string CreatedBy, string? Comment, string Sha256);
 
-public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions<TierModelOptions> options, ILogger<ConfigService> logger)
+/// <summary>Versioned desired configuration of the current domain (<see cref="Domains.DomainContext"/>, roadmap 17).</summary>
+public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions<TierModelOptions> options, ILogger<ConfigService> logger,
+    Domains.DomainContext domain, GitSync.GitSyncQueue? gitSync = null)
 {
+    private int DomainId => domain.Id;
+
     private static readonly JsonSerializerOptions WriteOptions = new()
     {
         WriteIndented = true,
@@ -45,10 +50,20 @@ public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions
         };
     }
 
-    /// <summary>Imports framework config files for every catalog section that is not in the database yet.</summary>
+    /// <summary>Imports framework config files for every catalog section that is not in the database yet, for every domain.</summary>
     public async Task SeedAsync(CancellationToken ct = default)
     {
-        var existing = await db.ConfigSections.Select(s => s.Key).ToListAsync(ct);
+        foreach (var id in await db.Domains.Select(d => d.Id).ToListAsync(ct))
+            await SeedDomainAsync(id, ct);
+    }
+
+    /// <summary>
+    /// A new domain starts with the shipped sample configuration (like the first domain did); the setup wizard then adapts it.
+    /// Written as user "system", so the wizard recognises the untouched sample.
+    /// </summary>
+    public async Task SeedDomainAsync(int domainId, CancellationToken ct = default)
+    {
+        var existing = await db.ConfigSections.Where(s => s.DomainId == domainId).Select(s => s.Key).ToListAsync(ct);
         var configDir = Path.Combine(options.Value.FrameworkPath, "config");
         foreach (var def in ConfigCatalog.Sections.Where(d => !existing.Contains(d.Key)))
         {
@@ -61,22 +76,24 @@ public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions
             var node = JsonNode.Parse(await File.ReadAllTextAsync(file, ct));
             var content = Serialize(node);
             var now = DateTimeOffset.UtcNow;
-            db.ConfigSections.Add(new ConfigSection { Key = def.Key, FileName = def.FileName, CurrentVersion = 1, UpdatedAt = now, UpdatedBy = "system" });
+            db.ConfigSections.Add(new ConfigSection { DomainId = domainId, Key = def.Key, FileName = def.FileName, CurrentVersion = 1, UpdatedAt = now, UpdatedBy = "system" });
             db.ConfigVersions.Add(new ConfigVersion
             {
-                SectionKey = def.Key, Version = 1, Content = content, Sha256 = Hash(content),
-                CreatedBy = "system", CreatedAt = now, Comment = $"Import aus {def.FileName}",
+                DomainId = domainId, SectionKey = def.Key, Version = 1, Content = content, Sha256 = Hash(content),
+                CreatedBy = "system", CreatedAt = now, Comment = L.PF("Import aus {0}", def.FileName),
             });
-            changeLog.Add("system", "config.import", "config", def.Key, $"{def.Title}: aus {def.FileName} importiert");
-            logger.LogInformation("Imported config section {Key} from {File}", def.Key, file);
+            changeLog.Add("system", "config.import", "config", def.Key, L.PF("{0}: aus {1} importiert", def.PersistedTitle, def.FileName), domainId: domainId);
+            logger.LogInformation("Imported config section {Key} from {File} for domain {Domain}", def.Key, file, domainId);
         }
         await db.SaveChangesAsync(ct);
     }
 
     public async Task<List<SectionSummaryDto>> ListAsync(CancellationToken ct = default)
     {
+        var id = DomainId;
         var rows = await (from s in db.ConfigSections
-                          join v in db.ConfigVersions on new { s.Key, V = s.CurrentVersion } equals new { Key = v.SectionKey, V = v.Version }
+                          join v in db.ConfigVersions on new { s.DomainId, s.Key, V = s.CurrentVersion } equals new { v.DomainId, Key = v.SectionKey, V = v.Version }
+                          where s.DomainId == id
                           select new { s, v.Content }).ToListAsync(ct);
         var result = new List<SectionSummaryDto>();
         foreach (var def in ConfigCatalog.Sections)
@@ -94,10 +111,11 @@ public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions
     {
         var def = ConfigCatalog.Find(key);
         if (def is null) return null;
-        var section = await db.ConfigSections.AsNoTracking().FirstOrDefaultAsync(s => s.Key == def.Key, ct);
+        var id = DomainId;
+        var section = await db.ConfigSections.AsNoTracking().FirstOrDefaultAsync(s => s.DomainId == id && s.Key == def.Key, ct);
         if (section is null) return null;
         var v = await db.ConfigVersions.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.SectionKey == def.Key && x.Version == (version ?? section.CurrentVersion), ct);
+            .FirstOrDefaultAsync(x => x.DomainId == id && x.SectionKey == def.Key && x.Version == (version ?? section.CurrentVersion), ct);
         if (v is null) return null;
         var content = JsonNode.Parse(v.Content);
         return version is null
@@ -105,24 +123,28 @@ public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions
             : new(def.Key, def.FileName, def.Title, def.Description, v.Version, CountItems(def, content), v.CreatedAt, v.CreatedBy, content);
     }
 
-    public Task<List<VersionInfoDto>> VersionsAsync(string key, CancellationToken ct = default) =>
-        db.ConfigVersions.AsNoTracking()
-            .Where(v => v.SectionKey == key)
+    public Task<List<VersionInfoDto>> VersionsAsync(string key, CancellationToken ct = default)
+    {
+        var id = DomainId;
+        return db.ConfigVersions.AsNoTracking()
+            .Where(v => v.DomainId == id && v.SectionKey == key)
             .OrderByDescending(v => v.Version)
             .Select(v => new VersionInfoDto(v.Version, v.CreatedAt, v.CreatedBy, v.Comment, v.Sha256))
             .ToListAsync(ct);
+    }
 
     /// <summary>Stores <paramref name="content"/> as a new version. Throws <see cref="ConfigConflictException"/> if <paramref name="baseVersion"/> is stale.</summary>
     public async Task<SectionDto> SaveAsync(string key, JsonNode? content, string? comment, int baseVersion, string user, string action = "config.update", CancellationToken ct = default)
     {
         var def = ConfigCatalog.Find(key) ?? throw new KeyNotFoundException(key);
         if (content is not JsonObject)
-            throw new ArgumentException("Der Inhalt muss ein JSON-Objekt sein.");
+            throw new ArgumentException(L.T("Der Inhalt muss ein JSON-Objekt sein."));
 
+        var id = DomainId;
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         // Row lock serialises concurrent saves of the same section.
         var section = await db.ConfigSections
-            .FromSqlInterpolated($"SELECT * FROM config_sections WHERE \"Key\" = {def.Key} FOR UPDATE")
+            .FromSqlInterpolated($"SELECT * FROM config_sections WHERE \"DomainId\" = {id} AND \"Key\" = {def.Key} FOR UPDATE")
             .FirstOrDefaultAsync(ct) ?? throw new KeyNotFoundException(key);
         if (section.CurrentVersion != baseVersion)
             throw new ConfigConflictException(section.CurrentVersion);
@@ -130,7 +152,7 @@ public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions
         var text = Serialize(content);
         var hash = Hash(text);
         var current = await db.ConfigVersions.AsNoTracking()
-            .FirstAsync(v => v.SectionKey == def.Key && v.Version == section.CurrentVersion, ct);
+            .FirstAsync(v => v.DomainId == id && v.SectionKey == def.Key && v.Version == section.CurrentVersion, ct);
         if (current.Sha256 == hash)
         {
             await tx.RollbackAsync(ct);
@@ -141,25 +163,61 @@ public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions
         var newVersion = section.CurrentVersion + 1;
         db.ConfigVersions.Add(new ConfigVersion
         {
-            SectionKey = def.Key, Version = newVersion, Content = text, Sha256 = hash,
+            DomainId = id, SectionKey = def.Key, Version = newVersion, Content = text, Sha256 = hash,
             CreatedBy = user, CreatedAt = now, Comment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim(),
         });
         section.CurrentVersion = newVersion;
         section.UpdatedAt = now;
         section.UpdatedBy = user;
         changeLog.Add(user, action, "config", def.Key,
-            $"{def.Title}: Version {baseVersion} → {newVersion}" + (string.IsNullOrWhiteSpace(comment) ? "" : $" ({comment.Trim()})"),
+            L.PF("{0}: Version {1} → {2}", def.PersistedTitle, baseVersion, newVersion) + (string.IsNullOrWhiteSpace(comment) ? "" : $" ({comment.Trim()})"),
             new { section = def.Key, fromVersion = baseVersion, toVersion = newVersion, comment });
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+        // Git mirror (roadmap 16): queued for the background worker, never blocks or fails the save.
+        gitSync?.Enqueue(def.Key, newVersion, id);
+        return (await GetAsync(def.Key, ct: ct))!;
+    }
+
+    /// <summary>Creates a catalog section that does not exist yet (e.g. imported from another instance) with version 1.</summary>
+    public async Task<SectionDto> CreateAsync(string key, JsonNode? content, string? comment, string user, string action = "config.import", CancellationToken ct = default)
+    {
+        var def = ConfigCatalog.Find(key) ?? throw new KeyNotFoundException(key);
+        if (content is not JsonObject)
+            throw new ArgumentException(L.T("Der Inhalt muss ein JSON-Objekt sein."));
+        var id = DomainId;
+        if (await db.ConfigSections.AnyAsync(s => s.DomainId == id && s.Key == def.Key, ct))
+            throw new ConfigConflictException(await db.ConfigSections.Where(s => s.DomainId == id && s.Key == def.Key).Select(s => s.CurrentVersion).FirstAsync(ct));
+        var text = Serialize(content);
+        var now = DateTimeOffset.UtcNow;
+        db.ConfigSections.Add(new ConfigSection { DomainId = id, Key = def.Key, FileName = def.FileName, CurrentVersion = 1, UpdatedAt = now, UpdatedBy = user });
+        db.ConfigVersions.Add(new ConfigVersion
+        {
+            DomainId = id, SectionKey = def.Key, Version = 1, Content = text, Sha256 = Hash(text),
+            CreatedBy = user, CreatedAt = now, Comment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim(),
+        });
+        changeLog.Add(user, action, "config", def.Key,
+            L.PF("{0}: Version 1 angelegt", def.PersistedTitle) + (string.IsNullOrWhiteSpace(comment) ? "" : $" ({comment.Trim()})"),
+            new { section = def.Key, fromVersion = 0, toVersion = 1, comment });
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            throw new ConfigConflictException(1);
+        }
+        gitSync?.Enqueue(def.Key, 1, id);
         return (await GetAsync(def.Key, ct: ct))!;
     }
 
     /// <summary>Current content and version of every section, used to materialise a run's working copy.</summary>
     public async Task<List<(SectionDefinition Def, int Version, string Content)>> SnapshotAsync(CancellationToken ct = default)
     {
+        var id = DomainId;
         var rows = await (from s in db.ConfigSections
-                          join v in db.ConfigVersions on new { s.Key, V = s.CurrentVersion } equals new { Key = v.SectionKey, V = v.Version }
+                          join v in db.ConfigVersions on new { s.DomainId, s.Key, V = s.CurrentVersion } equals new { v.DomainId, Key = v.SectionKey, V = v.Version }
+                          where s.DomainId == id
                           select new { s.Key, v.Version, v.Content }).AsNoTracking().ToListAsync(ct);
         return rows
             .Select(r => (Def: ConfigCatalog.Find(r.Key), r.Version, r.Content))
@@ -183,8 +241,9 @@ public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions
                 result.Add((def, version, content));
                 continue;
             }
-            var v = await db.ConfigVersions.AsNoTracking().FirstOrDefaultAsync(x => x.SectionKey == def.Key && x.Version == wanted, ct)
-                ?? throw new InvalidOperationException($"Festgeschriebene Version {wanted} von '{def.Key}' existiert nicht mehr.");
+            var id = DomainId;
+            var v = await db.ConfigVersions.AsNoTracking().FirstOrDefaultAsync(x => x.DomainId == id && x.SectionKey == def.Key && x.Version == wanted, ct)
+                ?? throw new InvalidOperationException(L.PF("Festgeschriebene Version {0} von '{1}' existiert nicht mehr.", wanted, def.Key));
             result.Add((def, wanted, v.Content));
         }
         return result;

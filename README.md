@@ -79,13 +79,17 @@ Beim TierModel Service gelten diese Anforderungen für das **Dienstkonto**.
 
 | Bereich | Funktionen |
 |---|---|
-| **Dashboard** | Kennzahlen, letzter Audit-/Deploy-Status, Drift-Verlauf, OU-Baum mit Tier-Farben, letzte Läufe und Änderungen |
-| **Konfiguration** | Formulare für OUs, Gruppen, Konten, ACL-Delegationen, MSA/gMSA/dMSA und Windows LAPS; Formulare auch für GPOs, ADMX/ADML, GUID-Zuordnungen und Abhängigkeiten (kein JSON-Editor, Auswahlfelder mit Suche und Vorschlägen aus Konfiguration und AD); Rückgängig/Wiederholen, Diff vor dem Speichern, Versionen und Wiederherstellung, Validierung, OUs umbenennen und verschieben mit Anpassung aller Verweise, Export |
-| **Deploy** | Planen (WhatIf) oder Anwenden – Anwenden nur für Operatoren, mit Bestätigung und nur ohne Validierungsfehler |
-| **Audits** | sofort oder per Zeitplan (Cron + Zeitzone), Befunde je Lauf |
+| **Dashboard** | Compliance-Wert je Tier mit Verlauf, Kennzahlen, letzter Audit-/Deploy-Status, Drift-Verlauf, OU-Baum mit Tier-Farben, letzte Läufe und Änderungen |
+| **Konfiguration** | Formulare für OUs, Gruppen, Konten, ACL-Delegationen, MSA/gMSA/dMSA und Windows LAPS; Formulare auch für GPOs, ADMX/ADML, GUID-Zuordnungen und Abhängigkeiten (kein JSON-Editor, Auswahlfelder mit Suche und Vorschlägen aus Konfiguration und AD); Rückgängig/Wiederholen, Diff vor dem Speichern, Versionen und Wiederherstellung, Authentication Silos, Assistenten für neue Server-Bereiche, Admin-Konten und Delegationen, Soll/Ist-Vergleich mit dem AD, Import aus Export-ZIP oder anderer Instanz (Test → Produktion), Git-Anbindung, Einrichtungsassistent, Validierung mit Tier-Regeln (Warnung direkt im Formular, wenn ein niedrigeres Tier ein höheres steuern würde), OUs umbenennen und verschieben mit Anpassung aller Verweise, Export |
+| **Deploy** | Planen (WhatIf) mit lesbarer Liste der geplanten Änderungen; Anwenden nur aus einer passenden, aktuellen Planung, nur für Operatoren, mit Bestätigung und nur ohne Validierungsfehler |
+| **Audits** | sofort oder per Zeitplan (Cron + Zeitzone), Befunde je Lauf mit Schweregrad, Behebung per Klick (Planung nur für den betroffenen Bereich) |
+| **Befristeter Zugriff** | Just-in-Time-Mitgliedschaft in Admin-Gruppen mit Ablaufzeit (PAM), Freigabe durch einen zweiten Operator, vorzeitiger Entzug |
+| **Privilegierte Zugriffe** | Mitglieder der geschützten und Tier-0-Gruppen (auch in deutschen Domänen), Änderungsverlauf, nicht erwartete Mitglieder, Konten-Hygiene, Angriffspfade zu Tier 0, Benachrichtigung bei Änderungen |
 | **Läufe** | Warteschlange, Live-Protokoll, Abbrechen, verwendete Konfigurationsversionen |
 | **Änderungsprotokoll** | wer hat wann was geändert, gestartet oder freigegeben |
-| **Administration** | Benutzer mit Rollen (Betrachter, Bearbeiter, Operator, Administrator), Windows-Anmeldung mit AD-Gruppen, Benachrichtigungen, Vier-Augen-Prinzip, Einstellungen |
+| **Mehrere Domänen** | eine Instanz für mehrere Domänen (auch Gesamtstrukturen mit Vertrauensstellung), je Domäne eigene Konfiguration, Läufe und Überwachung, Umschalter in der Kopfzeile |
+| **Sprache** | Oberfläche und Meldungen auf Deutsch oder Englisch, je Benutzer wählbar |
+| **Administration** | Benutzer mit Rollen (Betrachter, Bearbeiter, Operator, Administrator), Windows-Anmeldung mit AD-Gruppen, Benachrichtigungen, Vier-Augen-Prinzip, Systemzustand (Zertifikat, Datenbank, Warteschlange, Hintergrunddienste, Kette des Änderungsprotokolls), Wartungsfenster und Sperrzeiten, Entra-ID-Anmeldung, API-Tokens, SIEM (Syslog/CEF, Log Analytics), PDF-Berichte, Einstellungen |
 
 **Technik:** ASP.NET Core 10 als Windows-Dienst (self-contained, keine .NET-Installation nötig), PostgreSQL,
 React/TypeScript-Oberfläche, die der Dienst selbst ausliefert. Nur HTTPS, eigene Konten mit Sperre nach
@@ -98,6 +102,8 @@ Fehlversuchen, CSRF-Schutz, Content-Security-Policy.
 | [Überblick & Architektur](docs/service/index.md) | Wie der Dienst aufgebaut ist und einen Lauf ausführt |
 | [Installation](docs/service/installation.md) | Voraussetzungen, Dienstkonto, Assistent, Aktualisieren, Deinstallieren |
 | [Bedienung](docs/service/bedienung.md) | Rollen, Konfiguration, Deploy, Audits, Zeitpläne, Läufe |
+| [Roadmap](docs/service/roadmap.md) | Geplante Funktionen und Umsetzungsstand |
+| [Testplan Windows](docs/service/testplan-windows.md) | Was vor dem Produktiveinsatz in einer echten (auch deutschen) Testdomäne zu prüfen ist |
 | [Betrieb](docs/service/betrieb.md) | Konfigurationsdatei, Protokolle, Sicherung, Zertifikat, Kommandozeile, Fehlerbehebung |
 | [Sicherheit](docs/service/sicherheit.md) | Einstufung als Tier-0-System, Schutzmaßnahmen, Härtung |
 | [Entwicklung](docs/service/entwicklung.md) | Lokale Umgebung, Tests, Release-Paket, Datenbank |
@@ -113,13 +119,15 @@ Das Original von Microsoft verlangt eine englische Umgebung. In diesem Fork gilt
   Französisch, Spanisch, Italienisch, Niederländisch, Portugiesisch, Türkisch, Japanisch, Koreanisch, Chinesisch,
   Polnisch, Russisch, Schwedisch, Dänisch, Finnisch, Griechisch, Tschechisch, Ungarisch. Andere Sprachen werden
   weiterhin abgelehnt.
-- **Active Directory:** Die Sprache der Domäne wird anhand der integrierten Gruppen (per SID) erkannt und im
-  Ergebnis der Voraussetzungsprüfung festgehalten (`AdLanguage`, `AdGroupNames`). Sie wird aber **noch nicht
-  verwendet**: Die Konfiguration und die Prüfung auf „Domain Admins“ arbeiten mit den **englischen** Gruppennamen.
-  **Domänen mit lokalisierten Gruppennamen (z. B. „Domänen-Admins“) werden daher derzeit nicht unterstützt.**
+- **Active Directory:** Domänen mit lokalisierten Gruppennamen (z. B. „Domänen-Admins“) werden unterstützt.
+  Die Konfiguration bleibt englisch; integrierte Benutzer und Gruppen werden über ihre festen SIDs bzw. RIDs
+  aufgelöst (`Get-TierModelWellKnownPrincipal`), nicht über den Namen – Schema-/Organisations-Admins,
+  Enterprise Key Admins und Enterprise-RODCs über die SID der Stammdomäne, sodass auch untergeordnete Domänen
+  funktionieren. Die erkannte Sprache der Domäne (`AdLanguage`, `AdGroupNames`) wird nur zur Information im
+  Ergebnis der Voraussetzungsprüfung festgehalten.
 
-Die Pester-Tests der Sprachprüfung (`tests/Unit.Prerequisites.Tests.ps1`) beschreiben noch das frühere
-Englisch-Verhalten und müssen angepasst werden.
+Die Pester-Tests der Sprachprüfung (`tests/Unit.Prerequisites.Tests.ps1`) beschreiben das aktuelle Verhalten;
+Tests, die eine Windows-Identität brauchen, sind mit `WindowsOnly` markiert.
 
 ## 📁 Projektstruktur
 

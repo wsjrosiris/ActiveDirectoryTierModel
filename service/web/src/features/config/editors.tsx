@@ -12,6 +12,8 @@ import { TierBadge, TierBadgeFor } from '@/components/shared/badges'
 import { OuTree } from '@/components/shared/ou-tree'
 import { DOMAIN, ouFullDn, ouParentOptions, toFullDn, type OuItem } from '@/lib/ou'
 import { tierOf, type Tier } from '@/lib/tier'
+import { aclTierIssues, lapsTierIssues, userTierIssues } from '@/lib/tier-rules'
+import { useGroupTierMap } from './tier-rule-alerts'
 import { ListEditor, type Column, type FormProps, type Item } from './list-editor'
 import {
   CheckboxGrid,
@@ -24,6 +26,7 @@ import {
 import { ALL_OBJECTS_LABEL, PrincipalCombobox, PrincipalMultiCombobox, useObjectTypeOptions } from './lookups'
 import { useSectionContent } from './draft-store'
 import { OuRenameDialog } from './ou-rename-dialog'
+import { t } from '@/i18n'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = any
@@ -40,7 +43,7 @@ function DnText({ value }: { value: string | undefined }) {
   const short = value.replace(/,\{\{DOMAIN_DN\}\}$/, '')
   return (
     <span className="block max-w-[150px] truncate font-mono text-[12px] text-muted-foreground @4xl:max-w-[220px] @6xl:max-w-[340px]" title={value}>
-      {short === DOMAIN ? 'Domänenstamm' : short}
+      {short === DOMAIN ? t('config.editors.domainRoot') : short}
     </span>
   )
 }
@@ -50,7 +53,7 @@ function Mono({ children }: { children: React.ReactNode }) {
 }
 
 const bool = (v: unknown) =>
-  v ? <CheckCircle2 className="size-4 text-emerald-500" aria-label="Ja" /> : <Circle className="size-4 text-muted-foreground/40" aria-label="Nein" />
+  v ? <CheckCircle2 className="size-4 text-emerald-500" aria-label={t('common.yes')} /> : <Circle className="size-4 text-muted-foreground/40" aria-label={t('common.no')} />
 
 function useListBinding(props: EditorProps, listKey: string) {
   const items: Item[] = Array.isArray(props.content?.[listKey]) ? props.content[listKey] : []
@@ -76,40 +79,40 @@ function OuForm({ value, onChange, errors, index }: FormProps) {
 
   return (
     <>
-      <FormSection title="Allgemein">
-        <Field label="Name" htmlFor="ou-name" required error={errors.name} hint={existing ? 'Umbenennen und Verschieben aktualisieren alle Referenzen in anderen Sektionen.' : undefined}>
+      <FormSection title={t('config.editors.general')}>
+        <Field label={t('common.name')} htmlFor="ou-name" required error={errors.name} hint={existing ? t('config.editors.renamingAndMovingUpdateAll') : undefined}>
           <div className="flex gap-2">
-            <Input id="ou-name" value={value.name ?? ''} readOnly={existing} onChange={(e) => onChange(setField(value, 'name', e.target.value))} aria-invalid={!!errors.name} placeholder="z. B. Tier 0 Accounts" />
+            <Input id="ou-name" value={value.name ?? ''} readOnly={existing} onChange={(e) => onChange(setField(value, 'name', e.target.value))} aria-invalid={!!errors.name} placeholder={t('config.editors.eGTier0Accounts')} />
             {existing && (
               <Button type="button" variant="outline" onClick={() => setRenameOpen(true)}>
-                <Pencil /> Umbenennen / Verschieben …
+                <Pencil /> {t('config.editors.renameMove')}
               </Button>
             )}
           </div>
         </Field>
-        <Field label="Übergeordnete OU" htmlFor="ou-path" required error={errors.path} hint={existing ? "Verschieben über „Umbenennen / Verschieben …“." : "Relativer Pfad ohne Domänen-Suffix oder {{DOMAIN_DN}} für die oberste Ebene."}>
+        <Field label={t('config.editors.parentOu')} htmlFor="ou-path" required error={errors.path} hint={existing ? t('config.editors.moveViaRenameMove') : t('config.editors.relativePathWithoutDomainSuffix')}>
           {existing ? (
             <Input id="ou-path" className="font-mono" value={value.path ?? ''} readOnly />
           ) : (
-            <Combobox id="ou-path" mono value={value.path ?? ''} onChange={(v) => onChange(setField(value, 'path', v))} options={parentOptions} placeholder="Übergeordnete OU wählen" invalid={!!errors.path} />
+            <Combobox id="ou-path" mono value={value.path ?? ''} onChange={(v) => onChange(setField(value, 'path', v))} options={parentOptions} placeholder={t('config.editors.selectParentOu')} invalid={!!errors.path} />
           )}
         </Field>
         <div className="rounded-lg border border-dashed bg-muted/30 px-3 py-2.5">
-          <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Distinguished Name</p>
+          <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{t('config.editors.distinguishedName')}</p>
           <div className="mt-1 flex items-center gap-2">
             <p className="min-w-0 flex-1 font-mono text-[12px] break-all">{value.name ? ouFullDn(value as OuItem) : '–'}</p>
             <TierBadgeFor text={value.name ? ouFullDn(value as OuItem) : ''} />
           </div>
         </div>
-        <Field label="Kommentar" htmlFor="ou-comment">
+        <Field label={t('config.editors.comment')} htmlFor="ou-comment">
           <Textarea id="ou-comment" rows={2} value={value.comment ?? ''} onChange={(e) => onChange(setField(value, 'comment', e.target.value, !('comment' in value)))} />
         </Field>
       </FormSection>
-      <FormSection title="Schutz & Vererbung">
+      <FormSection title={t('config.editors.protectionInheritance')}>
         <div className="grid gap-2">
-          <SwitchRow id="ou-protect" label="Vor versehentlichem Löschen schützen" checked={!!value.protectFromAccidentalDeletion} onCheckedChange={(v) => onChange(setField(value, 'protectFromAccidentalDeletion', v))} />
-          <SwitchRow id="ou-inherit" label="ACL-Vererbung deaktivieren" description="Berechtigungen der übergeordneten OU werden nicht geerbt." checked={!!value.disableInheritance} onCheckedChange={(v) => onChange(setField(value, 'disableInheritance', v))} />
-          <SwitchRow id="ou-gpo" label="GPO-Vererbung blockieren" description="Gruppenrichtlinien übergeordneter Container werden blockiert." checked={!!value.blockGpoInheritance} onCheckedChange={(v) => onChange(setField(value, 'blockGpoInheritance', v))} />
+          <SwitchRow id="ou-protect" label={t('config.editors.protectFromAccidentalDeletion')} checked={!!value.protectFromAccidentalDeletion} onCheckedChange={(v) => onChange(setField(value, 'protectFromAccidentalDeletion', v))} />
+          <SwitchRow id="ou-inherit" label={t('config.editors.disableAclInheritance')} description={t('config.editors.permissionsOfTheParentOu')} checked={!!value.disableInheritance} onCheckedChange={(v) => onChange(setField(value, 'disableInheritance', v))} />
+          <SwitchRow id="ou-gpo" label={t('config.editors.blockGpoInheritance')} description={t('config.editors.groupPoliciesOfParentContainers')} checked={!!value.blockGpoInheritance} onCheckedChange={(v) => onChange(setField(value, 'blockGpoInheritance', v))} />
         </div>
       </FormSection>
       {existing && index !== null && (
@@ -124,13 +127,13 @@ export function OusEditor(props: EditorProps) {
   const [view, setView] = React.useState<'table' | 'tree'>('table')
   const [rename, setRename] = React.useState<number | null>(null)
   const columns: Column[] = [
-    { id: 'name', header: 'Name', cell: (o) => <span className="font-medium whitespace-nowrap">{o.name}</span>, sortValue: (o) => o.name ?? '' },
-    { id: 'path', header: 'Übergeordnet', cell: (o) => <DnText value={o.path} />, sortValue: (o) => toFullDn(o.path ?? '').split(',').reverse().join(',') },
-    { id: 'tier', header: 'Tier', cell: (o) => <TierBadge tier={ouTier(o)} short />, sortValue: (o) => String(ouTier(o) ?? 'z') },
-    { id: 'protect', header: 'Schutz', cell: (o) => bool(o.protectFromAccidentalDeletion), className: 'hidden @2xl:table-cell' },
-    { id: 'inh', header: 'ACL-Vererb. aus', cell: (o) => bool(o.disableInheritance), className: 'hidden @3xl:table-cell' },
-    { id: 'gpo', header: 'GPO-Block', cell: (o) => bool(o.blockGpoInheritance), className: 'hidden @3xl:table-cell' },
-    { id: 'comment', header: 'Kommentar', cell: (o) => <span className="line-clamp-1 max-w-xs text-muted-foreground">{o.comment}</span>, className: 'hidden @5xl:table-cell' },
+    { id: 'name', header: t('common.name'), cell: (o) => <span className="font-medium whitespace-nowrap">{o.name}</span>, sortValue: (o) => o.name ?? '' },
+    { id: 'path', header: t('config.editors.parent'), cell: (o) => <DnText value={o.path} />, sortValue: (o) => toFullDn(o.path ?? '').split(',').reverse().join(',') },
+    { id: 'tier', header: t('config.editors.tier'), cell: (o) => <TierBadge tier={ouTier(o)} short />, sortValue: (o) => String(ouTier(o) ?? 'z') },
+    { id: 'protect', header: t('config.editors.protection'), cell: (o) => bool(o.protectFromAccidentalDeletion), className: 'hidden @2xl:table-cell' },
+    { id: 'inh', header: t('config.editors.aclInheritOff'), cell: (o) => bool(o.disableInheritance), className: 'hidden @3xl:table-cell' },
+    { id: 'gpo', header: t('config.editors.gpoBlock'), cell: (o) => bool(o.blockGpoInheritance), className: 'hidden @3xl:table-cell' },
+    { id: 'comment', header: t('config.editors.comment'), cell: (o) => <span className="line-clamp-1 max-w-xs text-muted-foreground">{o.comment}</span>, className: 'hidden @5xl:table-cell' },
   ]
   return (
     <>
@@ -143,30 +146,30 @@ export function OusEditor(props: EditorProps) {
         itemLabel={(o) => o.name}
         newItem={() => ({ name: '', path: DOMAIN, protectFromAccidentalDeletion: true, disableInheritance: false, blockGpoInheritance: false, comment: '' })}
         Form={OuForm}
-        entity={{ singular: 'OU', plural: 'OUs', article: 'die' }}
+        entity={{ singular: t('config.editors.ou'), plural: t('config.editors.ous'), article: 'die' }}
         readOnly={props.readOnly}
         defaultSort="path"
         validate={(o, all, index) => {
           const e: Record<string, string> = {}
-          if (!o.name?.trim()) e.name = 'Name ist erforderlich.'
-          else if (/[,=+<>#;\\"]/.test(o.name)) e.name = 'Name darf keine Sonderzeichen wie , = + < > # ; \\ " enthalten.'
-          if (!o.path?.trim()) e.path = 'Übergeordnete OU ist erforderlich.'
+          if (!o.name?.trim()) e.name = t('config.editors.nameIsRequired')
+          else if (/[,=+<>#;\\"]/.test(o.name)) e.name = t('config.editors.nameMustNotContainSpecial')
+          if (!o.path?.trim()) e.path = t('config.editors.parentOuIsRequired')
           const dn = ouFullDn(o as OuItem).toLowerCase()
-          if (o.name && all.some((x, i) => i !== index && ouFullDn(x as OuItem).toLowerCase() === dn)) e.name = 'Eine OU mit diesem Namen existiert bereits an dieser Stelle.'
+          if (o.name && all.some((x, i) => i !== index && ouFullDn(x as OuItem).toLowerCase() === dn)) e.name = t('config.editors.anOuWithThisName')
           const parent = toFullDn(o.path ?? '').toLowerCase()
           if (o.path && o.path !== DOMAIN && !all.some((x, i) => i !== index && ouFullDn(x as OuItem).toLowerCase() === parent))
-            e.path = 'Übergeordnete OU existiert nicht in der Konfiguration.'
+            e.path = t('config.editors.parentOuDoesNotExist')
           return e
         }}
-        extraActions={[{ label: 'Umbenennen / Verschieben …', icon: <Pencil />, onSelect: (_o, i) => setRename(i) }]}
+        extraActions={[{ label: t('config.editors.renameMove'), icon: <Pencil />, onSelect: (_o, i) => setRename(i) }]}
         toolbarExtra={
           <Segmented
-            aria-label="Ansicht"
+            aria-label={t('config.editors.view')}
             value={view}
             onValueChange={setView}
             options={[
-              { value: 'table', label: 'Tabelle', icon: <Table2 /> },
-              { value: 'tree', label: 'Baum', icon: <FolderTree /> },
+              { value: 'table', label: t('config.editors.table'), icon: <Table2 /> },
+              { value: 'tree', label: t('config.editors.tree'), icon: <FolderTree /> },
             ]}
             className="[&_button]:h-7 [&_button]:px-2.5 [&_button]:text-xs"
           />
@@ -183,7 +186,7 @@ export function OusEditor(props: EditorProps) {
                       props.readOnly
                         ? undefined
                         : (n) => (
-                            <Button type="button" variant="ghost" size="icon-xs" aria-label={`${n.ou.name} umbenennen`} onClick={() => setRename(n.index)}>
+                            <Button type="button" variant="ghost" size="icon-xs" aria-label={t('config.editors.renameName', { name: n.ou.name })} onClick={() => setRename(n.index)}>
                               <Pencil />
                             </Button>
                           )
@@ -207,39 +210,39 @@ function GroupForm({ value, onChange, errors }: FormProps) {
   const ouOptions = useOuOptions()
   return (
     <>
-      <FormSection title="Identität">
+      <FormSection title={t('config.editors.identity')}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Name" htmlFor="g-name" required error={errors.name}>
-            <Input id="g-name" value={value.name ?? ''} onChange={(e) => onChange(setField(value, 'name', e.target.value))} aria-invalid={!!errors.name} placeholder="z. B. Tier 0 Admins" />
+          <Field label={t('common.name')} htmlFor="g-name" required error={errors.name}>
+            <Input id="g-name" value={value.name ?? ''} onChange={(e) => onChange(setField(value, 'name', e.target.value))} aria-invalid={!!errors.name} placeholder={t('config.editors.eGTier0Admins')} />
           </Field>
           <Field label="sAMAccountName" htmlFor="g-sam" required error={errors.samaccountname}>
             <Input id="g-sam" className="font-mono" value={value.samaccountname ?? ''} onChange={(e) => onChange(setField(value, 'samaccountname', e.target.value))} aria-invalid={!!errors.samaccountname} placeholder="Tier0Admins" />
           </Field>
         </div>
-        <Field label="Beschreibung" htmlFor="g-desc">
+        <Field label={t('config.editors.description')} htmlFor="g-desc">
           <Textarea id="g-desc" rows={2} value={value.description ?? ''} onChange={(e) => onChange(setField(value, 'description', e.target.value, !('description' in value)))} />
         </Field>
       </FormSection>
-      <FormSection title="Typ & Ablage">
+      <FormSection title={t('config.editors.typeLocation')}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Gruppenbereich" htmlFor="g-scope">
+          <Field label={t('config.editors.groupScope')} htmlFor="g-scope">
             <Select id="g-scope" value={value.groupscope} onValueChange={(v) => onChange(setField(value, 'groupscope', v))} options={[
               { value: 'Global', label: 'Global' },
               { value: 'Universal', label: 'Universal' },
-              { value: 'DomainLocal', label: 'Lokal (Domäne)' },
+              { value: 'DomainLocal', label: t('config.editors.domainLocal') },
             ]} />
           </Field>
-          <Field label="Gruppentyp" htmlFor="g-cat">
+          <Field label={t('config.editors.groupType')} htmlFor="g-cat">
             <Select id="g-cat" value={value.groupcategory} onValueChange={(v) => onChange(setField(value, 'groupcategory', v))} options={[
-              { value: 'Security', label: 'Sicherheit' },
-              { value: 'Distribution', label: 'Verteilung' },
+              { value: 'Security', label: t('config.editors.security') },
+              { value: 'Distribution', label: t('config.editors.distribution') },
             ]} />
           </Field>
         </div>
-        <Field label="Ziel-OU" htmlFor="g-path" required error={errors.path}>
-          <Combobox id="g-path" mono value={value.path ?? ''} onChange={(v) => onChange(setField(value, 'path', v))} options={ouOptions} placeholder="OU wählen" invalid={!!errors.path} />
+        <Field label={t('config.editors.targetOu')} htmlFor="g-path" required error={errors.path}>
+          <Combobox id="g-path" mono value={value.path ?? ''} onChange={(v) => onChange(setField(value, 'path', v))} options={ouOptions} placeholder={t('config.editors.selectOu')} invalid={!!errors.path} />
         </Field>
-        <Field label="Kommentar" htmlFor="g-comment">
+        <Field label={t('config.editors.comment')} htmlFor="g-comment">
           <Textarea id="g-comment" rows={2} value={value.comment ?? ''} onChange={(e) => onChange(setField(value, 'comment', e.target.value, !('comment' in value)))} />
         </Field>
       </FormSection>
@@ -251,16 +254,16 @@ const groupTier = (g: Item): Tier => tierOf(g.name) ?? tierOf(g.path)
 
 export function GroupsEditor(props: EditorProps) {
   const { items, onItemsChange } = useListBinding(props, 'groups')
-  const scopeLabel: Record<string, string> = { Global: 'Global', Universal: 'Universal', DomainLocal: 'Lokal' }
+  const scopeLabel: Record<string, string> = { Global: 'Global', Universal: 'Universal', DomainLocal: t('config.editors.domainLocal2') }
   return (
     <ListEditor
       items={items}
       onItemsChange={onItemsChange}
       columns={[
-        { id: 'name', header: 'Name', cell: (g) => <span className="block min-w-[140px] font-medium">{g.name}</span>, sortValue: (g) => g.name ?? '' },
+        { id: 'name', header: t('common.name'), cell: (g) => <span className="block min-w-[140px] font-medium">{g.name}</span>, sortValue: (g) => g.name ?? '' },
         { id: 'sam', header: 'sAMAccountName', cell: (g) => <Mono>{g.samaccountname}</Mono>, sortValue: (g) => g.samaccountname ?? '' },
-        { id: 'scope', header: 'Bereich', cell: (g) => <Badge variant="outline">{scopeLabel[g.groupscope] ?? g.groupscope}</Badge>, sortValue: (g) => g.groupscope ?? '', className: 'hidden @2xl:table-cell' },
-        { id: 'cat', header: 'Typ', cell: (g) => <span className="text-muted-foreground">{g.groupcategory === 'Security' ? 'Sicherheit' : g.groupcategory === 'Distribution' ? 'Verteilung' : g.groupcategory}</span>, className: 'hidden @5xl:table-cell' },
+        { id: 'scope', header: t('config.editors.scope'), cell: (g) => <Badge variant="outline">{scopeLabel[g.groupscope] ?? g.groupscope}</Badge>, sortValue: (g) => g.groupscope ?? '', className: 'hidden @2xl:table-cell' },
+        { id: 'cat', header: t('config.editors.type'), cell: (g) => <span className="text-muted-foreground">{g.groupcategory === 'Security' ? t('config.editors.security') : g.groupcategory === 'Distribution' ? t('config.editors.distribution') : g.groupcategory}</span>, className: 'hidden @5xl:table-cell' },
         { id: 'path', header: 'OU', cell: (g) => <DnText value={g.path} />, sortValue: (g) => g.path ?? '', className: 'hidden @3xl:table-cell' },
       ]}
       searchText={(g) => `${g.name} ${g.samaccountname} ${g.description ?? ''} ${g.path ?? ''}`}
@@ -268,16 +271,16 @@ export function GroupsEditor(props: EditorProps) {
       itemLabel={(g) => g.name || g.samaccountname}
       newItem={() => ({ name: '', samaccountname: '', description: '', groupscope: 'Global', groupcategory: 'Security', path: '', comment: '' })}
       Form={GroupForm}
-      entity={{ singular: 'Gruppe', plural: 'Gruppen', article: 'die' }}
+      entity={{ singular: t('config.editors.group'), plural: t('config.editors.groups'), article: 'die' }}
       readOnly={props.readOnly}
       defaultSort="name"
       validate={(g, all, index) => {
         const e: Record<string, string> = {}
-        if (!g.name?.trim()) e.name = 'Name ist erforderlich.'
-        if (!g.samaccountname?.trim()) e.samaccountname = 'sAMAccountName ist erforderlich.'
-        else if (/[\s"/\\[\]:;|=,+*?<>@]/.test(g.samaccountname)) e.samaccountname = 'Enthält unzulässige Zeichen.'
-        else if (all.some((x, i) => i !== index && String(x.samaccountname).toLowerCase() === g.samaccountname.toLowerCase())) e.samaccountname = 'Dieser sAMAccountName ist bereits vergeben.'
-        if (!g.path?.trim()) e.path = 'Ziel-OU ist erforderlich.'
+        if (!g.name?.trim()) e.name = t('config.editors.nameIsRequired')
+        if (!g.samaccountname?.trim()) e.samaccountname = t('config.editors.samaccountnameIsRequired')
+        else if (/[\s"/\\[\]:;|=,+*?<>@]/.test(g.samaccountname)) e.samaccountname = t('config.editors.containsInvalidCharacters')
+        else if (all.some((x, i) => i !== index && String(x.samaccountname).toLowerCase() === g.samaccountname.toLowerCase())) e.samaccountname = t('config.editors.thisSamaccountnameIsAlreadyIn')
+        if (!g.path?.trim()) e.path = t('config.editors.targetOuIsRequired')
         return e
       }}
     />
@@ -291,27 +294,27 @@ function UserForm({ value, onChange, errors }: FormProps) {
   const members: string[] = Array.isArray(value.memberOf) ? value.memberOf : []
   return (
     <>
-      <FormSection title="Konto">
+      <FormSection title={t('config.editors.account')}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="sAMAccountName" htmlFor="u-sam" required error={errors.samAccountName} hint="Max. 20 Zeichen">
+          <Field label="sAMAccountName" htmlFor="u-sam" required error={errors.samAccountName} hint={t('config.editors.max20Characters')}>
             <Input id="u-sam" className="font-mono" value={value.samAccountName ?? ''} onChange={(e) => onChange(setField(value, 'samAccountName', e.target.value))} aria-invalid={!!errors.samAccountName} placeholder="svc-beispiel" />
           </Field>
-          <Field label="Anzeigename" htmlFor="u-dn">
+          <Field label={t('config.editors.displayName')} htmlFor="u-dn">
             <Input id="u-dn" value={value.displayName ?? ''} onChange={(e) => onChange(setField(value, 'displayName', e.target.value, !('displayName' in value)))} />
           </Field>
         </div>
-        <Field label="Ziel-OU" htmlFor="u-ou" required error={errors.ouPath}>
-          <Combobox id="u-ou" mono value={value.ouPath ?? ''} onChange={(v) => onChange(setField(value, 'ouPath', v))} options={ouOptions} placeholder="OU wählen" invalid={!!errors.ouPath} />
+        <Field label={t('config.editors.targetOu')} htmlFor="u-ou" required error={errors.ouPath}>
+          <Combobox id="u-ou" mono value={value.ouPath ?? ''} onChange={(v) => onChange(setField(value, 'ouPath', v))} options={ouOptions} placeholder={t('config.editors.selectOu')} invalid={!!errors.ouPath} />
         </Field>
-        <Field label="Beschreibung" htmlFor="u-desc">
+        <Field label={t('config.editors.description')} htmlFor="u-desc">
           <Textarea id="u-desc" rows={2} value={value.description ?? ''} onChange={(e) => onChange(setField(value, 'description', e.target.value, !('description' in value)))} />
         </Field>
-        <SwitchRow id="u-enabled" label="Konto aktiviert" description="Dienstkonten bleiben üblicherweise deaktiviert, bis sie benötigt werden." checked={!!value.enabled} onCheckedChange={(v) => onChange(setField(value, 'enabled', v))} />
+        <SwitchRow id="u-enabled" label={t('config.editors.accountEnabled')} description={t('config.editors.serviceAccountsUsuallyStayDisabled')} checked={!!value.enabled} onCheckedChange={(v) => onChange(setField(value, 'enabled', v))} />
       </FormSection>
-      <FormSection title="Gruppenmitgliedschaften" description="sAMAccountName der Gruppen – aus der Konfiguration, integriert oder per Suche im Active Directory">
-        <PrincipalMultiCombobox id="u-member" values={members} onChange={(v) => onChange(setField(value, 'memberOf', v))} placeholder="Gruppe suchen und hinzufügen …" />
+      <FormSection title={t('config.editors.groupMemberships')} description={t('config.editors.samaccountnameOfTheGroupsFrom')}>
+        <PrincipalMultiCombobox id="u-member" values={members} onChange={(v) => onChange(setField(value, 'memberOf', v))} placeholder={t('config.editors.searchAndAddGroup')} />
       </FormSection>
-      <Field label="Kommentar" htmlFor="u-comment">
+      <Field label={t('config.editors.comment')} htmlFor="u-comment">
         <Textarea id="u-comment" rows={2} value={value.comment ?? ''} onChange={(e) => onChange(setField(value, 'comment', e.target.value, !('comment' in value)))} />
       </Field>
     </>
@@ -320,30 +323,32 @@ function UserForm({ value, onChange, errors }: FormProps) {
 
 export function UsersEditor(props: EditorProps) {
   const { items, onItemsChange } = useListBinding(props, 'users')
+  const groupTiers = useGroupTierMap()
   return (
     <ListEditor
       items={items}
       onItemsChange={onItemsChange}
+      hints={(u) => userTierIssues(u, groupTiers)}
       columns={[
         { id: 'sam', header: 'sAMAccountName', cell: (u) => <Mono>{u.samAccountName}</Mono>, sortValue: (u) => u.samAccountName ?? '' },
-        { id: 'dn', header: 'Anzeigename', cell: (u) => u.displayName, sortValue: (u) => u.displayName ?? '', className: 'hidden @2xl:table-cell' },
+        { id: 'dn', header: t('config.editors.displayName'), cell: (u) => u.displayName, sortValue: (u) => u.displayName ?? '', className: 'hidden @2xl:table-cell' },
         { id: 'ou', header: 'OU', cell: (u) => <DnText value={u.ouPath} />, sortValue: (u) => u.ouPath ?? '' },
-        { id: 'enabled', header: 'Status', cell: (u) => (u.enabled ? <Badge variant="success">Aktiv</Badge> : <Badge variant="muted">Deaktiviert</Badge>) },
-        { id: 'member', header: 'Mitglied von', cell: (u) => <span className="text-muted-foreground">{(u.memberOf ?? []).join(', ') || '–'}</span>, className: 'hidden @3xl:table-cell' },
+        { id: 'enabled', header: t('common.status'), cell: (u) => (u.enabled ? <Badge variant="success">{t('common.active')}</Badge> : <Badge variant="muted">{t('config.editors.disabled')}</Badge>) },
+        { id: 'member', header: t('config.editors.memberOf'), cell: (u) => <span className="text-muted-foreground">{(u.memberOf ?? []).join(', ') || '–'}</span>, className: 'hidden @3xl:table-cell' },
       ]}
       searchText={(u) => `${u.samAccountName} ${u.displayName ?? ''} ${u.ouPath ?? ''} ${u.description ?? ''} ${(u.memberOf ?? []).join(' ')}`}
       tierOf={(u) => tierOf(u.ouPath)}
       itemLabel={(u) => u.samAccountName}
       newItem={() => ({ samAccountName: '', displayName: '', ouPath: '', description: '', enabled: false, memberOf: [], comment: '' })}
       Form={UserForm}
-      entity={{ singular: 'Benutzer', plural: 'Benutzer', article: 'den' }}
+      entity={{ singular: t('config.editors.user'), plural: t('config.editors.users'), article: 'den' }}
       readOnly={props.readOnly}
       validate={(u, all, index) => {
         const e: Record<string, string> = {}
-        if (!u.samAccountName?.trim()) e.samAccountName = 'sAMAccountName ist erforderlich.'
-        else if (u.samAccountName.length > 20) e.samAccountName = 'Maximal 20 Zeichen.'
-        else if (all.some((x, i) => i !== index && String(x.samAccountName).toLowerCase() === u.samAccountName.toLowerCase())) e.samAccountName = 'Bereits vergeben.'
-        if (!u.ouPath?.trim()) e.ouPath = 'Ziel-OU ist erforderlich.'
+        if (!u.samAccountName?.trim()) e.samAccountName = t('config.editors.samaccountnameIsRequired')
+        else if (u.samAccountName.length > 20) e.samAccountName = t('config.editors.atMost20Characters')
+        else if (all.some((x, i) => i !== index && String(x.samAccountName).toLowerCase() === u.samAccountName.toLowerCase())) e.samAccountName = t('config.editors.alreadyInUse')
+        if (!u.ouPath?.trim()) e.ouPath = t('config.editors.targetOuIsRequired')
         return e
       }}
     />
@@ -358,11 +363,11 @@ export const AD_RIGHTS = [
 ]
 const INHERITANCE = ['None', 'All', 'Descendents', 'SelfAndChildren', 'Children']
 const inheritanceLabels: Record<string, string> = {
-  None: 'Keine – nur dieses Objekt',
-  All: 'Alle – Objekt und alle Nachfolger',
-  Descendents: 'Nachfolger – nur untergeordnete Objekte',
-  SelfAndChildren: 'Objekt und direkte Kinder',
-  Children: 'Nur direkte Kinder',
+  None: t('config.editors.noneThisObjectOnly'),
+  All: t('config.editors.allObjectAndAllDescendants'),
+  Descendents: t('config.editors.descendantsChildObjectsOnly'),
+  SelfAndChildren: t('config.editors.objectAndDirectChildren'),
+  Children: t('config.editors.directChildrenOnly'),
 }
 const COMMON_OBJECT_TYPES = [
   'Computer', 'User', 'Group', 'OrganizationalUnit', 'Contact', 'AllObjectClasses', 'PasswordReset',
@@ -384,66 +389,66 @@ function makeAclForm(objectTypes: string[], showTier: boolean) {
     const rights: string[] = Array.isArray(value.activedirectoryrights) ? value.activedirectoryrights : []
     return (
       <>
-        <FormSection title="Ziel & Prinzipal">
-          <Field label="Ziel-OU" htmlFor="a-ou" required error={errors.targetOUPath}>
-            <Combobox id="a-ou" mono value={value.targetOUPath ?? ''} onChange={(v) => onChange(setField(value, 'targetOUPath', v))} options={ouOptions} placeholder="OU wählen" invalid={!!errors.targetOUPath} />
+        <FormSection title={t('config.editors.targetPrincipal')}>
+          <Field label={t('config.editors.targetOu')} htmlFor="a-ou" required error={errors.targetOUPath}>
+            <Combobox id="a-ou" mono value={value.targetOUPath ?? ''} onChange={(v) => onChange(setField(value, 'targetOUPath', v))} options={ouOptions} placeholder={t('config.editors.selectOu')} invalid={!!errors.targetOUPath} />
           </Field>
-          <Field label="Prinzipal (Identity Reference)" htmlFor="a-id" required error={errors.identityreference} hint="sAMAccountName einer Gruppe aus der Konfiguration, ein integriertes Konto oder eine Gruppe aus dem Active Directory (Suche).">
-            <PrincipalCombobox id="a-id" value={value.identityreference ?? ''} onChange={(v) => onChange(setField(value, 'identityreference', v))} placeholder="Prinzipal wählen" invalid={!!errors.identityreference} />
+          <Field label={t('config.editors.principalIdentityReference')} htmlFor="a-id" required error={errors.identityreference} hint={t('config.editors.samaccountnameOfAGroupFrom')}>
+            <PrincipalCombobox id="a-id" value={value.identityreference ?? ''} onChange={(v) => onChange(setField(value, 'identityreference', v))} placeholder={t('config.editors.selectPrincipal')} invalid={!!errors.identityreference} />
           </Field>
         </FormSection>
-        <FormSection title="Rechte" description="activedirectoryrights">
+        <FormSection title={t('config.editors.rights')} description="activedirectoryrights">
           <CheckboxGrid options={AD_RIGHTS} value={rights} onChange={(v) => onChange(setField(value, 'activedirectoryrights', v))} />
           {errors.activedirectoryrights && <p className="-mt-2 text-xs text-destructive">{errors.activedirectoryrights}</p>}
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Zugriffstyp" htmlFor="a-type">
+            <Field label={t('config.editors.accessType')} htmlFor="a-type">
               <Select id="a-type" value={value.accesscontroltype} onValueChange={(v) => onChange(setField(value, 'accesscontroltype', v))} options={[
-                { value: 'Allow', label: 'Zulassen (Allow)' },
-                { value: 'Deny', label: 'Verweigern (Deny)' },
+                { value: 'Allow', label: t('config.editors.allow') },
+                { value: 'Deny', label: t('config.editors.deny') },
               ]} />
             </Field>
-            <Field label="Vererbung" htmlFor="a-inh">
+            <Field label={t('config.editors.inheritance')} htmlFor="a-inh">
               <Select id="a-inh" value={value.activeDirectorysecurityinheritance} onValueChange={(v) => onChange(setField(value, 'activeDirectorysecurityinheritance', v))}
                 options={INHERITANCE.map((i) => ({ value: i, label: i, description: inheritanceLabels[i] }))} />
             </Field>
           </div>
         </FormSection>
-        <FormSection title="Objekttypen">
+        <FormSection title={t('config.editors.objectTypes')}>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Objekttyp" htmlFor="a-obj" hint="Namen aus den GUID-Zuordnungen">
+            <Field label={t('config.editors.objectType')} htmlFor="a-obj" hint={t('config.editors.namesFromTheGuidMappings')}>
               <Combobox id="a-obj" mono value={value.objecttype ?? ''} onChange={(v) => onChange(setField(value, 'objecttype', v))} options={typeOptions} placeholder={ALL_OBJECTS_LABEL} />
             </Field>
-            <Field label="Geerbter Objekttyp" htmlFor="a-iobj" hint="Optional – schränkt auf Nachfolger dieses Typs ein">
+            <Field label={t('config.editors.inheritedObjectType')} htmlFor="a-iobj" hint={t('config.editors.optionalRestrictsToDescendantsOf')}>
               <Combobox id="a-iobj" mono value={value[inhKey] ?? ''} onChange={(v) => onChange(setField(value, inhKey, v, true))} options={typeOptions} placeholder={ALL_OBJECTS_LABEL} />
             </Field>
           </div>
           {'inheritanceType' in value && (
-            <Field label="Vererbungstyp" htmlFor="a-it" hint="inheritanceType">
+            <Field label={t('config.editors.inheritanceType')} htmlFor="a-it" hint="inheritanceType">
               <Combobox
                 id="a-it"
                 mono
                 value={value.inheritanceType ?? ''}
                 onChange={(v) => onChange(setField(value, 'inheritanceType', v, true))}
                 options={[
-                  { value: 'ContainerInherit', hint: 'Vererbung an Container' },
-                  { value: 'ObjectInherit', hint: 'Vererbung an Objekte' },
-                  { value: 'None', hint: 'Keine Vererbung' },
+                  { value: 'ContainerInherit', hint: t('config.editors.inheritanceToContainers') },
+                  { value: 'ObjectInherit', hint: t('config.editors.inheritanceToObjects') },
+                  { value: 'None', hint: t('config.editors.noInheritance') },
                   ...typeOptions.filter((o) => o.value),
                 ]}
-                placeholder="Optional"
+                placeholder={t('config.editors.optional')}
               />
             </Field>
           )}
-          <SwitchRow id="a-guid" label="GUID auflösen" description="Objekttyp zur Laufzeit über guid-mappings in eine Schema-GUID übersetzen (resolveguid)." checked={!!value.resolveguid} onCheckedChange={(v) => onChange(setField(value, 'resolveguid', v))} />
+          <SwitchRow id="a-guid" label={t('config.editors.resolveGuid')} description={t('config.editors.translateTheObjectTypeInto')} checked={!!value.resolveguid} onCheckedChange={(v) => onChange(setField(value, 'resolveguid', v))} />
           {showTier && (
-            <Field label="Tier" htmlFor="a-tier">
+            <Field label={t('config.editors.tier')} htmlFor="a-tier">
               <Select id="a-tier" value={value.tier === undefined ? '' : String(value.tier)} onValueChange={(v) => onChange(setField(value, 'tier', Number(v)))} options={[
-                { value: '0', label: 'Tier 0' }, { value: '1', label: 'Tier 1' }, { value: '2', label: 'Tier 2' },
-              ]} placeholder="Tier wählen" />
+                { value: '0', label: t('config.editors.tier0') }, { value: '1', label: t('config.editors.tier1') }, { value: '2', label: t('config.editors.tier2') },
+              ]} placeholder={t('config.editors.selectTier')} />
             </Field>
           )}
         </FormSection>
-        <Field label="Kommentar" htmlFor="a-comment">
+        <Field label={t('config.editors.comment')} htmlFor="a-comment">
           <Textarea id="a-comment" rows={2} value={value.comment ?? ''} onChange={(e) => onChange(setField(value, 'comment', e.target.value, !('comment' in value)))} />
         </Field>
       </>
@@ -453,6 +458,7 @@ function makeAclForm(objectTypes: string[], showTier: boolean) {
 
 export function AclsEditor(props: EditorProps) {
   const { items, onItemsChange } = useListBinding(props, 'aclDelegations')
+  const groupTiers = useGroupTierMap()
   const isMsa = props.sectionKey !== 'acls'
   const objectTypes = React.useMemo(() => {
     const s = new Set(COMMON_OBJECT_TYPES)
@@ -467,30 +473,31 @@ export function AclsEditor(props: EditorProps) {
     <>
       {isMsa && msaType && (
         <p className="mb-3 text-[13px] text-muted-foreground">
-          Kontotyp: <Badge variant="info">{msaType}</Badge>
+          {t('config.editors.accountType')} <Badge variant="info">{msaType}</Badge>
         </p>
       )}
       <ListEditor
         items={items}
         onItemsChange={onItemsChange}
+        hints={(a) => aclTierIssues(a, groupTiers)}
         columns={[
-          { id: 'principal', header: 'Prinzipal', cell: (a) => <span className="font-medium">{a.identityreference}</span>, sortValue: (a) => a.identityreference ?? '' },
+          { id: 'principal', header: t('config.editors.principal'), cell: (a) => <span className="font-medium">{a.identityreference}</span>, sortValue: (a) => a.identityreference ?? '' },
           {
-            id: 'rights', header: 'Rechte',
+            id: 'rights', header: t('config.editors.rights'),
             cell: (a) => (
               <div className="flex min-w-[160px] max-w-[280px] flex-wrap gap-1">
                 {(a.activedirectoryrights ?? []).map((r: string) => <Badge key={r} variant="secondary" className="font-mono text-[11px] font-normal">{r}</Badge>)}
               </div>
             ),
           },
-          { id: 'type', header: 'Objekttyp', cell: (a) => <Mono>{a.objecttype || <span className="text-muted-foreground">alle</span>}</Mono>, sortValue: (a) => a.objecttype ?? '', className: 'hidden @4xl:table-cell' },
-          { id: 'ou', header: 'Ziel-OU', cell: (a) => <DnText value={a.targetOUPath} />, sortValue: (a) => a.targetOUPath ?? '' },
+          { id: 'type', header: t('config.editors.objectType'), cell: (a) => <Mono>{a.objecttype || <span className="text-muted-foreground">{t('config.editors.all')}</span>}</Mono>, sortValue: (a) => a.objecttype ?? '', className: 'hidden @4xl:table-cell' },
+          { id: 'ou', header: t('config.editors.targetOu'), cell: (a) => <DnText value={a.targetOUPath} />, sortValue: (a) => a.targetOUPath ?? '' },
           {
-            id: 'act', header: 'Typ',
+            id: 'act', header: t('config.editors.type'),
             cell: (a) => (a.accesscontroltype === 'Deny' ? <Badge variant="danger">Deny</Badge> : <Badge variant="success">Allow</Badge>),
             sortValue: (a) => a.accesscontroltype ?? '', className: 'hidden @5xl:table-cell',
           },
-          { id: 'inh', header: 'Vererbung', cell: (a) => <span className="text-muted-foreground">{a.activeDirectorysecurityinheritance}</span>, sortValue: (a) => a.activeDirectorysecurityinheritance ?? '', className: 'hidden @6xl:table-cell' },
+          { id: 'inh', header: t('config.editors.inheritance'), cell: (a) => <span className="text-muted-foreground">{a.activeDirectorysecurityinheritance}</span>, sortValue: (a) => a.activeDirectorysecurityinheritance ?? '', className: 'hidden @6xl:table-cell' },
         ]}
         searchText={(a) => `${a.identityreference} ${a.targetOUPath} ${a.objecttype ?? ''} ${a.inheritedObjectType ?? a.inheritedobjecttype ?? ''} ${(a.activedirectoryrights ?? []).join(' ')} ${a.comment ?? ''}`}
         tierOf={aclTier}
@@ -501,13 +508,13 @@ export function AclsEditor(props: EditorProps) {
           activeDirectorysecurityinheritance: 'Descendents', resolveguid: isMsa, ...(isMsa ? { tier: 1 } : {}), comment: '',
         })}
         Form={Form}
-        entity={{ singular: 'Delegation', plural: 'Delegationen', article: 'die' }}
+        entity={{ singular: t('config.editors.delegation'), plural: t('config.editors.delegations'), article: 'die' }}
         readOnly={props.readOnly}
         validate={(a) => {
           const e: Record<string, string> = {}
-          if (!a.targetOUPath?.trim()) e.targetOUPath = 'Ziel-OU ist erforderlich.'
-          if (!a.identityreference?.trim()) e.identityreference = 'Prinzipal ist erforderlich.'
-          if (!a.activedirectoryrights?.length) e.activedirectoryrights = 'Mindestens ein Recht auswählen.'
+          if (!a.targetOUPath?.trim()) e.targetOUPath = t('config.editors.targetOuIsRequired')
+          if (!a.identityreference?.trim()) e.identityreference = t('config.editors.principalIsRequired')
+          if (!a.activedirectoryrights?.length) e.activedirectoryrights = t('config.editors.selectAtLeastOneRight')
           return e
         }}
       />
@@ -522,32 +529,32 @@ function WinLapsForm({ value, onChange, errors }: FormProps) {
   const gpoNames = useGpoNameOptions()
   return (
     <>
-      <FormSection title="Ziel">
-        <Field label="OU" htmlFor="w-ou" required error={errors.ouDn}>
-          <Combobox id="w-ou" mono value={value.ouDn ?? ''} onChange={(v) => onChange(setField(value, 'ouDn', v))} options={ouOptions} placeholder="OU wählen" invalid={!!errors.ouDn} />
+      <FormSection title={t('config.editors.target')}>
+        <Field label={t('config.editors.ou')} htmlFor="w-ou" required error={errors.ouDn}>
+          <Combobox id="w-ou" mono value={value.ouDn ?? ''} onChange={(v) => onChange(setField(value, 'ouDn', v))} options={ouOptions} placeholder={t('config.editors.selectOu')} invalid={!!errors.ouDn} />
         </Field>
         <div className="grid gap-2">
-          <SwitchRow id="w-self" label="Computer-Selbstberechtigung" description="Computer dürfen ihr eigenes LAPS-Passwort schreiben." checked={!!value.computerSelfPermission} onCheckedChange={(v) => onChange(setField(value, 'computerSelfPermission', v))} />
-          <SwitchRow id="w-dc" label="Domain-Controller-OU" description="DSRM-Entschlüsselung erfolgt immer durch Domain Admins." checked={!!value.isDomainControllerOu} onCheckedChange={(v) => onChange(setField(value, 'isDomainControllerOu', v, !('isDomainControllerOu' in value) && !v))} />
+          <SwitchRow id="w-self" label={t('config.editors.computerSelfPermission')} description={t('config.editors.computersMayWriteTheirOwn')} checked={!!value.computerSelfPermission} onCheckedChange={(v) => onChange(setField(value, 'computerSelfPermission', v))} />
+          <SwitchRow id="w-dc" label={t('config.editors.domainControllerOu')} description={t('config.editors.dsrmDecryptionIsAlwaysDone')} checked={!!value.isDomainControllerOu} onCheckedChange={(v) => onChange(setField(value, 'isDomainControllerOu', v, !('isDomainControllerOu' in value) && !v))} />
         </div>
       </FormSection>
-      <FormSection title="Berechtigte Gruppen" description="Gruppennamen (nicht sAMAccountName)">
+      <FormSection title={t('config.editors.authorizedGroups')} description={t('config.editors.groupNamesNotSamaccountname')}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Lesen" htmlFor="w-read" required error={errors.readGroup}>
-            <PrincipalCombobox by="name" id="w-read" value={value.readGroup ?? ''} onChange={(v) => onChange(setField(value, 'readGroup', v))} placeholder="Gruppe wählen" invalid={!!errors.readGroup} />
+          <Field label={t('config.editors.read')} htmlFor="w-read" required error={errors.readGroup}>
+            <PrincipalCombobox by="name" id="w-read" value={value.readGroup ?? ''} onChange={(v) => onChange(setField(value, 'readGroup', v))} placeholder={t('config.editors.selectGroup')} invalid={!!errors.readGroup} />
           </Field>
-          <Field label="Zurücksetzen" htmlFor="w-reset" required error={errors.resetGroup}>
-            <PrincipalCombobox by="name" id="w-reset" value={value.resetGroup ?? ''} onChange={(v) => onChange(setField(value, 'resetGroup', v))} placeholder="Gruppe wählen" invalid={!!errors.resetGroup} />
+          <Field label={t('config.editors.reset')} htmlFor="w-reset" required error={errors.resetGroup}>
+            <PrincipalCombobox by="name" id="w-reset" value={value.resetGroup ?? ''} onChange={(v) => onChange(setField(value, 'resetGroup', v))} placeholder={t('config.editors.selectGroup')} invalid={!!errors.resetGroup} />
           </Field>
         </div>
-        <Field label="Entschlüsselung (decryptorGroup)" htmlFor="w-dec" hint="Optional – bei DC-OU nicht erforderlich">
-          <PrincipalCombobox by="name" id="w-dec" value={value.decryptorGroup ?? ''} onChange={(v) => onChange(setField(value, 'decryptorGroup', v, true))} placeholder="Optional" />
+        <Field label={t('config.editors.decryptionDecryptorgroup')} htmlFor="w-dec" hint={t('config.editors.optionalNotRequiredForA')}>
+          <PrincipalCombobox by="name" id="w-dec" value={value.decryptorGroup ?? ''} onChange={(v) => onChange(setField(value, 'decryptorGroup', v, true))} placeholder={t('config.editors.optional')} />
         </Field>
-        <Field label="Decryptor-GPO" htmlFor="w-gpo" hint="Name der GPO, die die Entschlüsselungsgruppe konfiguriert">
-          <Combobox id="w-gpo" value={value.decryptorGpoName ?? ''} onChange={(v) => onChange(setField(value, 'decryptorGpoName', v, true))} options={gpoNames} placeholder="Optional" />
+        <Field label={t('config.editors.decryptorGpo')} htmlFor="w-gpo" hint={t('config.editors.nameOfTheGpoThat')}>
+          <Combobox id="w-gpo" value={value.decryptorGpoName ?? ''} onChange={(v) => onChange(setField(value, 'decryptorGpoName', v, true))} options={gpoNames} placeholder={t('config.editors.optional')} />
         </Field>
       </FormSection>
-      <Field label="Kommentar" htmlFor="w-comment">
+      <Field label={t('config.editors.comment')} htmlFor="w-comment">
         <Textarea id="w-comment" rows={2} value={value.comment ?? ''} onChange={(e) => onChange(setField(value, 'comment', e.target.value, true))} />
       </Field>
     </>
@@ -556,15 +563,17 @@ function WinLapsForm({ value, onChange, errors }: FormProps) {
 
 export function WinLapsEditor(props: EditorProps) {
   const { items, onItemsChange } = useListBinding(props, 'winLapsDelegations')
+  const groupTiers = useGroupTierMap()
   return (
     <ListEditor
       items={items}
       onItemsChange={onItemsChange}
+      hints={(w) => lapsTierIssues(w, groupTiers)}
       columns={[
         { id: 'ou', header: 'OU', cell: (w) => <DnText value={w.ouDn} />, sortValue: (w) => w.ouDn ?? '' },
-        { id: 'read', header: 'Lesen', cell: (w) => w.readGroup, sortValue: (w) => w.readGroup ?? '' },
-        { id: 'reset', header: 'Zurücksetzen', cell: (w) => w.resetGroup, className: 'hidden @2xl:table-cell' },
-        { id: 'dec', header: 'Entschlüsselung', cell: (w) => w.decryptorGroup ?? <span className="text-muted-foreground">–</span>, className: 'hidden @3xl:table-cell' },
+        { id: 'read', header: t('config.editors.read'), cell: (w) => w.readGroup, sortValue: (w) => w.readGroup ?? '' },
+        { id: 'reset', header: t('config.editors.reset'), cell: (w) => w.resetGroup, className: 'hidden @2xl:table-cell' },
+        { id: 'dec', header: t('config.editors.decryption'), cell: (w) => w.decryptorGroup ?? <span className="text-muted-foreground">–</span>, className: 'hidden @3xl:table-cell' },
         { id: 'self', header: 'Self', cell: (w) => bool(w.computerSelfPermission), className: 'hidden @3xl:table-cell' },
       ]}
       searchText={(w) => `${w.ouDn} ${w.readGroup} ${w.resetGroup} ${w.decryptorGroup ?? ''} ${w.decryptorGpoName ?? ''}`}
@@ -572,14 +581,14 @@ export function WinLapsEditor(props: EditorProps) {
       itemLabel={(w) => String(w.ouDn ?? '').replace(/,\{\{DOMAIN_DN\}\}$/, '')}
       newItem={() => ({ ouDn: '', computerSelfPermission: true, readGroup: '', resetGroup: '' })}
       Form={WinLapsForm}
-      entity={{ singular: 'LAPS-Delegation', plural: 'LAPS-Delegationen', article: 'die' }}
+      entity={{ singular: t('config.editors.lapsDelegation'), plural: t('config.editors.lapsDelegations'), article: 'die' }}
       readOnly={props.readOnly}
       validate={(w, all, index) => {
         const e: Record<string, string> = {}
-        if (!w.ouDn?.trim()) e.ouDn = 'OU ist erforderlich.'
-        else if (all.some((x, i) => i !== index && x.ouDn === w.ouDn)) e.ouDn = 'Für diese OU existiert bereits eine Delegation.'
-        if (!w.readGroup?.trim()) e.readGroup = 'Erforderlich.'
-        if (!w.resetGroup?.trim()) e.resetGroup = 'Erforderlich.'
+        if (!w.ouDn?.trim()) e.ouDn = t('config.editors.ouIsRequired')
+        else if (all.some((x, i) => i !== index && x.ouDn === w.ouDn)) e.ouDn = t('config.editors.aDelegationAlreadyExistsFor')
+        if (!w.readGroup?.trim()) e.readGroup = t('config.editors.required')
+        if (!w.resetGroup?.trim()) e.resetGroup = t('config.editors.required')
         return e
       }}
     />

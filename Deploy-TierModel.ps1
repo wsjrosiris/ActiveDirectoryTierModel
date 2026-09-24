@@ -36,9 +36,17 @@ access control list delegations will be applied. (Not yet implemented in v0.2)
 Deploy only ADMX template configurations. When specified, only administrative
 template imports and configurations will be applied. (Not yet implemented in v0.2)
 
+.PARAMETER AuthSilosOnly
+Deploy only Kerberos authentication policies, authentication policy silos, silo membership and
+device group synchronisation from config/tiermodel-authsilos.json (Get-/New-TierModelAuthSilo).
+Requires a domain functional level of Windows Server 2012 R2 or later. See
+docs/authentication-silos.md.
+
 .PARAMETER FullDeployment
 Perform comprehensive deployment of all TierModel components in dependency order:
-OUs -> Groups -> Users -> OU ACL Delegations -> GPOs -> ADMX.
+OUs -> Groups -> Users -> OU ACL Delegations -> GPOs -> ADMX [-> -Include* ACL delegations]
+-> Authentication Policies and Silos (last phase, only when config/tiermodel-authsilos.json
+exists and has entries).
 Provides consolidated reporting at completion.
 
 .PARAMETER ConfirmApply
@@ -64,6 +72,13 @@ Base filename for generated deployment reports and logs (without extension or ti
 The actual filename will include a timestamp and appropriate extension.
 Used when Logging is enabled or when generating deployment reports.
 
+.PARAMETER PlanOutputPath
+Planning mode only (no -ConfirmApply): write the deployment plan as JSON to this file.
+When omitted but -Logging, -LogPath and -OutputFileBase are set, the plan is written to
+<LogPath>/<OutputFileBase>-plan.json. The file (UTF-8 without BOM) contains metadata,
+summary, phases, actions (with flattened details), warnings and errors - see
+Export-TierModelPlan for the contract. Console output is not affected.
+
 .EXAMPLE
 .\Deploy-TierModel.ps1 -PreferredDc "DC01.contoso.com" -OuOnly
 Generate deployment plan for organizational units only (planning mode).
@@ -75,6 +90,10 @@ Deploy organizational units and log all operations to C:\Logs directory.
 .EXAMPLE
 .\Deploy-TierModel.ps1 -PreferredDc "DC01.contoso.com" -FullDeployment -ConfirmApply -Logging -OutputFileBase "TierModel-Deploy"
 Perform full TierModel deployment with logging enabled using custom log filename base.
+
+.EXAMPLE
+.\Deploy-TierModel.ps1 -PreferredDc "DC01.contoso.com" -AuthSilosOnly
+Plan the authentication policies, silos, silo membership and device group synchronisation.
 
 .NOTES
 Version: 2.0
@@ -91,6 +110,7 @@ param(
     [switch]$GposOnly,
     [switch]$OuAclsOnly,
     [switch]$AdmxOnly,
+    [switch]$AuthSilosOnly,
     [switch]$FullDeployment,
     [switch]$ConfirmApply,
 
@@ -113,26 +133,29 @@ param(
     [string]$LogPath,
     
     [Parameter()]
-    [string]$OutputFileBase
+    [string]$OutputFileBase,
+    
+    [Parameter()]
+    [string]$PlanOutputPath
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # Validate that only one deployment scope parameter is specified
-$scopeParameters = @($OuOnly, $GroupOnly, $UserOnly, $GposOnly, $OuAclsOnly, $AdmxOnly, $FullDeployment)
+$scopeParameters = @($OuOnly, $GroupOnly, $UserOnly, $GposOnly, $OuAclsOnly, $AdmxOnly, $AuthSilosOnly, $FullDeployment)
 $activeScopeCount = @($scopeParameters | Where-Object { $_ }).Count
 $includeParameters = @($IncludeMsa, $IncludeGmsa, $IncludeDmsa, $IncludeWinLaps)
 $activeIncludeCount = @($includeParameters | Where-Object { $_ }).Count
 
 if ($activeScopeCount -eq 0 -and $activeIncludeCount -eq 0) {
-    Write-Error "You must specify exactly one deployment scope parameter (-OuOnly, -GroupOnly, -UserOnly, -GposOnly, -OuAclsOnly, -AdmxOnly, -FullDeployment) or one or more -Include* switches (-IncludeMsa, -IncludeGmsa, -IncludeDmsa, -IncludeWinLaps)." -ErrorAction Stop
+    Write-Error "You must specify exactly one deployment scope parameter (-OuOnly, -GroupOnly, -UserOnly, -GposOnly, -OuAclsOnly, -AdmxOnly, -AuthSilosOnly, -FullDeployment) or one or more -Include* switches (-IncludeMsa, -IncludeGmsa, -IncludeDmsa, -IncludeWinLaps)." -ErrorAction Stop
 }
 elseif ($activeScopeCount -gt 1) {
-    Write-Error "You can only specify one deployment scope parameter at a time. Cannot combine -OuOnly, -GroupOnly, -UserOnly, -GposOnly, -OuAclsOnly, -AdmxOnly, and -FullDeployment" -ErrorAction Stop
+    Write-Error "You can only specify one deployment scope parameter at a time. Cannot combine -OuOnly, -GroupOnly, -UserOnly, -GposOnly, -OuAclsOnly, -AdmxOnly, -AuthSilosOnly, and -FullDeployment" -ErrorAction Stop
 }
 elseif ($activeIncludeCount -gt 0 -and $activeScopeCount -eq 1 -and -not $FullDeployment) {
-    Write-Error "-IncludeMsa, -IncludeGmsa, -IncludeDmsa, and -IncludeWinLaps can only be used standalone or combined with -FullDeployment. They cannot be used with -OuOnly, -GroupOnly, -UserOnly, -GposOnly, -OuAclsOnly, or -AdmxOnly." -ErrorAction Stop
+    Write-Error "-IncludeMsa, -IncludeGmsa, -IncludeDmsa, and -IncludeWinLaps can only be used standalone or combined with -FullDeployment. They cannot be used with -OuOnly, -GroupOnly, -UserOnly, -GposOnly, -OuAclsOnly, -AdmxOnly, or -AuthSilosOnly." -ErrorAction Stop
 }
 
 Write-Host "Deploy TierModel orchestration starting." -ForegroundColor Cyan
@@ -171,6 +194,16 @@ if ($Logging) {
     $logDir = Split-Path $script:LogFilePath -Parent
     if (-not (Test-Path $logDir)) {
         New-Item -Path $logDir -ItemType Directory -Force | Out-Null
+    }
+}
+
+# Determine the JSON plan output file (planning mode only)
+$script:PlanOutputFile = $null
+if (-not $ConfirmApply) {
+    if (-not [string]::IsNullOrWhiteSpace($PlanOutputPath)) {
+        $script:PlanOutputFile = $PlanOutputPath
+    } elseif ($Logging -and -not [string]::IsNullOrWhiteSpace($LogPath) -and -not [string]::IsNullOrWhiteSpace($OutputFileBase)) {
+        $script:PlanOutputFile = Join-Path $LogPath "$OutputFileBase-plan.json"
     }
 }
 
@@ -274,7 +307,7 @@ if ($Logging) {
     Write-TierModelLog -LogPath $script:LogFilePath -Level 'Info' -Message "TierModel deployment started" -Data @{
         PreferredDc = $PreferredDc
         Mode = if ($ConfirmApply) { 'EXECUTION' } else { 'PLANNING' }
-        Scope = if ($FullDeployment) { 'FullDeployment' } elseif ($OuOnly) { 'OuOnly' } elseif ($GroupOnly) { 'GroupOnly' } elseif ($UserOnly) { 'UserOnly' } elseif ($GposOnly) { 'GposOnly' } elseif ($OuAclsOnly) { 'OuAclsOnly' } elseif ($AdmxOnly) { 'AdmxOnly' } else { 'Unknown' }
+        Scope = if ($FullDeployment) { 'FullDeployment' } elseif ($OuOnly) { 'OuOnly' } elseif ($GroupOnly) { 'GroupOnly' } elseif ($UserOnly) { 'UserOnly' } elseif ($GposOnly) { 'GposOnly' } elseif ($OuAclsOnly) { 'OuAclsOnly' } elseif ($AdmxOnly) { 'AdmxOnly' } elseif ($AuthSilosOnly) { 'AuthSilosOnly' } else { 'Unknown' }
         Version = 'v0.2'
         UserConfirmed = $ConfirmApply
     }
@@ -745,6 +778,8 @@ function Invoke-UserDeployment {
         $result = [PSCustomObject]@{
             EntityType = 'User'
             Actions = $plan.Actions
+            Summary = if ($plan.PSObject.Properties.Name -contains 'Summary') { $plan.Summary } else { $null }
+            Warnings = if ($plan.PSObject.Properties.Name -contains 'Warnings') { $plan.Warnings } else { @() }
             Applied = @()
             Skipped = @()
             Errors = if ($hasErrors) { $plan.Errors } else { @() }
@@ -870,6 +905,8 @@ function Invoke-OuAclDeployment {
         $result = [PSCustomObject]@{
             EntityType = 'OuAcl'
             Actions = $plan.Actions  # Include Actions for planning mode count display
+            Summary = if ($plan.PSObject.Properties.Name -contains 'Summary') { $plan.Summary } else { $null }
+            Warnings = if ($plan.PSObject.Properties.Name -contains 'Warnings') { $plan.Warnings } else { @() }
             Applied = @()
             Skipped = @()
             Errors = if ($hasErrors) { $plan.Errors } else { @() }
@@ -1159,6 +1196,39 @@ function Add-IncludeAclPhaseToDeploymentPlan {
         ExistingCount = $existingCount
         Actions = @($Plan.Actions)
     }
+}
+
+function Test-AuthSiloConfigured {
+    <# True when config/tiermodel-authsilos.json was loaded and has at least one entry. #>
+    param([Parameter(Mandatory)] [object]$Config)
+    if (-not $Config.PSObject.Properties['authSilos'] -or $null -eq $Config.authSilos) { return $false }
+    foreach ($name in @('authenticationPolicies', 'authenticationPolicySilos', 'deviceGroupSync')) {
+        if ($Config.authSilos.PSObject.Properties[$name] -and @($Config.authSilos.$name | Where-Object { $null -ne $_ }).Count -gt 0) { return $true }
+    }
+    return $false
+}
+
+function Write-AuthSiloPlanActions {
+    <# Console lines for authentication policy / silo plan actions (same style as the other phases). #>
+    param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]]$Actions)
+    foreach ($a in @($Actions)) {
+        switch ($a.Action) {
+            'AddDeviceGroupMember' { Write-Host "  ■ Add to Device Group: $($a.Name) -> $($a.Data.group)" -ForegroundColor Yellow }
+            'CreateAuthPolicy'     { Write-Host "  ■ Create Authentication Policy: $($a.Name)" -ForegroundColor Yellow }
+            'UpdateAuthPolicy'     { Write-Host "  ■ Update Authentication Policy: $($a.Name) ($(@($a.Data.changes) -join ', '))" -ForegroundColor Yellow }
+            'CreateAuthSilo'       { Write-Host "  ■ Create Authentication Silo: $($a.Name)" -ForegroundColor Yellow }
+            'UpdateAuthSilo'       { Write-Host "  ■ Update Authentication Silo: $($a.Name) ($(@($a.Data.changes) -join ', '))" -ForegroundColor Yellow }
+            'GrantSiloAccess'      { Write-Host "  ■ Grant Silo Access: $($a.Name) -> $($a.Data.silo)" -ForegroundColor Yellow }
+            'AssignSilo'           { Write-Host "  ■ Assign Silo: $($a.Name) -> $($a.Data.silo)" -ForegroundColor Yellow }
+        }
+    }
+}
+
+function Write-AuthSiloPlanMessages {
+    <# Prints plan errors (red) and warnings (yellow) of Get-TierModelAuthSilo. #>
+    param([Parameter(Mandatory)] [object]$Plan)
+    foreach ($e in @($Plan.Errors)) { Write-Host "  ❌ $($e.Message)" -ForegroundColor Red }
+    foreach ($w in @($Plan.Warnings)) { Write-Host "  ⚠️  $w" -ForegroundColor Yellow }
 }
 
 # Execute deployment based on scope
@@ -1726,6 +1796,40 @@ if ($FullDeployment) {
         }
     }
     
+    # Phase 11: Authentication policies and silos - LAST phase, only when configured
+    # (config/tiermodel-authsilos.json with entries). Planned here for the summary; applied with a
+    # fresh plan after all other phases, when the device groups and accounts exist.
+    $authSiloFdConfigured = Test-AuthSiloConfigured -Config $config
+    if ($authSiloFdConfigured) {
+        if (-not $ConfirmApply) {
+            Write-Host "" # Blank line
+            Write-Host "Phase 11: Analyzing Authentication Policies and Silos..." -ForegroundColor Cyan
+        }
+        $authSiloFdPlan = Get-TierModelAuthSilo -Config $config -DomainController $PreferredDc -Silent
+        $authSiloFdActions = @($authSiloFdPlan.Actions)
+        $deploymentPlan.CreateCount += [int]$authSiloFdPlan.Summary.CreateActions
+        $deploymentPlan.UpdateCount += [int]$authSiloFdPlan.Summary.UpdateActions
+        $deploymentPlan.ConfigureCount += [int]$authSiloFdPlan.Summary.ConfigureActions
+        $deploymentPlan.TotalActions += $authSiloFdActions.Count
+        $deploymentPlan.AlreadyExistCount += [int]$authSiloFdPlan.Summary.ExistingCount
+        $deploymentPlan.Phases += [PSCustomObject]@{
+            Phase = 11
+            Name = 'Authentication Policies and Silos'
+            ActionCount = $authSiloFdActions.Count
+            ExistingCount = [int]$authSiloFdPlan.Summary.ExistingCount
+            Actions = $authSiloFdActions
+        }
+        if (-not $ConfirmApply) {
+            Write-AuthSiloPlanMessages -Plan $authSiloFdPlan
+            if ($authSiloFdActions.Count -gt 0) {
+                Write-Host "Planned Actions:" -ForegroundColor Cyan
+                Write-AuthSiloPlanActions -Actions $authSiloFdActions
+            } elseif (@($authSiloFdPlan.Errors).Count -eq 0) {
+                Write-Host "  ✅ Authentication policies and silos already up to date" -ForegroundColor Green
+            }
+        }
+    }
+
     # Show deployment plan summary (only if not applying changes)
     if (-not $ConfirmApply) {
         Write-Host "`n=== Deployment Plan ===" -ForegroundColor Blue
@@ -1935,6 +2039,23 @@ if ($FullDeployment) {
         } elseif ($activeIncludeCount -gt 0 -and $standardDeployHadErrors) {
             Write-Host "`n⚠️  Skipping optional MSA/gMSA/dMSA/WinLaps features due to errors in standard deployment." -ForegroundColor Yellow
         }
+
+        # === LAST PHASE: Authentication policies and silos (only when configured) ===
+        if ($authSiloFdConfigured -and -not $standardDeployHadErrors) {
+            Write-Host "`n=== Phase 11: Authentication Policies and Silos ===" -ForegroundColor Magenta
+            # Always plan again: groups, OUs and accounts created by the earlier phases now exist
+            $authSiloApplyPlan = Get-TierModelAuthSilo -Config $config -DomainController $PreferredDc -Silent
+            if (@($authSiloApplyPlan.Errors).Count -gt 0) {
+                Write-AuthSiloPlanMessages -Plan $authSiloApplyPlan
+                $authSiloExecResult = [PSCustomObject]@{ EntityType = 'AuthSilo'; Applied = @(); Errors = @($authSiloApplyPlan.Errors); Converged = $false }
+            } elseif (@($authSiloApplyPlan.Actions).Count -gt 0) {
+                $authSiloExecResult = New-TierModelAuthSilo -Plan $authSiloApplyPlan -DomainController $PreferredDc -Config $config -Confirm:$false
+            } else {
+                Write-Host "  ✅ Authentication policies and silos already up to date" -ForegroundColor Green
+            }
+        } elseif ($authSiloFdConfigured -and $standardDeployHadErrors) {
+            Write-Host "`n⚠️  Skipping authentication policies and silos due to errors in standard deployment." -ForegroundColor Yellow
+        }
         
         # Show consolidated deployment results
         Write-Host "`n=== Deployment Results ===" -ForegroundColor Blue
@@ -1951,6 +2072,7 @@ if ($FullDeployment) {
         if (Get-Variable gmsaExecResult -ErrorAction SilentlyContinue) { $allResults += $gmsaExecResult }
         if (Get-Variable dmsaExecResult -ErrorAction SilentlyContinue) { $allResults += $dmsaExecResult }
         if (Get-Variable winLapsExecResult -ErrorAction SilentlyContinue) { $allResults += $winLapsExecResult }
+        if (Get-Variable authSiloExecResult -ErrorAction SilentlyContinue) { $allResults += $authSiloExecResult }
         
         # Calculate consolidated counts
         $totalApplied = 0
@@ -2424,6 +2546,56 @@ else {
             }
         }
     }
+    if ($AuthSilosOnly) {
+        Write-Host "=== Authentication Silo-Only Deployment ===" -ForegroundColor Magenta
+        if ($Logging) {
+            Write-TierModelLog -LogPath $script:LogFilePath -Level 'Info' -Message "Starting Authentication Silo-Only deployment"
+        }
+        if (-not (Test-AuthSiloConfigured -Config $config)) {
+            Write-Host "  No authentication policies or silos configured (config/tiermodel-authsilos.json missing or empty)." -ForegroundColor Gray
+        }
+        Write-Host "Analyzing authentication policies and silos..." -ForegroundColor Cyan
+        $authSiloPlan = Get-TierModelAuthSilo -Config $config -DomainController $PreferredDc
+        Write-AuthSiloPlanMessages -Plan $authSiloPlan
+        $authSiloHasErrors = @($authSiloPlan.Errors).Count -gt 0
+        $authSiloActions = @($authSiloPlan.Actions)
+
+        if (-not $ConfirmApply) {
+            if ($authSiloActions.Count -gt 0) {
+                Write-Host "" # Blank line for spacing
+                Write-Host "Planned Actions:" -ForegroundColor Cyan
+                Write-AuthSiloPlanActions -Actions $authSiloActions
+            } elseif (-not $authSiloHasErrors) {
+                Write-Host "  No actions needed - authentication policies and silos are up to date." -ForegroundColor Green
+            }
+
+            Write-Host "`n=== Deployment Plan ===" -ForegroundColor Blue
+            if ($authSiloHasErrors) {
+                Write-Host "Resolve all dependency errors before proceeding with authentication silo deployment" -ForegroundColor Red
+            } else {
+                Write-Host "Action count: $($authSiloActions.Count)" -ForegroundColor White
+                Write-Host "Create count: $($authSiloPlan.Summary.CreateActions)" -ForegroundColor Yellow
+                Write-Host "Update count: $($authSiloPlan.Summary.UpdateActions)" -ForegroundColor Yellow
+                Write-Host "Configure count: $($authSiloPlan.Summary.ConfigureActions)" -ForegroundColor Yellow
+                Write-Host "Already exist: $($authSiloPlan.Summary.ExistingCount)" -ForegroundColor Green
+            }
+        } else {
+            if ($authSiloHasErrors) {
+                $authSiloResult = [PSCustomObject]@{ EntityType = 'AuthSilo'; Applied = @(); Errors = @($authSiloPlan.Errors); DurationMs = 0; Converged = $false }
+            } elseif ($authSiloActions.Count -gt 0) {
+                Write-Host "Applying authentication policies and silos..." -ForegroundColor Cyan
+                $authSiloResult = New-TierModelAuthSilo -Plan $authSiloPlan -DomainController $PreferredDc -Config $config -Confirm:$false
+            } else {
+                Write-Host "  No actions needed - authentication policies and silos are up to date." -ForegroundColor Green
+                $authSiloResult = [PSCustomObject]@{ EntityType = 'AuthSilo'; Applied = @(); Errors = @(); DurationMs = 0; Converged = $true }
+            }
+            Write-Host "`n=== Deployment Results ===" -ForegroundColor Blue
+            Write-Host "Applied: $(@($authSiloResult.Applied).Count)" -ForegroundColor Green
+            Write-Host "Errors: $(@($authSiloResult.Errors).Count)" -ForegroundColor $(if (@($authSiloResult.Errors).Count -gt 0) { 'Red' } else { 'Green' })
+            Write-Host "Duration: $($authSiloResult.DurationMs)ms" -ForegroundColor Gray
+            Write-Host "Converged: $($authSiloResult.Converged)" -ForegroundColor $(if ($authSiloResult.Converged) { 'Green' } else { 'Yellow' })
+        }
+    }
 }
 
 # === Standalone -Include* Mode (no scope parameter) ===
@@ -2600,6 +2772,7 @@ if (-not $FullDeployment -and -not $ConfirmApply) {
     if ($OuAclsOnly -and $ouAclResult -and $ouAclResult.PSObject.Properties.Name -contains 'Actions' -and @($ouAclResult.Actions).Count -gt 0) { $hasActions = $true }
     if ($GposOnly -and $gpoResult -and $gpoResult.PSObject.Properties.Name -contains 'Actions' -and $gpoResult.Actions.Count -gt 0) { $hasActions = $true }
     if ($AdmxOnly -and $admxPlan -and $admxPlan.Summary.FilesToUpdate -gt 0) { $hasActions = $true }
+    if ($AuthSilosOnly -and $authSiloPlan -and @($authSiloPlan.Actions).Count -gt 0) { $hasActions = $true }
     
     # Check for errors
     if ($OuOnly -and $ouResult -and $ouResult.PSObject.Properties.Name -contains 'Errors' -and $ouResult.Errors.Count -gt 0) { $hasErrors = $true }
@@ -2608,12 +2781,142 @@ if (-not $FullDeployment -and -not $ConfirmApply) {
     if ($OuAclsOnly -and $ouAclResult -and $ouAclResult.PSObject.Properties.Name -contains 'Errors' -and @($ouAclResult.Errors).Count -gt 0) { $hasErrors = $true }
     if ($GposOnly -and $gpoResult -and $gpoResult.PSObject.Properties.Name -contains 'Errors' -and $gpoResult.Errors -and @($gpoResult.Errors).Count -gt 0) { $hasErrors = $true }
     if ($AdmxOnly -and $admxPlan -and $admxPlan.PSObject.Properties.Name -contains 'Analysis' -and $admxPlan.Analysis.Errors -and $admxPlan.Analysis.Errors.Count -gt 0) { $hasErrors = $true }
+    if ($AuthSilosOnly -and $authSiloPlan -and @($authSiloPlan.Errors).Count -gt 0) { $hasErrors = $true }
     
     # Only show ConfirmApply if there are actions and no errors
     if ($hasActions -and -not $hasErrors) {
         Write-Host ""
         Write-Host "Use -ConfirmApply to execute the deployment plan" -ForegroundColor DarkCyan
         Write-Host ""
+    }
+}
+
+# === JSON plan output (planning mode only; -PlanOutputPath or -Logging with -LogPath/-OutputFileBase) ===
+if ($script:PlanOutputFile -and -not $ConfirmApply) {
+    try {
+        function Get-DeployPlanProperty {
+            param($Object, [string]$Name)
+            if ($null -eq $Object) { return $null }
+            if ($Object -is [System.Collections.IDictionary]) { if ($Object.Contains($Name)) { return $Object[$Name] } else { return $null } }
+            if ($Object.PSObject.Properties[$Name]) { return $Object.$Name }
+            return $null
+        }
+        function Get-DeployPlanExistingCount {
+            param($PlanObject)
+            $summary = Get-DeployPlanProperty $PlanObject 'Summary'
+            if ($null -eq $summary) { return 0 }
+            $existing = Get-DeployPlanProperty $summary 'ExistingCount'
+            if ($null -ne $existing) { return [int]$existing }
+            $total = Get-DeployPlanProperty $summary 'TotalInConfig'
+            $toCreate = Get-DeployPlanProperty $summary 'ToCreate'
+            if ($null -ne $total -and $null -ne $toCreate) { return [Math]::Max(0, [int]$total - [int]$toCreate) }
+            return 0
+        }
+
+        $planPhases = @()
+        $planWarnings = @()
+        $planErrors = @()
+        $planIncludes = @()
+        if ($IncludeMsa) { $planIncludes += 'Msa' }
+        if ($IncludeGmsa) { $planIncludes += 'Gmsa' }
+        if ($IncludeDmsa) { $planIncludes += 'Dmsa' }
+        if ($IncludeWinLaps) { $planIncludes += 'WinLaps' }
+
+        # Collect Warnings/Errors of every plan object that was produced in this run
+        $planSources = @()
+        foreach ($varName in @('ouResult', 'groupResult', 'userResult', 'ouAclResult', 'gpoResult', 'gpoLinkResult',
+                               'msaFdPlan', 'gmsaFdPlan', 'dmsaFdPlan', 'winLapsFdPlan',
+                               'msaPlan', 'gmsaPlan', 'dmsaPlan', 'winLapsPlan', 'authSiloFdPlan', 'authSiloPlan')) {
+            $v = Get-Variable -Name $varName -ValueOnly -ErrorAction SilentlyContinue
+            if ($null -ne $v) { $planSources += , $v }
+        }
+        if ($GposOnly -and $null -ne (Get-Variable -Name gpoResult -ValueOnly -ErrorAction SilentlyContinue)) {
+            $gpoInnerPlan = Get-DeployPlanProperty $gpoResult 'Plan'
+            if ($null -ne $gpoInnerPlan) { $planSources += , $gpoInnerPlan }
+        }
+        foreach ($src in $planSources) {
+            $w = Get-DeployPlanProperty $src 'Warnings'
+            if ($w) { $planWarnings += @($w) }
+            $e = Get-DeployPlanProperty $src 'Errors'
+            if ($e -and $e -isnot [int]) { $planErrors += @($e) }
+        }
+        foreach ($admxVarName in @('admxResult', 'admxPlan')) {
+            $admxObj = Get-Variable -Name $admxVarName -ValueOnly -ErrorAction SilentlyContinue
+            $admxAnalysis = Get-DeployPlanProperty $admxObj 'Analysis'
+            if ($admxAnalysis) {
+                $admxErrors = Get-DeployPlanProperty $admxAnalysis 'Errors'
+                if ($admxErrors) { $planErrors += @($admxErrors) }
+            }
+        }
+
+        $planScope = if ($FullDeployment) { 'FullDeployment' }
+            elseif ($OuOnly) { 'OuOnly' } elseif ($GroupOnly) { 'GroupOnly' } elseif ($UserOnly) { 'UserOnly' }
+            elseif ($GposOnly) { 'GposOnly' } elseif ($OuAclsOnly) { 'OuAclsOnly' } elseif ($AdmxOnly) { 'AdmxOnly' }
+            elseif ($AuthSilosOnly) { 'AuthSilosOnly' }
+            else { 'IncludeOnly' }
+
+        if ($FullDeployment) {
+            $fdAreaByPhase = @{ 1 = 'ous'; 2 = 'groups'; 3 = 'users'; 4 = 'acls'; 5 = 'gpos'; 6 = 'admx'; 7 = 'msa'; 8 = 'gmsa'; 9 = 'dmsa'; 10 = 'winlaps'; 11 = 'authsilos' }
+            foreach ($p in @($deploymentPlan.Phases)) {
+                $planPhases += @{
+                    Phase         = [int]$p.Phase
+                    Area          = $fdAreaByPhase[[int]$p.Phase]
+                    Actions       = Get-DeployPlanProperty $p 'Actions'
+                    AdmxPlan      = Get-DeployPlanProperty $p 'Result'
+                    ExistingCount = Get-DeployPlanProperty $p 'ExistingCount'
+                }
+            }
+        } elseif ($activeScopeCount -eq 1) {
+            $single = switch ($planScope) {
+                'OuOnly'     { @{ Area = 'ous';    Source = (Get-Variable ouResult -ValueOnly -ErrorAction SilentlyContinue) } }
+                'GroupOnly'  { @{ Area = 'groups'; Source = (Get-Variable groupResult -ValueOnly -ErrorAction SilentlyContinue) } }
+                'UserOnly'   { @{ Area = 'users';  Source = (Get-Variable userResult -ValueOnly -ErrorAction SilentlyContinue) } }
+                'OuAclsOnly' { @{ Area = 'acls';   Source = (Get-Variable ouAclResult -ValueOnly -ErrorAction SilentlyContinue) } }
+                'GposOnly'   {
+                    $g = Get-Variable gpoResult -ValueOnly -ErrorAction SilentlyContinue
+                    $inner = Get-DeployPlanProperty $g 'Plan'
+                    @{ Area = 'gpos'; Source = $(if ($null -ne $inner) { $inner } else { $g }) }
+                }
+                'AdmxOnly'   { @{ Area = 'admx';   Source = $null } }
+                'AuthSilosOnly' { @{ Area = 'authsilos'; Source = (Get-Variable authSiloPlan -ValueOnly -ErrorAction SilentlyContinue) } }
+            }
+            if ($planScope -eq 'AdmxOnly') {
+                $admxPlanObj = Get-Variable admxPlan -ValueOnly -ErrorAction SilentlyContinue
+                $admxExisting = if ($admxPlanObj -and $admxPlanObj.Summary) { [int]$admxPlanObj.Summary.FilesUpToDate } else { 0 }
+                $planPhases += @{ Phase = 1; Area = 'admx'; Actions = @(); AdmxPlan = $admxPlanObj; ExistingCount = $admxExisting }
+            } elseif ($single) {
+                $planPhases += @{
+                    Phase         = 1
+                    Area          = $single.Area
+                    Actions       = Get-DeployPlanProperty $single.Source 'Actions'
+                    ExistingCount = Get-DeployPlanExistingCount $single.Source
+                }
+            }
+        } else {
+            # -Include* only
+            $includeAreaByName = @{
+                'MSA ACL Delegations' = 'msa'; 'gMSA ACL Delegations' = 'gmsa'
+                'dMSA ACL Delegations' = 'dmsa'; 'Windows LAPS ACL Delegations' = 'winlaps'
+            }
+            foreach ($p in @($standaloneDeploymentPlan.Phases)) {
+                $planPhases += @{
+                    Phase         = [int]$p.Phase
+                    Area          = $includeAreaByName[[string]$p.Name]
+                    Name          = [string]$p.Name
+                    Actions       = Get-DeployPlanProperty $p 'Actions'
+                    ExistingCount = Get-DeployPlanProperty $p 'ExistingCount'
+                }
+            }
+        }
+
+        $writtenPlan = Export-TierModelPlan -Phases $planPhases -Scope $planScope -PreferredDc $PreferredDc `
+            -Includes $planIncludes -Warnings $planWarnings -Errors $planErrors -Path $script:PlanOutputFile
+        Write-Verbose "Deployment plan written: $writtenPlan"
+        if ($Logging) {
+            Write-TierModelLog -LogPath $script:LogFilePath -Level 'Info' -Message "Deployment plan JSON written: $writtenPlan"
+        }
+    } catch {
+        Write-Warning "Could not write deployment plan JSON to '$($script:PlanOutputFile)': $($_.Exception.Message)"
     }
 }
 

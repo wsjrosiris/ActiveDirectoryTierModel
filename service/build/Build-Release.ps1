@@ -5,7 +5,8 @@
 .DESCRIPTION
     1. Builds the web UI (service/web → wwwroot)
     2. Publishes the service self-contained for win-x64 (no .NET runtime needed on the server)
-    3. Adds the PowerShell framework (Deploy/Audit scripts, modules, config) and the installer
+    3. Adds the PowerShell framework (Deploy/Audit scripts, modules, config), the client module
+       TierModel.Service.Client (client/) and the installer
     4. Zips everything into service/artifacts/
 
     Runs on Windows, Linux or macOS with PowerShell 7, the .NET 10 SDK and Node.js 20+.
@@ -62,6 +63,11 @@ foreach ($f in 'Deploy-TierModel.ps1', 'Audit-TierModel.ps1', 'LICENSE') {
 foreach ($d in 'modules', 'config') {
     Copy-Item (Join-Path $repoRoot $d) (Join-Path $framework $d) -Recurse
 }
+
+Write-Host '==> PowerShell client module' -ForegroundColor Cyan
+# client/TierModel.Service.Client: copy to a PSModulePath folder on admin workstations (Pester tests stay out of the package).
+$client = New-Item -ItemType Directory -Path (Join-Path $staging 'client') -Force
+Copy-Item (Join-Path $serviceRoot 'client/TierModel.Service.Client') (Join-Path $client 'TierModel.Service.Client') -Recurse
 
 Write-Host '==> Installer' -ForegroundColor Cyan
 Copy-Item (Join-Path $serviceRoot 'installer/Install-TierModelService.ps1') $staging

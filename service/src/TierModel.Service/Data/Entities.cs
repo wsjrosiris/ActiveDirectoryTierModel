@@ -9,19 +9,21 @@ public enum Role
     Admin = 3,
 }
 
-public enum RunKind { Deploy, Audit }
+/// <summary>Monitor: snapshot of the privileged groups (Watch-TierModelPrivilegedGroups.ps1). Jit: time-limited membership (Grant-TierModelJitAccess.ps1).</summary>
+public enum RunKind { Deploy, Audit, Monitor, Jit }
 
-public enum RunStatus { Queued, Running, Succeeded, Failed, Cancelled, AwaitingApproval, Rejected }
+/// <summary>Scheduled: an apply waiting for the next maintenance window (<see cref="Run.ScheduledFor"/>).</summary>
+public enum RunStatus { Queued, Running, Succeeded, Failed, Cancelled, AwaitingApproval, Rejected, Scheduled }
 
-public enum AuthType { Local, Windows }
+public enum AuthType { Local, Windows, Entra }
 
-public enum ChannelType { Email, Teams, Webhook }
+public enum ChannelType { Email, Teams, Webhook, Syslog, LogAnalytics }
 
 public enum RunTrigger { Manual, Schedule }
 
 public enum RunMode { Plan, Apply }
 
-public enum DeployScope { FullDeployment, OuOnly, GroupOnly, UserOnly, GposOnly, OuAclsOnly, AdmxOnly }
+public enum DeployScope { FullDeployment, OuOnly, GroupOnly, UserOnly, GposOnly, OuAclsOnly, AdmxOnly, AuthSilosOnly }
 
 public class AppUser
 {
@@ -42,10 +44,13 @@ public class AppUser
     public string SecurityStamp { get; set; } = Guid.NewGuid().ToString("N");
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? LastLoginAt { get; set; }
+    /// <summary>UI language chosen by the user ("de"/"en"); null = browser default (roadmap 25).</summary>
+    public string? Language { get; set; }
 }
 
-public class ConfigSection
+public class ConfigSection : IDomainScoped
 {
+    public int DomainId { get; set; }
     public required string Key { get; set; }
     public required string FileName { get; set; }
     public int CurrentVersion { get; set; }
@@ -53,9 +58,10 @@ public class ConfigSection
     public required string UpdatedBy { get; set; }
 }
 
-public class ConfigVersion
+public class ConfigVersion : IDomainScoped
 {
     public long Id { get; set; }
+    public int DomainId { get; set; }
     public required string SectionKey { get; set; }
     public int Version { get; set; }
     /// <summary>Pretty-printed JSON text. Stored as text (not jsonb) so key order and layout survive.</summary>
@@ -66,9 +72,11 @@ public class ConfigVersion
     public string? Comment { get; set; }
 }
 
-public class Run
+public class Run : IDomainScoped
 {
     public long Id { get; set; }
+    /// <summary>Domain the run works on (roadmap 17).</summary>
+    public int DomainId { get; set; }
     public RunKind Kind { get; set; }
     public RunStatus Status { get; set; }
     public RunTrigger Trigger { get; set; }
@@ -101,6 +109,15 @@ public class Run
     public string? Summary { get; set; }
     /// <summary>JSON array with the audit report's driftFindings.</summary>
     public string? Findings { get; set; }
+    /// <summary>Deploy/Plan runs: the normalised deploy-plan.json (see <see cref="Runs.DeployPlan"/>).</summary>
+    public string? Plan { get; set; }
+    /// <summary>Apply runs: the planning run whose result was reviewed (and whose configuration versions are applied).</summary>
+    public long? PlanRunId { get; set; }
+    /// <summary>Status <see cref="RunStatus.Scheduled"/>: when the run is queued (start of the next maintenance window).</summary>
+    public DateTimeOffset? ScheduledFor { get; set; }
+    /// <summary>Kind <see cref="RunKind.Jit"/>: what the run does and (grant/revoke) the request it belongs to.</summary>
+    public JitAction? JitAction { get; set; }
+    public long? JitRequestId { get; set; }
 }
 
 public class RunLogLine
@@ -114,10 +131,13 @@ public class RunLogLine
     public required string Text { get; set; }
 }
 
-public class Schedule
+public class Schedule : IDomainScoped
 {
     public long Id { get; set; }
+    public int DomainId { get; set; }
     public required string Name { get; set; }
+    /// <summary>Audit or Monitor; monitor schedules ignore scope and include flags.</summary>
+    public RunKind Kind { get; set; } = RunKind.Audit;
     public required string Cron { get; set; }
     public required string TimeZone { get; set; }
     public bool Enabled { get; set; } = true;
@@ -146,6 +166,10 @@ public class ChangeEntry
     public required string Summary { get; set; }
     /// <summary>Optional JSON payload.</summary>
     public string? Details { get; set; }
+    /// <summary>Hex SHA-256 over <see cref="PrevHash"/> and the canonical entry (see <see cref="ChangeLogChain"/>).</summary>
+    public string? Hash { get; set; }
+    /// <summary>Hash of the previous entry (by Id); empty for the first entry.</summary>
+    public string? PrevHash { get; set; }
 }
 
 public class NotificationChannel
@@ -162,6 +186,10 @@ public class NotificationChannel
     public bool OnFailure { get; set; }
     public bool OnApply { get; set; }
     public bool OnApproval { get; set; }
+    public bool OnCertificate { get; set; }
+    public bool OnPrivilegedChange { get; set; }
+    public bool OnJitRequested { get; set; }
+    public bool OnJitGranted { get; set; }
     public DateTimeOffset? LastSentAt { get; set; }
     public string? LastError { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
@@ -171,4 +199,27 @@ public class Setting
 {
     public required string Key { get; set; }
     public required string Value { get; set; }
+}
+
+/// <summary>
+/// Result of one monitor run: the normalised privileged.json (<see cref="Data"/>) and its evaluation against the
+/// previous snapshot and the desired configuration (<see cref="Evaluation"/>). Counts are kept as columns for lists and charts.
+/// </summary>
+public class PrivilegedSnapshot : IDomainScoped
+{
+    public long Id { get; set; }
+    public long RunId { get; set; }
+    public DateTimeOffset TakenAt { get; set; }
+    /// <summary>Domain of the monitor run (roadmap 17).</summary>
+    public int DomainId { get; set; }
+    /// <summary>jsonb: normalised snapshot (camelCase, arrays always arrays), see <see cref="Monitoring.PrivilegedSnapshotData"/>.</summary>
+    public required string Data { get; set; }
+    /// <summary>jsonb: <see cref="Monitoring.PrivilegedEvaluation"/>.</summary>
+    public required string Evaluation { get; set; }
+    public int GroupCount { get; set; }
+    public int MemberCount { get; set; }
+    public int ChangeCount { get; set; }
+    public int UnexpectedCount { get; set; }
+    public int HygieneCount { get; set; }
+    public int AttackPathCount { get; set; }
 }

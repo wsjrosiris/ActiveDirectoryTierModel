@@ -22,11 +22,15 @@ Deshalb gilt:
 | Vier-Augen-Prinzip | optional: *Anwenden* nur nach Freigabe durch einen zweiten Operator; festgeschriebene Konfigurationsversionen; Frist mit automatischem Verfall |
 | Anmeldung | Eigene Konten, Passwörter mit PBKDF2 gehasht (ASP.NET Core Identity), mindestens 12 Zeichen, Sperre nach 5 Fehlversuchen für 15 Minuten, Rate-Limit 10 Anmeldungen/Minute je IP, Antwortzeit unabhängig davon, ob das Konto existiert |
 | Sitzungen | Cookie `HttpOnly`, `Secure`, `SameSite=Strict`, 8 Stunden gleitend; wird bei Deaktivierung, Löschung, Rollen- oder Passwortänderung sofort ungültig |
+| Entra ID | optional: OpenID Connect (Authorization Code + PKCE, `state`, `nonce`), Aussteller auf den Mandanten geprüft; Rollen nur über Gruppen-Objekt-IDs bzw. App-Rollen, bei jeder Anmeldung neu bestimmt; Client-Secret verschlüsselt gespeichert |
+| API-Tokens | Format `tmk_<8>_<43>`, gespeichert nur als SHA-256-Hash, einmal angezeigt; nur im Header `Authorization: Bearer` (nie aus Cookie oder URL); Gültigkeit höchstens 365 Tage; Rolle höchstens die des Besitzers und bei jeder Anfrage auf dessen aktuelle Rolle begrenzt; deaktivierte Besitzer sperren ihre Tokens; 300 Anfragen/Minute je Token; Tokens können keine Tokens verwalten, keine Passwörter ändern und sich nicht an-/abmelden |
 | CSRF | Antiforgery-Token (Cookie `XSRF-TOKEN` → Header `X-XSRF-TOKEN`) für jeden schreibenden Aufruf, an die angemeldete Identität gebunden |
 | Berechtigungen | Rollenprüfung serverseitig an jedem Endpunkt; *Anwenden* nur für Operatoren; der letzte Administrator kann nicht entfernt werden |
 | Browser | Content-Security-Policy ohne Inline-Skripte, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, API-Antworten `no-store` |
 | Prozessstart | PowerShell wird ohne Shell mit Argumentliste gestartet; DC-Name und Sprache werden per Regex geprüft, bevor sie Argumente werden; stdin ist geschlossen, damit unerwartete Rückfragen nicht hängen |
 | Dateien | Konfigurationsdateinamen stammen aus einem festen Katalog – keine Pfadangaben aus Anfragen |
+| Änderungsprotokoll | Einträge per SHA-256 verkettet (vorheriger Hash + Inhalt), unter PostgreSQL-Advisory-Lock geschrieben; Prüfung unter *Systemzustand* und `/api/changelog/verify` erkennt geänderte oder gelöschte Einträge. Einen kompletten Austausch der Tabelle erkennt nur der Vergleich mit einem extern notierten Kettenende |
+| Wartungsfenster | *Anwenden* nur innerhalb freigegebener Fenster und nie in Sperrzeiten; der Worker prüft unmittelbar vor dem Start erneut |
 | Nachvollziehbarkeit | Jede Konfigurationsänderung mit Autor, Kommentar und Diff; Änderungsprotokoll für Läufe, Benutzer, Zeitpläne, Einstellungen und Anmeldungen; jeder Lauf speichert die verwendeten Konfigurationsversionen |
 | Benachrichtigungen | SMTP-Passwort und Webhook-URLs mit ASP.NET Core Data Protection verschlüsselt in der Datenbank; URLs werden nur gekürzt angezeigt; Ziele nur per https |
 | Geheimnisse | Datenbankpasswort nur in `appsettings.Production.json` (ACL: SYSTEM, Administratoren, Dienstkonto); Installer übergibt Passwörter über stdin, nie auf der Kommandozeile; das Superuser-Passwort der lokalen PostgreSQL-Installation wird über eine temporäre, ACL-geschützte Optionsdatei übergeben und danach gelöscht |
@@ -45,8 +49,11 @@ Deshalb gilt:
 - [ ] Rollen sparsam vergeben: die meisten Personen brauchen *Betrachter* oder *Bearbeiter*; *Operator* nur für
       die, die Änderungen im AD freigeben.
 - [ ] Datenbanksicherungen verschlüsselt und getrennt aufbewahren.
-- [ ] Ereignisanzeige (Quelle `TierModel.Service`) und das Änderungsprotokoll in das SIEM übernehmen,
-      z. B. ergänzend zu den Sentinel-Regeln unter `optional/TIerModel-Sentinel`.
+- [ ] Änderungsprotokoll und Befunde per **Syslog/CEF** oder **Log Analytics** an das SIEM weiterleiten
+      (siehe [Betrieb › SIEM](betrieb.md#siem-anbindung)).
+- [ ] Das **Kettenende** des Änderungsprotokolls (Systemzustand) regelmäßig außerhalb des Servers notieren.
+- [ ] **API-Tokens** mit kurzer Gültigkeit und minimaler Rolle; nicht benötigte Tokens widerrufen.
+- [ ] **Wartungsfenster** und Sperrzeiten (z. B. Jahresabschluss) pflegen.
 - [ ] Regelmäßig aktualisieren (Paket, PowerShell 7, PostgreSQL, Windows).
 
 ## Bekannte Grenzen
@@ -55,7 +62,7 @@ Deshalb gilt:
   Administratoren). Deshalb die Oberfläche nur aus einem geschützten Netz erreichbar machen und notfalls per
   Kommandozeile entsperren (`admin reset-password`).
 
-- Keine Anmeldung per Entra ID und keine eigene Mehr-Faktor-Authentifizierung; mit der Windows-Anmeldung greift
-  die Anmeldung am Windows-Client (z. B. Smartcard/Windows Hello auf der PAW).
+- Keine eigene Mehr-Faktor-Authentifizierung für lokale Konten; MFA über die Entra-ID-Anmeldung (Conditional
+  Access) oder die Windows-Anmeldung (z. B. Smartcard/Windows Hello auf der PAW).
 - Das Vier-Augen-Prinzip ist optional und gilt nur für *Anwenden*; Konfigurationsänderungen selbst werden nicht
   freigegeben (sie werden aber versioniert und protokolliert).

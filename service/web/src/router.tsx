@@ -3,6 +3,7 @@ import { FullPageSpinner } from '@/components/layout/full-page-spinner'
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { RequireAuth } from '@/features/auth/auth'
 import { AppLayout } from '@/components/layout/app-layout'
+import { DomainProvider } from '@/features/domains/domain-context'
 import { RouteError } from '@/components/layout/route-error'
 
 // Lazy route helper: every page module exports `Component`.
@@ -27,7 +28,9 @@ const routes: RouteObject[] = [
     path: '/',
     element: (
       <RequireAuth>
-        <AppLayout />
+        <DomainProvider>
+          <AppLayout />
+        </DomainProvider>
       </RequireAuth>
     ),
     errorElement: <RouteError />,
@@ -36,13 +39,20 @@ const routes: RouteObject[] = [
         { index: true, ...page(() => import('@/features/dashboard/dashboard-page')) },
         { path: 'konfiguration', element: <Navigate to="/konfiguration/ous" replace /> },
         { path: 'konfiguration/validierung', ...page(() => import('@/features/config/validation-page')) },
+        { path: 'konfiguration/import', ...page(() => import('@/features/config/import/import-page')) },
         { path: 'konfiguration/:key', ...page(() => import('@/features/config/config-page')) },
         { path: 'deploy', ...page(() => import('@/features/runs/deploy-page')) },
         { path: 'audits', ...page(() => import('@/features/runs/audits-page')) },
         { path: 'audits/zeitplaene', ...page(() => import('@/features/runs/audits-page')) },
+        { path: 'privilegiert', ...page(() => import('@/features/privileged/privileged-page')) },
+        { path: 'privilegiert/:tab', ...page(() => import('@/features/privileged/privileged-page')) },
+        { path: 'zugriff', ...page(() => import('@/features/jit/jit-page')) },
+        { path: 'zugriff/:tab', ...page(() => import('@/features/jit/jit-page')) },
         { path: 'laeufe', ...page(() => import('@/features/runs/runs-page')) },
         { path: 'laeufe/:id', ...page(() => import('@/features/runs/run-detail-page')) },
         { path: 'aenderungen', ...page(() => import('@/features/changelog/changelog-page')) },
+        { path: 'berichte', ...page(() => import('@/features/reports/reports-page')) },
+        { path: 'einrichtung', ...page(() => import('@/features/setup/setup-page')) },
         {
           path: 'admin',
           element: <RequireAuth role="Admin"><Navigate to="/admin/benutzer" replace /></RequireAuth>,
@@ -50,7 +60,12 @@ const routes: RouteObject[] = [
         { path: 'admin/benutzer', ...page(() => import('@/features/admin/users-page')) },
         { path: 'admin/einstellungen', ...page(() => import('@/features/admin/settings-page')) },
         { path: 'admin/windows-anmeldung', ...page(() => import('@/features/admin/windows-auth-page')) },
+        { path: 'admin/entra-anmeldung', ...page(() => import('@/features/admin/entra-auth-page')) },
         { path: 'admin/benachrichtigungen', ...page(() => import('@/features/admin/notifications-page')) },
+        { path: 'admin/systemzustand', ...page(() => import('@/features/admin/health-page')) },
+        { path: 'admin/wartungsfenster', ...page(() => import('@/features/admin/maintenance-page')) },
+        { path: 'admin/domaenen', ...page(() => import('@/features/domains/domains-page')) },
+        { path: 'api-tokens', ...page(() => import('@/features/auth/api-tokens-page')) },
         { path: '*', ...page(() => import('@/components/layout/not-found')) },
       ] },
     ],

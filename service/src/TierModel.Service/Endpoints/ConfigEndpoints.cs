@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using TierModel.Service.Auth;
 using TierModel.Service.Config;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Endpoints;
 
@@ -30,8 +31,8 @@ public static class ConfigEndpoints
             }
             catch (ConfigConflictException ex)
             {
-                return Results.Problem(title: "Konflikt: Der Bereich wurde inzwischen geändert",
-                    detail: $"Aktuelle Version ist {ex.CurrentVersion}. Bitte neu laden und die Änderungen erneut anwenden.",
+                return Results.Problem(title: L.T("Konflikt: Der Bereich wurde inzwischen geändert"),
+                    detail: L.F("Aktuelle Version ist {0}. Bitte neu laden und die Änderungen erneut anwenden.", ex.CurrentVersion),
                     statusCode: StatusCodes.Status409Conflict,
                     extensions: new Dictionary<string, object?> { ["currentVersion"] = ex.CurrentVersion });
             }
@@ -52,21 +53,21 @@ public static class ConfigEndpoints
             var old = await config.GetAsync(key, version);
             var current = await config.GetAsync(key);
             if (old is null || current is null) return Results.NotFound();
-            var comment = string.IsNullOrWhiteSpace(r.Comment) ? $"Version {version} wiederhergestellt" : $"Version {version} wiederhergestellt: {r.Comment.Trim()}";
+            var comment = string.IsNullOrWhiteSpace(r.Comment) ? L.PF("Version {0} wiederhergestellt", version) : L.PF("Version {0} wiederhergestellt: {1}", version, r.Comment.Trim());
             try
             {
                 return Results.Ok(await config.SaveAsync(key, old.Content, comment, current.Version, ctx.User.UserName(), "config.restore"));
             }
             catch (ConfigConflictException)
             {
-                return Results.Problem(title: "Konflikt: Der Bereich wurde gerade geändert, bitte erneut versuchen", statusCode: 409);
+                return Results.Problem(title: L.T("Konflikt: Der Bereich wurde gerade geändert, bitte erneut versuchen"), statusCode: 409);
             }
         }).RequireAuthorization(nameof(Role.Editor));
 
         g.MapGet("/validate", async (ConfigService config, CancellationToken ct) =>
             ConfigValidator.Validate(await config.CurrentContentAsync(ct)));
 
-        g.MapGet("/export", async (ConfigService config, CancellationToken ct) =>
+        g.MapGet("/export", async (ConfigService config, Domains.DomainContext domain, Domains.DomainRegistry domains, CancellationToken ct) =>
         {
             var snapshot = await config.SnapshotAsync(ct);
             var ms = new MemoryStream();
@@ -84,7 +85,8 @@ public static class ConfigEndpoints
                         new JsonObject(snapshot.Select(x => KeyValuePair.Create(x.Def.Key, (JsonNode?)x.Version))))), ct);
             }
             ms.Position = 0;
-            return Results.File(ms, "application/zip", $"tiermodel-config-{DateTime.UtcNow:yyyyMMdd-HHmm}.zip");
+            var name = domains.Multiple ? $"tiermodel-config-{domain.Key}-{DateTime.UtcNow:yyyyMMdd-HHmm}.zip" : $"tiermodel-config-{DateTime.UtcNow:yyyyMMdd-HHmm}.zip";
+            return Results.File(ms, "application/zip", name);
         });
     }
 }

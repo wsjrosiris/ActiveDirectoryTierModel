@@ -20,6 +20,8 @@
     "appxbundle",
     "appxupload",
     "Auggie",
+    "AuthN",
+    "authsilos",
     "azuredevops",
     "badver",
     "binlog",
@@ -128,6 +130,7 @@
     "nvuser",
     "objectclass",
     "objecttype",
+    "OICI",
     "OLAP",
     "onent",
     "opencode",
@@ -226,7 +229,11 @@
     "wpftmp",
     "wwwroot",
     "xpress",
-    "ZZZNOMATCH"
+    "ZZZNOMATCH",
+    "nopam",
+    "jitfail",
+    "LibGit",
+    "Umgebungs"
   ],
   "flagWords": []
 }
