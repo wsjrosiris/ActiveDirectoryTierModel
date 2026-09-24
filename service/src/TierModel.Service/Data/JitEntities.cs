@@ -11,9 +11,10 @@ public enum JitStatus { Pending, Approved, Rejected, Active, Expired, Revoked, F
 public enum JitAction { Grant, Revoke, Check }
 
 /// <summary>A group that may be requested for time-limited membership, with its rules.</summary>
-public class JitGroup
+public class JitGroup : IDomainScoped
 {
     public long Id { get; set; }
+    public int DomainId { get; set; }
     /// <summary>samAccountName or SID as passed to the framework script.</summary>
     public required string Group { get; set; }
     /// <summary>Known SID (from the configuration/AD lookup or the first grant); used for the monitoring match.</summary>
@@ -32,9 +33,10 @@ public class JitGroup
     public DateTimeOffset? UpdatedAt { get; set; }
 }
 
-public class JitRequest
+public class JitRequest : IDomainScoped
 {
     public long Id { get; set; }
+    public int DomainId { get; set; }
     /// <summary>Application user who asked for the access.</summary>
     public required string RequestedBy { get; set; }
     /// <summary>AD account (samAccountName) that becomes a member.</summary>

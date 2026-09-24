@@ -15,6 +15,8 @@ public class MaintenanceWindow
     public TimeOnly To { get; set; }
     public required string TimeZone { get; set; }
     public bool Enabled { get; set; } = true;
+    /// <summary>Domains the window applies to (roadmap 17); empty = all domains.</summary>
+    public int[] DomainIds { get; set; } = [];
     public required string CreatedBy { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }
@@ -27,6 +29,8 @@ public class FreezePeriod
     public DateTimeOffset To { get; set; }
     public required string Reason { get; set; }
     public bool Enabled { get; set; } = true;
+    /// <summary>Domains the freeze applies to (roadmap 17); empty = all domains.</summary>
+    public int[] DomainIds { get; set; } = [];
     public required string CreatedBy { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }

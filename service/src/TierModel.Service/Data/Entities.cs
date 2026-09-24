@@ -46,8 +46,9 @@ public class AppUser
     public DateTimeOffset? LastLoginAt { get; set; }
 }
 
-public class ConfigSection
+public class ConfigSection : IDomainScoped
 {
+    public int DomainId { get; set; }
     public required string Key { get; set; }
     public required string FileName { get; set; }
     public int CurrentVersion { get; set; }
@@ -55,9 +56,10 @@ public class ConfigSection
     public required string UpdatedBy { get; set; }
 }
 
-public class ConfigVersion
+public class ConfigVersion : IDomainScoped
 {
     public long Id { get; set; }
+    public int DomainId { get; set; }
     public required string SectionKey { get; set; }
     public int Version { get; set; }
     /// <summary>Pretty-printed JSON text. Stored as text (not jsonb) so key order and layout survive.</summary>
@@ -68,9 +70,11 @@ public class ConfigVersion
     public string? Comment { get; set; }
 }
 
-public class Run
+public class Run : IDomainScoped
 {
     public long Id { get; set; }
+    /// <summary>Domain the run works on (roadmap 17).</summary>
+    public int DomainId { get; set; }
     public RunKind Kind { get; set; }
     public RunStatus Status { get; set; }
     public RunTrigger Trigger { get; set; }
@@ -125,9 +129,10 @@ public class RunLogLine
     public required string Text { get; set; }
 }
 
-public class Schedule
+public class Schedule : IDomainScoped
 {
     public long Id { get; set; }
+    public int DomainId { get; set; }
     public required string Name { get; set; }
     /// <summary>Audit or Monitor; monitor schedules ignore scope and include flags.</summary>
     public RunKind Kind { get; set; } = RunKind.Audit;
@@ -198,13 +203,13 @@ public class Setting
 /// Result of one monitor run: the normalised privileged.json (<see cref="Data"/>) and its evaluation against the
 /// previous snapshot and the desired configuration (<see cref="Evaluation"/>). Counts are kept as columns for lists and charts.
 /// </summary>
-public class PrivilegedSnapshot
+public class PrivilegedSnapshot : IDomainScoped
 {
     public long Id { get; set; }
     public long RunId { get; set; }
     public DateTimeOffset TakenAt { get; set; }
-    /// <summary>Preparation for several domains (roadmap 17); always 1 for now.</summary>
-    public int DomainId { get; set; } = 1;
+    /// <summary>Domain of the monitor run (roadmap 17).</summary>
+    public int DomainId { get; set; }
     /// <summary>jsonb: normalised snapshot (camelCase, arrays always arrays), see <see cref="Monitoring.PrivilegedSnapshotData"/>.</summary>
     public required string Data { get; set; }
     /// <summary>jsonb: <see cref="Monitoring.PrivilegedEvaluation"/>.</summary>

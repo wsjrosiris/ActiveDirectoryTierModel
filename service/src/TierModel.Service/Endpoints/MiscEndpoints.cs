@@ -45,11 +45,13 @@ public static class MiscEndpoints
         api.MapGet("/health/details", (HealthService health, CancellationToken ct) => health.GetAsync(ct))
             .RequireAuthorization(nameof(Role.Admin));
 
-        api.MapGet("/changelog", async (AppDbContext db, string? entityType, int? page, int? pageSize) =>
+        // currentDomain=true: only entries of the current domain plus instance-wide ones (roadmap 17).
+        api.MapGet("/changelog", async (AppDbContext db, string? entityType, int? page, int? pageSize, bool? currentDomain, Domains.DomainContext domain) =>
         {
             var size = Math.Clamp(pageSize ?? 50, 1, 200);
             var p = Math.Max(page ?? 1, 1);
             var q = db.ChangeLog.AsNoTracking();
+            if (currentDomain == true) q = ChangeLogService.ForDomain(q, domain.Current);
             if (!string.IsNullOrWhiteSpace(entityType)) q = q.Where(e => e.EntityType == entityType);
             var total = await q.CountAsync();
             var items = await q.OrderByDescending(e => e.Id).Skip((p - 1) * size).Take(size).ToListAsync();
@@ -58,7 +60,8 @@ public static class MiscEndpoints
 
         api.MapGet("/settings", (SettingsService s, CancellationToken ct) => s.GetAsync(ct));
 
-        api.MapPut("/settings", async (UpdateSettingsRequest r, HttpContext ctx, SettingsService s, ChangeLogService log, AppDbContext db) =>
+        api.MapPut("/settings", async (UpdateSettingsRequest r, HttpContext ctx, SettingsService s, ChangeLogService log, AppDbContext db,
+            Domains.DomainRegistry registry, Domains.DomainContext domain) =>
         {
             var errors = new Dictionary<string, string[]>();
             r = r with { DefaultPreferredDc = r.DefaultPreferredDc?.Trim() ?? "", AdmlLanguage = r.AdmlLanguage?.Trim() ?? "" };
@@ -88,13 +91,17 @@ public static class MiscEndpoints
             if (r.StaleDays is { } sd && sd != before.StaleDays) approvalText += $", inaktive Konten ab {sd} Tagen";
             if (r.PasswordMaxAgeDays is { } pa && pa != before.PasswordMaxAgeDays) approvalText += $", maximales Passwortalter {pa} Tage";
             log.Add(ctx.User.UserName(), "settings.update", "settings", null,
-                $"Einstellungen geändert: DC '{r.DefaultPreferredDc}', ADML {r.AdmlLanguage}, Aufbewahrung {r.RunRetentionDays} Tage{approvalText}");
+                $"Einstellungen geändert: DC '{r.DefaultPreferredDc}', ADML {r.AdmlLanguage} (Domäne {domain.Key}), Aufbewahrung {r.RunRetentionDays} Tage{approvalText}",
+                new { domain = domain.Key });
             await db.SaveChangesAsync();
+            await registry.ReloadAsync(db);
             return Results.Ok(await s.GetAsync());
         }).RequireAuthorization(nameof(Role.Admin));
 
-        api.MapGet("/dashboard", async (AppDbContext db, ConfigService config, CancellationToken ct) =>
+        api.MapGet("/dashboard", async (AppDbContext db, ConfigService config, Domains.DomainContext domain, CancellationToken ct) =>
         {
+            var domainId = domain.Id;
+            var runs = db.Runs.AsNoTracking().Where(r => r.DomainId == domainId);
             var content = await config.CurrentContentAsync(ct);
             int Count(string key, string prop) => content.GetValueOrDefault(key)?[prop] is JsonArray a ? a.Count : 0;
 
@@ -111,15 +118,15 @@ public static class MiscEndpoints
                             }
 
             var issues = ConfigValidator.Validate(content);
-            var lastAudit = await db.Runs.AsNoTracking().Where(r => r.Kind == RunKind.Audit && r.FinishedAt != null && r.Status != RunStatus.Cancelled).OrderByDescending(r => r.Id).FirstOrDefaultAsync(ct);
-            var lastDeploy = await db.Runs.AsNoTracking().Where(r => r.Kind == RunKind.Deploy && r.FinishedAt != null && r.Status != RunStatus.Cancelled).OrderByDescending(r => r.Id).FirstOrDefaultAsync(ct);
-            var trend = await db.Runs.AsNoTracking()
+            var lastAudit = await runs.Where(r => r.Kind == RunKind.Audit && r.FinishedAt != null && r.Status != RunStatus.Cancelled).OrderByDescending(r => r.Id).FirstOrDefaultAsync(ct);
+            var lastDeploy = await runs.Where(r => r.Kind == RunKind.Deploy && r.FinishedAt != null && r.Status != RunStatus.Cancelled).OrderByDescending(r => r.Id).FirstOrDefaultAsync(ct);
+            var trend = await runs
                 .Where(r => r.Kind == RunKind.Audit && r.Status == RunStatus.Succeeded && r.DriftCount != null)
                 .OrderByDescending(r => r.Id).Take(30)
                 .Select(r => new { runId = r.Id, at = r.FinishedAt, driftCount = r.DriftCount })
                 .ToListAsync(ct);
-            var recentRuns = await db.Runs.AsNoTracking().OrderByDescending(r => r.Id).Take(8).ToListAsync(ct);
-            var recentChanges = await db.ChangeLog.AsNoTracking().Where(e => e.EntityType != "auth").OrderByDescending(e => e.Id).Take(8).ToListAsync(ct);
+            var recentRuns = await runs.OrderByDescending(r => r.Id).Take(8).ToListAsync(ct);
+            var recentChanges = await ChangeLogService.ForDomain(db.ChangeLog.AsNoTracking(), domain.Current).Where(e => e.EntityType != "auth").OrderByDescending(e => e.Id).Take(8).ToListAsync(ct);
 
             return new
             {
@@ -137,13 +144,15 @@ public static class MiscEndpoints
                 driftTrend = trend.AsEnumerable().Reverse(),
                 recentRuns = recentRuns.Select(RunSummaryDto.From),
                 recentChanges = recentChanges.Select(ChangeEntryDto.From),
-                pendingApprovals = (await db.Runs.AsNoTracking().Where(r => r.Status == RunStatus.AwaitingApproval).OrderBy(r => r.Id).ToListAsync(ct))
+                pendingApprovals = (await runs.Where(r => r.Status == RunStatus.AwaitingApproval).OrderBy(r => r.Id).ToListAsync(ct))
                     .Select(RunSummaryDto.From),
                 queue = new
                 {
                     running = await db.Runs.CountAsync(r => r.Status == RunStatus.Running, ct),
                     queued = await db.Runs.CountAsync(r => r.Status == RunStatus.Queued, ct),
                 },
+                // The queue is shared by all domains (runs execute one at a time).
+                domain = new { domain.Current.Id, domain.Current.Key, domain.Current.DisplayName, domain.Current.DnsName },
                 validation = new
                 {
                     errors = issues.Count(i => i.Severity == "Error"),

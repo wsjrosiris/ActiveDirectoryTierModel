@@ -17,8 +17,9 @@ public record PlanCandidatesDto(bool RequirePlan, int MaxAgeHours, PlanCandidate
 /// <summary>Whether a planning run can be applied right now.</summary>
 public record PlanApplicabilityDto(bool Applicable, string? Reason, DateTimeOffset? ExpiresAt);
 
+/// <summary>Runs of the current domain (<see cref="Domains.DomainContext"/>); decisions and cancellation work on any run by id.</summary>
 public class RunService(AppDbContext db, RunQueue queue, ChangeLogService changeLog, SettingsService settings, ConfigService config, NotificationQueue notifications,
-    MaintenanceService maintenance)
+    MaintenanceService maintenance, Domains.DomainContext domain)
 {
     public async Task<Run> EnqueueAsync(RunKind kind, RunRequest r, bool confirmApply, string user, RunTrigger trigger = RunTrigger.Manual, long? scheduleId = null,
         CancellationToken ct = default, Run? planRun = null)
@@ -26,6 +27,7 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
         var s = await settings.GetAsync(ct);
         var run = new Run
         {
+            DomainId = domain.Id,
             Kind = kind,
             Status = RunStatus.Queued,
             Trigger = trigger,
@@ -59,7 +61,7 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
         else if (MaintenanceService.IsRestricted(run))
         {
             // Outside a maintenance window the apply waits (roadmap 4); freezes are rejected by the endpoint beforehand.
-            (run.Status, run.ScheduledFor) = await maintenance.StartStatusAsync(run.CreatedAt, ct);
+            (run.Status, run.ScheduledFor) = await maintenance.StartStatusAsync(run.CreatedAt, run.DomainId, ct);
         }
         db.Runs.Add(run);
         await db.SaveChangesAsync(ct);
@@ -110,9 +112,14 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
                 ? (null, "Anwenden ist nur nach einer geprüften Planung möglich. Bitte zuerst einen Planungslauf mit denselben Parametern starten und dessen Ergebnis anwenden.")
                 : (null, null);
         var plan = await db.Runs.AsNoTracking().FirstOrDefaultAsync(x => x.Id == planId, ct);
+        // A plan of another domain was made against another directory and configuration (roadmap 17).
+        if (plan is not null && plan.DomainId != domain.Id)
+            return (null, $"Planung #{planId} gehört zur Domäne „{DomainName(plan.DomainId)}“, nicht zu „{domain.Current.DisplayName}“. Bitte in dieser Domäne planen.");
         var error = PlanGate.Check(plan, PlanGate.From(r.ToRunRequest(), s.AdmlLanguage), await CurrentVersionsAsync(ct), DateTimeOffset.UtcNow, s.PlanMaxAgeHours);
         return error is null ? (plan, null) : (null, error);
     }
+
+    private string DomainName(int id) => domain.Id == id ? domain.Current.DisplayName : $"#{id}";
 
     /// <summary>Whether the given planning run could be applied now (same parameters as itself, current configuration, not expired).</summary>
     public async Task<PlanApplicabilityDto?> PlanApplicabilityAsync(Run plan, CancellationToken ct = default)
@@ -120,8 +127,18 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
         if (plan.Kind != RunKind.Deploy || plan.Mode != RunMode.Plan) return null;
         var s = await settings.GetAsync(ct);
         var target = new PlanGate.Target(plan.Scope, plan.IncludeMsa, plan.IncludeGmsa, plan.IncludeDmsa, plan.IncludeWinLaps, plan.PreferredDc, plan.AdmlLanguage);
-        var error = PlanGate.Check(plan, target, await CurrentVersionsAsync(ct), DateTimeOffset.UtcNow, s.PlanMaxAgeHours);
-        return new PlanApplicabilityDto(error is null, error, plan.Status == RunStatus.Succeeded ? PlanGate.ExpiresAt(plan, s.PlanMaxAgeHours) : null);
+        // Compared with the configuration of the plan's own domain, whatever domain the request names.
+        var previous = domain.Current;
+        domain.Use(plan.DomainId);
+        try
+        {
+            var error = PlanGate.Check(plan, target, await CurrentVersionsAsync(ct), DateTimeOffset.UtcNow, s.PlanMaxAgeHours);
+            return new PlanApplicabilityDto(error is null, error, plan.Status == RunStatus.Succeeded ? PlanGate.ExpiresAt(plan, s.PlanMaxAgeHours) : null);
+        }
+        finally
+        {
+            domain.Use(previous, domain.Explicit);
+        }
     }
 
     /// <summary>The newest planning run an apply with these parameters could use.</summary>
@@ -130,8 +147,9 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
         var s = await settings.GetAsync(ct);
         var target = PlanGate.From(r, s.AdmlLanguage);
         var since = DateTimeOffset.UtcNow.AddHours(-Math.Max(s.PlanMaxAgeHours, 24) * 2);
+        var domainId = domain.Id;
         var recent = await db.Runs.AsNoTracking()
-            .Where(x => x.Kind == RunKind.Deploy && x.Mode == RunMode.Plan && x.Scope == r.Scope
+            .Where(x => x.DomainId == domainId && x.Kind == RunKind.Deploy && x.Mode == RunMode.Plan && x.Scope == r.Scope
                 && x.IncludeMsa == r.IncludeMsa && x.IncludeGmsa == r.IncludeGmsa && x.IncludeDmsa == r.IncludeDmsa && x.IncludeWinLaps == r.IncludeWinLaps
                 && x.CreatedAt >= since)
             .OrderByDescending(x => x.Id).Take(50).ToListAsync(ct);
@@ -159,7 +177,8 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
     /// <summary>Cancels a queued or running run. Returns null if the run does not exist, false if it has already finished.</summary>
     public async Task<bool?> CancelAsync(long id, string user, CancellationToken ct = default)
     {
-        if (!await db.Runs.AnyAsync(r => r.Id == id, ct)) return null;
+        var runDomain = await db.Runs.Where(r => r.Id == id).Select(r => (int?)r.DomainId).FirstOrDefaultAsync(ct);
+        if (runDomain is null) return null;
         var cancelledQueued = await db.Runs
             .Where(r => r.Id == id && (r.Status == RunStatus.Queued || r.Status == RunStatus.AwaitingApproval || r.Status == RunStatus.Scheduled))
             .ExecuteUpdateAsync(u => u
@@ -172,7 +191,7 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
             if (!running) return false;
             queue.Cancel(id);
         }
-        changeLog.Add(user, "run.cancel", "run", id.ToString(), $"Lauf #{id} abgebrochen");
+        changeLog.Add(user, "run.cancel", "run", id.ToString(), $"Lauf #{id} abgebrochen", domainId: runDomain);
         await db.SaveChangesAsync(ct);
         return true;
     }
@@ -196,17 +215,18 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
         if (approve)
         {
             // An approved apply still waits for the next maintenance window (a freeze moves it past the freeze).
-            (run.Status, run.ScheduledFor) = MaintenanceService.IsRestricted(run) ? await maintenance.StartStatusAsync(now, ct) : (RunStatus.Queued, null);
+            (run.Status, run.ScheduledFor) = MaintenanceService.IsRestricted(run) ? await maintenance.StartStatusAsync(now, run.DomainId, ct) : (RunStatus.Queued, null);
             changeLog.Add(user, "run.approve", "run", id.ToString(),
                 $"Deploy #{id} von {run.RequestedBy} freigegeben" + (run.ApprovalComment is null ? "" : $": {run.ApprovalComment}")
-                + (run.Status == RunStatus.Scheduled ? $" – Start im Wartungsfenster ab {MaintenanceCalendar.Format(run.ScheduledFor!.Value)}" : ""));
+                + (run.Status == RunStatus.Scheduled ? $" – Start im Wartungsfenster ab {MaintenanceCalendar.Format(run.ScheduledFor!.Value)}" : ""),
+                domainId: run.DomainId);
         }
         else
         {
             run.Status = RunStatus.Rejected;
             run.FinishedAt = now;
             run.Message = $"Abgelehnt von {user}: {run.ApprovalComment}";
-            changeLog.Add(user, "run.reject", "run", id.ToString(), $"Deploy #{id} von {run.RequestedBy} abgelehnt: {run.ApprovalComment}");
+            changeLog.Add(user, "run.reject", "run", id.ToString(), $"Deploy #{id} von {run.RequestedBy} abgelehnt: {run.ApprovalComment}", domainId: run.DomainId);
         }
         // Optimistic check: only one decision wins if two operators click at the same time.
         var updated = await db.Runs.Where(r => r.Id == id && r.Status == RunStatus.AwaitingApproval).ExecuteUpdateAsync(u => u
@@ -232,7 +252,7 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
             .SetProperty(r => r.Message, "Freigabe abgelaufen – niemand hat rechtzeitig freigegeben."), ct);
         if (n == 0) return;
         run.Status = RunStatus.Rejected;
-        changeLog.Add("system", "run.approval-expired", "run", run.Id.ToString(), $"Freigabe für Deploy #{run.Id} von {run.RequestedBy} abgelaufen");
+        changeLog.Add("system", "run.approval-expired", "run", run.Id.ToString(), $"Freigabe für Deploy #{run.Id} von {run.RequestedBy} abgelaufen", domainId: run.DomainId);
         await db.SaveChangesAsync(ct);
     }
 

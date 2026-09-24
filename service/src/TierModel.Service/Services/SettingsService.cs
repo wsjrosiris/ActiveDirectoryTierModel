@@ -29,11 +29,12 @@ public record WindowsAuthConfig(bool Enabled, Dictionary<Role, List<GroupRef>> R
 
 public record SmtpConfig(string Host, int Port, string Security, string Username, string From, string? PasswordProtected);
 
-/// <summary>Runtime-editable settings stored in the database, falling back to appsettings.json.</summary>
-public class SettingsService(AppDbContext db, IOptions<TierModelOptions> options, IDataProtectionProvider dataProtection)
+/// <summary>
+/// Runtime-editable settings stored in the database, falling back to appsettings.json. The default DC and the ADML language
+/// belong to the current domain (roadmap 17) and are stored with it; everything else is instance-wide.
+/// </summary>
+public class SettingsService(AppDbContext db, IOptions<TierModelOptions> options, IDataProtectionProvider dataProtection, Domains.DomainContext domain)
 {
-    private const string PreferredDcKey = "defaultPreferredDc";
-    private const string AdmlLanguageKey = "admlLanguage";
     private const string RetentionKey = "runRetentionDays";
     private const string RequireApprovalKey = "requireApproval";
     private const string ApprovalTimeoutKey = "approvalTimeoutHours";
@@ -52,9 +53,10 @@ public class SettingsService(AppDbContext db, IOptions<TierModelOptions> options
     {
         var o = options.Value;
         var stored = await db.Settings.AsNoTracking().ToDictionaryAsync(s => s.Key, s => s.Value, ct);
+        var d = domain.Current;
         return new SettingsDto(
-            stored.GetValueOrDefault(PreferredDcKey) ?? o.DefaultPreferredDc,
-            stored.GetValueOrDefault(AdmlLanguageKey) ?? o.AdmlLanguage,
+            d.PreferredDc,
+            string.IsNullOrWhiteSpace(d.AdmlLanguage) ? o.AdmlLanguage : d.AdmlLanguage,
             int.TryParse(stored.GetValueOrDefault(RetentionKey), out var days) ? days : o.RunRetentionDays,
             bool.TryParse(stored.GetValueOrDefault(RequireApprovalKey), out var approval) && approval,
             int.TryParse(stored.GetValueOrDefault(ApprovalTimeoutKey), out var hours) ? hours : 24,
@@ -68,10 +70,15 @@ public class SettingsService(AppDbContext db, IOptions<TierModelOptions> options
             int.TryParse(stored.GetValueOrDefault(PasswordMaxAgeKey), out var pwAge) ? pwAge : 365);
     }
 
+    /// <summary>Stages the changes; the caller saves and reloads the domain registry.</summary>
     public async Task UpdateAsync(UpdateSettingsRequest r, CancellationToken ct = default)
     {
-        await SetAsync(PreferredDcKey, r.DefaultPreferredDc.Trim(), ct);
-        await SetAsync(AdmlLanguageKey, r.AdmlLanguage.Trim(), ct);
+        if (await db.Domains.FindAsync([domain.Id], ct) is { } d)
+        {
+            d.PreferredDc = r.DefaultPreferredDc.Trim();
+            d.AdmlLanguage = r.AdmlLanguage.Trim();
+            if (string.IsNullOrWhiteSpace(d.DnsName) && Domains.DomainRules.DnsFromDc(d.PreferredDc) is { } dns) d.DnsName = dns;
+        }
         await SetAsync(RetentionKey, r.RunRetentionDays.ToString(), ct);
         if (r.RequireApproval is { } approval) await SetAsync(RequireApprovalKey, approval.ToString(), ct);
         if (r.ApprovalTimeoutHours is { } hours) await SetAsync(ApprovalTimeoutKey, hours.ToString(), ct);
