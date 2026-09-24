@@ -21,6 +21,8 @@ import { TierDot } from '@/components/shared/badges'
 import { matchesTierFilter, type Tier, type TierFilter } from '@/lib/tier'
 import { cn, formatNumber } from '@/lib/utils'
 import { useHotkey } from '@/hooks/use-hotkey'
+import type { TierIssue } from '@/lib/tier-rules'
+import { TierRuleAlerts } from './tier-rule-alerts'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Item = Record<string, any>
@@ -57,6 +59,8 @@ export interface ListEditorProps {
   newItem: () => Item
   Form: React.ComponentType<FormProps>
   validate?: (item: Item, all: Item[], index: number | null) => Record<string, string>
+  /** Advisory findings (e.g. tier rules) shown above the form while editing; they do not block saving. */
+  hints?: (item: Item) => TierIssue[]
   entity: { singular: string; plural: string; article: 'den' | 'die' | 'das' }
   readOnly: boolean
   extraActions?: ExtraAction[]
@@ -325,6 +329,7 @@ export function ListEditor(props: ListEditorProps) {
               </SheetHeader>
               <SheetBody>
                 <fieldset disabled={readOnly} className="grid min-w-0 gap-5">
+                  {props.hints && <TierRuleAlerts issues={props.hints(editing.value)} />}
                   <Form
                     value={editing.value}
                     onChange={(v) => setEditing((e) => (e ? { ...e, value: v } : e))}

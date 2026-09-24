@@ -8,13 +8,13 @@ namespace TierModel.Service.Notifications;
 
 public static class NotificationEndpoints
 {
-    public record EventsDto(bool Drift, bool Failure, bool Apply, bool Approval);
+    public record EventsDto(bool Drift, bool Failure, bool Apply, bool Approval, bool Certificate = false);
 
     public record ChannelDto(long Id, string Name, ChannelType Type, bool Enabled, string Target, EventsDto Events,
         DateTimeOffset? LastSentAt, string? LastError, DateTimeOffset CreatedAt)
     {
         public static ChannelDto From(NotificationChannel c) => new(c.Id, c.Name, c.Type, c.Enabled, c.TargetDisplay,
-            new EventsDto(c.OnDrift, c.OnFailure, c.OnApply, c.OnApproval), c.LastSentAt, c.LastError, c.CreatedAt);
+            new EventsDto(c.OnDrift, c.OnFailure, c.OnApply, c.OnApproval, c.OnCertificate), c.LastSentAt, c.LastError, c.CreatedAt);
     }
 
     public record ChannelRequest(string Name, ChannelType Type, bool Enabled, string? Target, EventsDto? Events);
@@ -159,10 +159,11 @@ public static class NotificationEndpoints
 
     private static void Apply(NotificationChannel c, EventsDto? e)
     {
-        e ??= new EventsDto(true, true, false, true);
+        e ??= new EventsDto(true, true, false, true, true);
         c.OnDrift = e.Drift;
         c.OnFailure = e.Failure;
         c.OnApply = e.Apply;
         c.OnApproval = e.Approval;
+        c.OnCertificate = e.Certificate;
     }
 }

@@ -37,11 +37,14 @@ builder.Services.Configure<TierModelOptions>(o =>
 
 // HTTPS certificate from the Windows certificate store (LocalMachine\My), selected by thumbprint.
 var isCli = args.Length > 0 && Cli.IsCommand(args[0]);
+var certificateSource = new ServerCertificateSource(null, "Kestrel-Konfiguration");
 if (!isCli && !string.IsNullOrWhiteSpace(options.CertificateThumbprint))
 {
     var certificate = CertificateLoader.FromStore(options.CertificateThumbprint);
     builder.WebHost.ConfigureKestrel(k => k.ConfigureHttpsDefaults(h => h.ServerCertificate = certificate));
+    certificateSource = new ServerCertificateSource(certificate, "Zertifikatspeicher LocalMachine\\My");
 }
+builder.Services.AddSingleton(certificateSource);
 
 var connectionString = builder.Configuration.GetConnectionString("TierModel")
     ?? throw new InvalidOperationException("ConnectionStrings:TierModel fehlt in appsettings.json.");
@@ -64,6 +67,8 @@ builder.Services.AddScoped<RunService>();
 builder.Services.AddSingleton<RunQueue>();
 builder.Services.AddSingleton<NotificationQueue>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddSingleton<WorkerHeartbeats>();
+builder.Services.AddScoped<HealthService>();
 builder.Services.AddHttpClient("notifications", c => c.Timeout = TimeSpan.FromSeconds(20));
 
 // Command-line maintenance used by the installer: runs without starting the web server.

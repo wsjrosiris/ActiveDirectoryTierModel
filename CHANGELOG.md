@@ -19,6 +19,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   forms; the JSON editor is gone. Pickers with search and suggestions (GPO backups, template files with MD5, domain
   controllers, AD groups via `/api/lookup/*`).
 - Save dialog, versions and change log show a readable list of changes instead of a JSON diff.
+- **Localized domains**: built-in principals are resolved via well-known SIDs/RIDs (`Get-TierModelWellKnownPrincipal`);
+  enterprise-wide groups via the forest root domain SID. Deploy and audit work on domains with translated group names
+  (e.g. `Domänen-Admins`) and in child domains.
+- `Deploy-TierModel.ps1` writes the plan as JSON (`-PlanOutputPath`, or `<LogPath>/<OutputFileBase>-plan.json` with
+  `-Logging`); new helpers `Export-TierModelPlan`, `Merge-TierModelAuditResult`.
+- Audit findings carry `Area` and `Severity`.
+- Service: **readable plan** per planning run (grouped by phase, filters, details), also shown to approvers and counted
+  in approval notifications.
+- Service: **apply only from a matching plan** (same scope, add-ons, DC, ADML language and configuration versions,
+  within `planMaxAgeHours`); the apply run executes the plan's configuration versions.
+- Service: **tier rules** in validation and as live hints in the forms (lower tier with write access to a higher tier,
+  cross-tier group membership, LAPS groups, GPO links).
+- Service: **system status** page (`/api/health/details`) and a daily certificate-expiry notification.
+- Roadmap for the next features (`docs/service/roadmap.md`).
+
+### Fixed
+- `Audit-TierModel.ps1 -FullDeployment` (and include audits) kept only the findings of the last entity in the JSON
+  report and left `auditSummary` at zero.
+- Domain Admins prerequisite check aborted on domains with localized group names.
 
 ## [1.4.0] - 2026-09-24
 

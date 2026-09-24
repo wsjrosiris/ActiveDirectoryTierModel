@@ -145,6 +145,7 @@ public static class ConfigValidator
                 if (target != "TemplateGpos" && !OuKnown(target))
                     issues.Add(new("Warning", "gpos", $"Verknüpfungsziel '{target}' ist nicht in der OU-Konfiguration", target));
 
+        issues.AddRange(TierRules.Check(sections));
         return issues;
     }
 

@@ -9,11 +9,13 @@ namespace TierModel.Service;
 public record SettingsDto(
     string DefaultPreferredDc, string AdmlLanguage, int RunRetentionDays,
     bool RequireApproval, int ApprovalTimeoutHours, string PublicBaseUrl,
+    bool RequirePlanBeforeApply, int PlanMaxAgeHours,
     string FrameworkPath, string PwshPath);
 
 public record UpdateSettingsRequest(
     string DefaultPreferredDc, string AdmlLanguage, int RunRetentionDays,
-    bool? RequireApproval, int? ApprovalTimeoutHours, string? PublicBaseUrl);
+    bool? RequireApproval, int? ApprovalTimeoutHours, string? PublicBaseUrl,
+    bool? RequirePlanBeforeApply = null, int? PlanMaxAgeHours = null);
 
 public record GroupRef(string Name, string Sid);
 
@@ -34,6 +36,8 @@ public class SettingsService(AppDbContext db, IOptions<TierModelOptions> options
     private const string RequireApprovalKey = "requireApproval";
     private const string ApprovalTimeoutKey = "approvalTimeoutHours";
     private const string PublicBaseUrlKey = "publicBaseUrl";
+    private const string RequirePlanKey = "requirePlanBeforeApply";
+    private const string PlanMaxAgeKey = "planMaxAgeHours";
     private const string WindowsAuthKey = "windowsAuth";
     private const string SmtpKey = "smtp";
 
@@ -51,6 +55,9 @@ public class SettingsService(AppDbContext db, IOptions<TierModelOptions> options
             bool.TryParse(stored.GetValueOrDefault(RequireApprovalKey), out var approval) && approval,
             int.TryParse(stored.GetValueOrDefault(ApprovalTimeoutKey), out var hours) ? hours : 24,
             stored.GetValueOrDefault(PublicBaseUrlKey) ?? o.PublicBaseUrl,
+            // Safe default: applying requires a reviewed plan unless an administrator switches it off.
+            !bool.TryParse(stored.GetValueOrDefault(RequirePlanKey), out var requirePlan) || requirePlan,
+            int.TryParse(stored.GetValueOrDefault(PlanMaxAgeKey), out var planHours) ? planHours : 24,
             o.FrameworkPath,
             o.PwshPath);
     }
@@ -63,6 +70,8 @@ public class SettingsService(AppDbContext db, IOptions<TierModelOptions> options
         if (r.RequireApproval is { } approval) await SetAsync(RequireApprovalKey, approval.ToString(), ct);
         if (r.ApprovalTimeoutHours is { } hours) await SetAsync(ApprovalTimeoutKey, hours.ToString(), ct);
         if (r.PublicBaseUrl is { } url) await SetAsync(PublicBaseUrlKey, url.Trim().TrimEnd('/'), ct);
+        if (r.RequirePlanBeforeApply is { } requirePlan) await SetAsync(RequirePlanKey, requirePlan.ToString(), ct);
+        if (r.PlanMaxAgeHours is { } planHours) await SetAsync(PlanMaxAgeKey, planHours.ToString(), ct);
     }
 
     public async Task<WindowsAuthConfig> GetWindowsAuthAsync(CancellationToken ct = default)
@@ -86,6 +95,16 @@ public class SettingsService(AppDbContext db, IOptions<TierModelOptions> options
 
     public Task SetSmtpAsync(SmtpConfig config, CancellationToken ct = default) =>
         SetAsync(SmtpKey, JsonSerializer.Serialize(config, JsonSerializerOptions.Web), ct);
+
+    /// <summary>Raw value store for small service-internal state (e.g. when a warning was last sent).</summary>
+    public async Task<string?> GetValueAsync(string key, CancellationToken ct = default) =>
+        (await db.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == key, ct))?.Value;
+
+    public async Task SetValueAsync(string key, string value, CancellationToken ct = default)
+    {
+        await SetAsync(key, value, ct);
+        await db.SaveChangesAsync(ct);
+    }
 
     private async Task SetAsync(string key, string value, CancellationToken ct)
     {

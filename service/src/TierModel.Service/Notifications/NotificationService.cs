@@ -10,16 +10,21 @@ using TierModel.Service.Runs;
 
 namespace TierModel.Service.Notifications;
 
-public enum NotificationEvent { Drift, Failure, Apply, ApprovalRequested }
+public enum NotificationEvent { Drift, Failure, Apply, ApprovalRequested, CertificateExpiring }
+
+/// <summary>A run event (message built from the run) or a ready-made message for events without a run.</summary>
+public record NotificationRequest(NotificationEvent Event, long RunId, NotificationMessage? Message = null);
 
 /// <summary>Events are sent in the background so a slow mail server never delays a run or a request.</summary>
 public class NotificationQueue
 {
-    private readonly Channel<(NotificationEvent Event, long RunId)> _channel = Channel.CreateUnbounded<(NotificationEvent, long)>();
+    private readonly Channel<NotificationRequest> _channel = Channel.CreateUnbounded<NotificationRequest>();
 
-    public void Enqueue(NotificationEvent e, long runId) => _channel.Writer.TryWrite((e, runId));
+    public void Enqueue(NotificationEvent e, long runId) => _channel.Writer.TryWrite(new(e, runId));
 
-    public ChannelReader<(NotificationEvent Event, long RunId)> Reader => _channel.Reader;
+    public void Enqueue(NotificationMessage message) => _channel.Writer.TryWrite(new(message.Event ?? NotificationEvent.Failure, 0, message));
+
+    public ChannelReader<NotificationRequest> Reader => _channel.Reader;
 }
 
 public record NotificationMessage(NotificationEvent? Event, string Title, string Text, IReadOnlyList<(string Label, string Value)> Facts, string? Url, string Color);
@@ -34,6 +39,7 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
         NotificationEvent.Failure => c.OnFailure,
         NotificationEvent.Apply => c.OnApply,
         NotificationEvent.ApprovalRequested => c.OnApproval,
+        NotificationEvent.CertificateExpiring => c.OnCertificate,
         _ => false,
     };
 
@@ -45,7 +51,21 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
         if (run.Kind == RunKind.Deploy && run.Mode == RunMode.Apply && run.Status == RunStatus.Succeeded) yield return NotificationEvent.Apply;
     }
 
-    public static NotificationMessage BuildMessage(NotificationEvent e, Run run, string publicBaseUrl)
+    /// <summary>"3 anlegen, 1 verknüpfen, 2 konfigurieren" – counts of a plan in words; null if nothing changes.</summary>
+    public static string? PlanCountsText(DeployPlan plan)
+    {
+        var s = plan.Summary;
+        var parts = new List<string>();
+        if (s.Create > 0) parts.Add($"{s.Create} anlegen");
+        if (s.Update > 0) parts.Add($"{s.Update} ändern");
+        if (s.Link > 0) parts.Add($"{s.Link} verknüpfen");
+        if (s.Configure > 0) parts.Add($"{s.Configure} konfigurieren");
+        var total = DeployPlanReader.TotalChanges(plan);
+        if (parts.Count == 0 && total > 0) parts.Add($"{total} Änderung(en)");
+        return parts.Count == 0 ? null : string.Join(", ", parts);
+    }
+
+    public static NotificationMessage BuildMessage(NotificationEvent e, Run run, string publicBaseUrl, DeployPlan? plan = null)
     {
         var what = run.Kind == RunKind.Audit ? "Audit" : run.Mode == RunMode.Apply ? "Deploy (Anwenden)" : "Deploy (Planung)";
         var scope = run.Scope?.ToString() ?? "–";
@@ -71,6 +91,13 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
                 + (run.ApprovalExpiresAt is { } exp ? $" (bis {exp.ToLocalTime():dd.MM.yyyy HH:mm})." : "."), "accent"),
             _ => ("TierModel Service", "", "default"),
         };
+        if (e == NotificationEvent.ApprovalRequested && run.PlanRunId is { } planId)
+        {
+            var counts = plan is null ? null : PlanCountsText(plan);
+            facts.Add(("Geplante Änderungen", plan is null ? $"siehe Planung #{planId}"
+                : counts is null ? $"keine (Planung #{planId})" : $"{counts} (Planung #{planId})"));
+            if (plan is { Errors.Count: > 0 }) facts.Add(("Fehler in der Planung", plan.Errors.Count.ToString()));
+        }
         if (run.FinishedAt is { } f) facts.Add(("Beendet", f.ToLocalTime().ToString("dd.MM.yyyy HH:mm")));
         var url = string.IsNullOrWhiteSpace(publicBaseUrl) ? null : $"{publicBaseUrl.TrimEnd('/')}/laeufe/{run.Id}";
         return new NotificationMessage(e, title, text, facts, url, color);
@@ -80,14 +107,38 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
         "Dieser Kanal ist richtig eingerichtet.", [("Gesendet", DateTimeOffset.Now.ToString("dd.MM.yyyy HH:mm"))],
         string.IsNullOrWhiteSpace(publicBaseUrl) ? null : publicBaseUrl.TrimEnd('/') + "/", "good");
 
+    public static NotificationMessage CertificateMessage(string subject, string thumbprint, DateTimeOffset notAfter, int daysLeft, string publicBaseUrl) => new(
+        NotificationEvent.CertificateExpiring,
+        daysLeft < 0 ? "HTTPS-Zertifikat ist abgelaufen" : $"HTTPS-Zertifikat läuft in {daysLeft} Tag(en) ab",
+        daysLeft < 0
+            ? "Das Zertifikat des TierModel Service ist abgelaufen. Browser verweigern die Verbindung, bis ein neues Zertifikat eingerichtet ist."
+            : "Das Zertifikat des TierModel Service läuft bald ab. Bitte rechtzeitig erneuern und den Fingerabdruck in appsettings.json aktualisieren.",
+        [("Zertifikat", subject), ("Fingerabdruck", thumbprint), ("Gültig bis", notAfter.ToLocalTime().ToString("dd.MM.yyyy HH:mm"))],
+        string.IsNullOrWhiteSpace(publicBaseUrl) ? null : $"{publicBaseUrl.TrimEnd('/')}/admin/systemzustand",
+        daysLeft < 7 ? "attention" : "warning");
+
     public async Task DispatchAsync(NotificationEvent e, long runId, CancellationToken ct)
     {
         var run = await db.Runs.AsNoTracking().FirstOrDefaultAsync(r => r.Id == runId, ct);
         if (run is null) return;
         var channels = (await db.NotificationChannels.Where(c => c.Enabled).ToListAsync(ct)).Where(c => Wants(c, e)).ToList();
         if (channels.Count == 0) return;
-        var message = BuildMessage(e, run, (await settings.GetAsync(ct)).PublicBaseUrl);
+        DeployPlan? plan = null;
+        if (e == NotificationEvent.ApprovalRequested && run.PlanRunId is { } planId)
+            plan = DeployPlanReader.Deserialize(await db.Runs.AsNoTracking().Where(r => r.Id == planId).Select(r => r.Plan).FirstOrDefaultAsync(ct));
+        await SendToAsync(channels, BuildMessage(e, run, (await settings.GetAsync(ct)).PublicBaseUrl, plan), ct);
+    }
 
+    /// <summary>Sends a ready-made message (events without a run) to every channel that wants its event.</summary>
+    public async Task DispatchAsync(NotificationMessage message, CancellationToken ct)
+    {
+        if (message.Event is not { } e) return;
+        var channels = (await db.NotificationChannels.Where(c => c.Enabled).ToListAsync(ct)).Where(c => Wants(c, e)).ToList();
+        if (channels.Count > 0) await SendToAsync(channels, message, ct);
+    }
+
+    private async Task SendToAsync(List<NotificationChannel> channels, NotificationMessage message, CancellationToken ct)
+    {
         foreach (var channel in channels)
         {
             string? error = null;
@@ -232,21 +283,45 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
     }
 }
 
-public class NotificationWorker(NotificationQueue queue, IServiceScopeFactory scopes, ILogger<NotificationWorker> logger) : BackgroundService
+public class NotificationWorker(NotificationQueue queue, IServiceScopeFactory scopes, WorkerHeartbeats heartbeats, ILogger<NotificationWorker> logger) : BackgroundService
 {
+    public const string HeartbeatName = "NotificationWorker";
+    private static readonly TimeSpan Idle = TimeSpan.FromSeconds(30);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var (e, runId) in queue.Reader.ReadAllAsync(stoppingToken))
+        while (!stoppingToken.IsCancellationRequested)
         {
-            try
+            heartbeats.Beat(HeartbeatName, Idle);
+            using (var wait = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken))
             {
-                await using var scope = scopes.CreateAsyncScope();
-                await scope.ServiceProvider.GetRequiredService<NotificationService>().DispatchAsync(e, runId, stoppingToken);
+                // Wake up regularly even without messages, so the health page can tell "idle" from "stuck".
+                wait.CancelAfter(Idle);
+                try
+                {
+                    if (!await queue.Reader.WaitToReadAsync(wait.Token)) return;
+                }
+                catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+                {
+                    continue;
+                }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            while (queue.Reader.TryRead(out var item))
             {
-                logger.LogError(ex, "Notification {Event} for run {RunId} failed", e, runId);
+                heartbeats.Busy(HeartbeatName, "Versendet Benachrichtigungen");
+                try
+                {
+                    await using var scope = scopes.CreateAsyncScope();
+                    var service = scope.ServiceProvider.GetRequiredService<NotificationService>();
+                    if (item.Message is { } message) await service.DispatchAsync(message, stoppingToken);
+                    else await service.DispatchAsync(item.Event, item.RunId, stoppingToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "Notification {Event} for run {RunId} failed", item.Event, item.RunId);
+                }
             }
+            heartbeats.Beat(HeartbeatName, Idle);
         }
     }
 }

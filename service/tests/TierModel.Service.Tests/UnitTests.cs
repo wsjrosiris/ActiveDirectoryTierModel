@@ -196,3 +196,83 @@ internal static class TestPaths
         }
     }
 }
+
+public class TierRulesTests
+{
+    private const string Groups = """
+        [{"name":"Tier 0 Admins","samaccountname":"Tier0Admins","path":"OU=Tier 0 Groups,{{DOMAIN_DN}}"},
+         {"name":"Tier 1 Server Admins","samaccountname":"Tier1ServerAdmins","path":"OU=Tier 1 Groups,{{DOMAIN_DN}}"},
+         {"name":"Tier 2 Helpdesk","samaccountname":"Tier2Helpdesk","path":"OU=Tier 2 Groups,{{DOMAIN_DN}}"}]
+        """;
+
+    private static List<ValidationIssue> Check(string key, string prop, string items) => TierRules.Check(new Dictionary<string, JsonNode?>
+    {
+        ["groups"] = JsonNode.Parse($"{{\"groups\": {Groups}}}"),
+        [key] = JsonNode.Parse($"{{\"{prop}\": {items}}}"),
+    });
+
+    private static string Acl(string principal, string target, string rights = "\"GenericAll\"", string type = "Allow") =>
+        $$"""[{"targetOUPath":"{{target}}","identityreference":"{{principal}}","activedirectoryrights":[{{rights}}],"accesscontroltype":"{{type}}"}]""";
+
+    [Theory]
+    [InlineData("Tier 1 Member Servers", 1)]
+    [InlineData("Tier0Admins", 0)]
+    [InlineData("OU=Tier 2 Accounts,OU=Tier 2,{{DOMAIN_DN}}", 2)]
+    [InlineData("Tier 10 Something", null)]
+    [InlineData("PAW Staging", null)]
+    public void TierOf_reads_names_and_dns(string text, int? expected) => Assert.Equal(expected, TierRules.TierOf(text));
+
+    [Fact]
+    public void Lower_tier_with_write_rights_on_higher_tier_ou_is_an_error()
+    {
+        var issue = Assert.Single(Check("acls", "aclDelegations", Acl("Tier2Helpdesk", "OU=Tier 0 Member Servers,{{DOMAIN_DN}}")));
+        Assert.Equal("Error", issue.Severity);
+        Assert.Contains("Tier-Verstoß", issue.Message);
+    }
+
+    [Theory]
+    [InlineData("Tier0Admins", "OU=Tier 1 Member Servers,{{DOMAIN_DN}}", "\"GenericAll\"", "Allow")] // higher tier manages lower
+    [InlineData("Tier1ServerAdmins", "OU=Tier 1 Member Servers,{{DOMAIN_DN}}", "\"GenericAll\"", "Allow")] // same tier
+    [InlineData("Tier2Helpdesk", "OU=Tier 0 Member Servers,{{DOMAIN_DN}}", "\"ReadProperty\",\"ListChildren\"", "Allow")] // read only
+    [InlineData("Tier2Helpdesk", "OU=Tier 0 Member Servers,{{DOMAIN_DN}}", "\"GenericAll\"", "Deny")] // deny ACE
+    [InlineData("SomeUnknownGroup", "OU=Tier 0 Member Servers,{{DOMAIN_DN}}", "\"GenericAll\"", "Allow")] // unknown tier
+    public void Allowed_delegations_raise_nothing(string principal, string target, string rights, string type) =>
+        Assert.Empty(Check("acls", "aclDelegations", Acl(principal, target, rights, type)));
+
+    [Fact]
+    public void Broad_principals_and_domain_root_are_recognized()
+    {
+        Assert.Single(Check("acls", "aclDelegations", Acl("Authenticated Users", "{{DOMAIN_DN}}", "\"WriteDacl\"")));
+        Assert.Single(Check("msa", "aclDelegations", Acl("CONTOSO\\\\Tier1ServerAdmins", "OU=Domain Controllers,{{DOMAIN_DN}}")));
+    }
+
+    [Fact]
+    public void Account_in_group_of_other_tier_is_flagged()
+    {
+        var issues = Check("users", "users", """
+            [{"samAccountName":"t2-admin","ouPath":"OU=Tier 2 Accounts,{{DOMAIN_DN}}","memberOf":["Tier0Admins","Tier2Helpdesk","Domain Users"]},
+             {"samAccountName":"t0-admin","ouPath":"OU=Tier 0 Accounts,{{DOMAIN_DN}}","memberOf":["Tier1ServerAdmins"]}]
+            """);
+        Assert.Collection(issues,
+            i => Assert.Equal(("Error", "t2-admin"), (i.Severity, i.Item)),
+            i => Assert.Equal(("Warning", "t0-admin"), (i.Severity, i.Item)));
+    }
+
+    [Fact]
+    public void Laps_groups_of_lower_tier_are_errors() =>
+        Assert.Equal("Error", Assert.Single(Check("winlaps", "winLapsDelegations",
+            """[{"ouDn":"OU=Tier 0 Member Servers,{{DOMAIN_DN}}","readGroup":"Tier0Admins","resetGroup":"Tier2Helpdesk"}]""")).Severity);
+
+    [Fact]
+    public void Gpo_of_other_tier_linked_to_tier_ou_is_a_warning()
+    {
+        var issues = TierRules.Check(new Dictionary<string, JsonNode?>
+        {
+            ["gpos"] = JsonNode.Parse("""
+                {"gpos":{"OU=Tier 1 Member Servers,{{DOMAIN_DN}}":{"ImportOnlyGpo":[{"name":"*- Tier 0 Servers SOE"},{"name":"*- Tier 1 Servers SOE"}]},
+                         "{{DOMAIN_DN}}":{"ImportOnlyGpo":[{"name":"*- Tier 0 Restrictions"}]}}}
+                """),
+        });
+        Assert.Equal("Warning", Assert.Single(issues).Severity);
+    }
+}

@@ -68,7 +68,8 @@ Each component audit displays:
 | ExpectedValue | Configuration from JSON |
 | ActualValue | Current AD state (null if missing) |
 | Details | Human-readable description |
-| Severity | High (if applicable) |
+| Area | Configuration area: ous, groups, users, acls, gpos, admx, msa, gmsa, dmsa, winlaps |
+| Severity | High (Tier 0 objects, GPOs linked to the domain root or a Tier 0 OU, errors), Medium (Tier 1), Low (other) |
 
 ## Generating Reports
 
@@ -84,9 +85,15 @@ Each component audit displays:
 ```json
 {
   "auditSummary": {
-    "totalChecked": 150,
-    "driftCount": 3,
-    "compliancePercentage": 98.0
+    "TotalChecked": 150,
+    "DriftCount": 3,
+    "MissingCount": 1,
+    "UnexpectedCount": 0,
+    "MismatchCount": 2,
+    "OrphanedGpoLinkCount": 0,
+    "SecurityDeltaCount": 0,
+    "ErrorCount": 0,
+    "CompliantCount": 147
   },
   "driftFindings": [
     {
@@ -95,7 +102,9 @@ Each component audit displays:
       "Identifier": "Tier0-PAW-Staging",
       "ExpectedValue": "OU=PAW Staging,OU=Tier Model Administration,DC=contoso,DC=com",
       "ActualValue": null,
-      "Details": "OU does not exist in Active Directory"
+      "Details": "OU does not exist in Active Directory",
+      "Area": "ous",
+      "Severity": "Low"
     }
   ],
   "metadata": {

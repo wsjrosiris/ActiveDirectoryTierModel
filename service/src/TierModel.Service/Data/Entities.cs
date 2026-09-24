@@ -101,6 +101,10 @@ public class Run
     public string? Summary { get; set; }
     /// <summary>JSON array with the audit report's driftFindings.</summary>
     public string? Findings { get; set; }
+    /// <summary>Deploy/Plan runs: the normalised deploy-plan.json (see <see cref="Runs.DeployPlan"/>).</summary>
+    public string? Plan { get; set; }
+    /// <summary>Apply runs: the planning run whose result was reviewed (and whose configuration versions are applied).</summary>
+    public long? PlanRunId { get; set; }
 }
 
 public class RunLogLine
@@ -162,6 +166,7 @@ public class NotificationChannel
     public bool OnFailure { get; set; }
     public bool OnApply { get; set; }
     public bool OnApproval { get; set; }
+    public bool OnCertificate { get; set; }
     public DateTimeOffset? LastSentAt { get; set; }
     public string? LastError { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

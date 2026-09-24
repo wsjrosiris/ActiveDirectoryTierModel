@@ -18,6 +18,7 @@ import { errorMessage } from '@/lib/query'
 import { includeLabels, scopeLabels, sectionFallbackTitles } from '@/lib/labels'
 import { hasRole } from '@/lib/roles'
 import { cn, formatDateTime, formatRelative } from '@/lib/utils'
+import { PlanCompact } from './plan-view'
 
 export function sameUser(a: string | null | undefined, b: string | null | undefined) {
   return !!a && !!b && a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase()
@@ -129,7 +130,7 @@ export function ApprovalPanel({ run, onShowConfig }: { run: RunDetail; onShowCon
             </div>
           </div>
 
-          <LatestPlanHint run={run} />
+          {run.planRunId ? <LinkedPlanSummary planRunId={run.planRunId} /> : <LatestPlanHint run={run} />}
         </div>
 
         <div className="flex flex-col gap-3 lg:w-72 lg:border-l lg:pl-8">
@@ -190,6 +191,21 @@ export function ApprovalPanel({ run, onShowConfig }: { run: RunDetail; onShowCon
       <DecisionDialog run={run} mode={dialog} onClose={() => setDialog(null)} onDone={refresh} />
     </Card>
   )
+}
+
+/** What the approved deploy will change: the plan of the planning run it is based on. */
+function LinkedPlanSummary({ planRunId }: { planRunId: number }) {
+  const q = useQuery({ queryKey: ['run-plan', planRunId], queryFn: () => api.runs.plan(planRunId), meta: { silent: true }, retry: false, staleTime: Infinity })
+  if (q.isLoading) return <div className="h-24 animate-pulse rounded-lg bg-muted/60" aria-label="Plan wird geladen" />
+  if (!q.data)
+    return (
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-sky-500/25 bg-sky-500/5 px-3 py-2.5 text-[13px]">
+        <FlaskConical className="size-4 shrink-0 text-sky-600 dark:text-sky-400" />
+        <span className="min-w-0 flex-1">Beruht auf Planung #{planRunId} – deren Plandatei ist nicht auswertbar, bitte das Protokoll prüfen.</span>
+        <Button variant="outline" size="xs" asChild><Link to={`/laeufe/${planRunId}`}>Öffnen <ArrowRight /></Link></Button>
+      </div>
+    )
+  return <PlanCompact plan={q.data} planRunId={planRunId} />
 }
 
 /** Points the approver to the most recent planning run before this request. */

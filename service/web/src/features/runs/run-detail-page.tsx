@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router'
-import { ArrowLeft, Ban, CalendarClock, FileSearch, ListChecks, Search, Terminal, User as UserIcon } from 'lucide-react'
+import { ArrowLeft, Ban, CalendarClock, ClipboardList, FileSearch, FlaskConical, ListChecks, Search, Terminal, User as UserIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, ApiError } from '@/api/client'
 import type { Finding, RunDetail, RunStatus } from '@/api/types'
@@ -22,6 +22,8 @@ import { findingTypeLabels, includeLabels, scopeLabels, sectionFallbackTitles } 
 import { cn, formatDateTime, formatDuration, formatNumber } from '@/lib/utils'
 import { RunLog, useRunLog } from './run-log'
 import { ApprovalOutcome, ApprovalPanel } from './approval-panel'
+import { PlanApplyBar, PlanMissing, PlanView } from './plan-view'
+import { planTotal } from './plan-model'
 import { Component as NotFound } from '@/components/layout/not-found'
 
 export function Component() {
@@ -54,6 +56,14 @@ export function Component() {
     if (wasAwaiting.current && !awaiting) setTab('log')
     wasAwaiting.current = awaiting
   }, [status, awaiting])
+  // Planning runs open on their result once it is there.
+  const isPlanRun = run.data?.kind === 'Deploy' && run.data.mode === 'Plan'
+  const planTabShown = React.useRef(false)
+  React.useEffect(() => {
+    if (!isPlanRun || planTabShown.current || status !== 'Succeeded') return
+    planTabShown.current = true
+    setTab('plan')
+  }, [isPlanRun, status])
   const [now, setNow] = React.useState(Date.now())
   React.useEffect(() => {
     if (!active) return
@@ -109,6 +119,11 @@ export function Component() {
                   </span>
                   <span>{formatDateTime(r.createdAt)}</span>
                   <ApprovalOutcome run={r} />
+                  {r.planRunId && (
+                    <Link to={`/laeufe/${r.planRunId}`} className="flex items-center gap-1 text-sky-700 hover:underline dark:text-sky-300">
+                      <FlaskConical className="size-3.5" /> Nach Planung #{r.planRunId}
+                    </Link>
+                  )}
                 </p>
               </div>
             </div>
@@ -169,12 +184,18 @@ export function Component() {
 
           <Tabs value={tab} onValueChange={setTab}>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <TabsList>
+              <TabsList className="max-w-full overflow-x-auto [scrollbar-width:none]">
                 <TabsTrigger value="log"><Terminal /> Protokoll</TabsTrigger>
                 {isAudit && (
                   <TabsTrigger value="findings">
                     <ListChecks /> Befunde
                     {r.findings.length > 0 && <span className="ml-1 rounded bg-muted-foreground/15 px-1.5 text-[11px] tabular">{r.findings.length}</span>}
+                  </TabsTrigger>
+                )}
+                {r.kind === 'Deploy' && (r.mode === 'Plan' || r.planRunId) && (
+                  <TabsTrigger value="plan">
+                    <ClipboardList /> Geplante Änderungen
+                    {r.plan && <span className="ml-1 rounded bg-muted-foreground/15 px-1.5 text-[11px] tabular">{planTotal(r.plan)}</span>}
                   </TabsTrigger>
                 )}
                 <TabsTrigger value="config"><FileSearch /> Konfiguration</TabsTrigger>
@@ -200,6 +221,15 @@ export function Component() {
                 <Findings run={r} />
               </TabsContent>
             )}
+            {r.kind === 'Deploy' && (r.mode === 'Plan' || r.planRunId) && (
+              <TabsContent value="plan">
+                {r.mode === 'Plan' ? (
+                  r.plan ? <PlanView plan={r.plan} header={<PlanApplyBar run={r} />} /> : <PlanMissing run={{ ...r, status: status ?? r.status }} />
+                ) : (
+                  <LinkedPlan planRunId={r.planRunId!} />
+                )}
+              </TabsContent>
+            )}
             <TabsContent value="config">
               <ConfigVersions versions={r.configVersions} pinned={r.approvalRequired} />
             </TabsContent>
@@ -213,6 +243,30 @@ export function Component() {
 const lifecycle: Record<RunStatus, number> = { AwaitingApproval: 0, Queued: 1, Running: 2, Succeeded: 3, Failed: 3, Cancelled: 3, Rejected: 3 }
 function statusRank(s: RunStatus) {
   return lifecycle[s] ?? 0
+}
+
+/** Apply runs: the plan of the planning run they are based on. */
+function LinkedPlan({ planRunId }: { planRunId: number }) {
+  const q = useQuery({ queryKey: ['run-plan', planRunId], queryFn: () => api.runs.plan(planRunId), meta: { silent: true }, retry: false, staleTime: Infinity })
+  if (q.isLoading) return <Skeleton className="h-64" />
+  if (!q.data)
+    return (
+      <Card>
+        <EmptyState compact icon={<ClipboardList />} title="Plan nicht verfügbar" description={<>Die Planung #{planRunId} enthält keine auswertbare Plandatei.</>} />
+      </Card>
+    )
+  return (
+    <PlanView
+      plan={q.data}
+      header={
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-500/25 bg-sky-500/5 px-3 py-2.5 text-[13px]">
+          <FlaskConical className="size-4 shrink-0 text-sky-600 dark:text-sky-400" />
+          <span className="min-w-0 flex-1">Dieser Lauf wendet die geprüfte Planung an – mit genau deren Konfigurationsversionen.</span>
+          <Button variant="outline" size="xs" asChild><Link to={`/laeufe/${planRunId}`}>Planung #{planRunId} öffnen</Link></Button>
+        </div>
+      }
+    />
+  )
 }
 
 function Meta({ label, children }: { label: string; children: React.ReactNode }) {

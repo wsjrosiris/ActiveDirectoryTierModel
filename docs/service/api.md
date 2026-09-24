@@ -119,7 +119,10 @@ interface RunRequest {
   includeMsa: boolean; includeGmsa: boolean; includeDmsa: boolean; includeWinLaps: boolean
   admlLanguage?: string                          // Standard aus Einstellungen
 }
-interface DeployRequest extends RunRequest { confirmApply: boolean }   // true erfordert Operator
+interface DeployRequest extends RunRequest {
+  confirmApply: boolean                          // true erfordert Operator
+  planRunId?: number                             // Pflicht für confirmApply, wenn requirePlanBeforeApply aktiv ist
+}
 
 type RunKind = 'Deploy' | 'Audit'
 type RunStatus = 'AwaitingApproval' | 'Queued' | 'Running' | 'Succeeded' | 'Failed' | 'Cancelled' | 'Rejected'
@@ -137,12 +140,26 @@ interface RunSummary {
   approvedBy: string | null; approvedAt: string | null     // bei Ablehnung: wer/wann abgelehnt hat
   approvalComment: string | null
   approvalExpiresAt: string | null                          // nur solange 'AwaitingApproval'
+  planRunId: number | null                                  // Anwenden: Planungslauf, aus dem angewendet wurde
+  admlLanguage: string | null
 }
 interface Finding { type: string; resourceType: string; identifier: string; details: string; [k: string]: any }
 interface RunDetail extends RunSummary {
   summary: Record<string, number> | null   // auditSummary aus dem Report
   findings: Finding[]
   configVersions: Record<string, number>   // Section-Key → verwendete Version
+  plan: DeployPlan | null                  // nur Deploy/Planung
+  planApplicability: { applicable: boolean; reason: string | null; expiresAt: string | null } | null
+}
+interface DeployPlan {
+  metadata: { version: string; scope: string; preferredDc: string; timestamp: string; includes: string[] }
+  summary: { totalActions: number; create: number; update: number; link: number; configure: number; existing: number }
+  phases: { phase: number; name: string; area: string; actionCount: number; existingCount: number }[]
+  actions: { phase: number; area: string; action: string; resourceType: string; name: string; path: string | null;
+             details: Record<string, string | number | boolean | string[]> | null }[]
+  actionCounts: Record<string, number>     // je Aktionsart, vor dem Kürzen gezählt
+  warnings: string[]; errors: string[]
+  truncated: boolean                       // mehr als 5000 Aktionen: Liste gekürzt
 }
 interface LogLine { seq: number; at: string; stream: 'stdout' | 'stderr' | 'system'; level: 'info' | 'warn' | 'error' | 'success'; text: string }
 ```
@@ -153,6 +170,8 @@ interface LogLine { seq: number; at: string; stream: 'stdout' | 'stderr' | 'syst
 | POST | `/api/runs/deploy` | `DeployRequest` → `RunSummary` (202) |
 | POST | `/api/runs/audit` | `RunRequest` → `RunSummary` (202) |
 | GET  | `/api/runs/{id}` | → `RunDetail` |
+| GET  | `/api/runs/{id}/plan` | → `DeployPlan`; 404 ohne Planung |
+| GET  | `/api/runs/plan-candidates?preferredDc&scope&includeMsa&…&admlLanguage` | → `{ requirePlan, maxAgeHours, candidate: { id, requestedBy, finishedAt, expiresAt, summary, changes } \| null, latestPlanRunId, reason }` – passende Planung zum Anwenden |
 | GET  | `/api/runs/{id}/log?after=0` | → `{ status: RunStatus, lines: LogLine[] }` (Zeilen mit `seq > after`, max. 2000) |
 | POST | `/api/runs/{id}/cancel` | → 204 (Operator; bei `AwaitingApproval` darf auch der Antragsteller zurückziehen); 404 unbekannt, 409 bereits beendet |
 | POST | `/api/runs/{id}/approve` | `{ comment?: string }` → `RunSummary` (Operator, **nicht** der Antragsteller → 403); 409 wenn nicht `AwaitingApproval` |
@@ -162,6 +181,11 @@ interface LogLine { seq: number; at: string; stream: 'stdout' | 'stderr' | 'syst
 Die Konfigurationsversionen werden dabei **festgeschrieben** (`configVersions` ist sofort gefüllt) – ausgeführt wird genau
 der Stand, den die freigebende Person sieht, auch wenn die Konfiguration inzwischen weiter bearbeitet wurde. Nach der
 Freigabe → `Queued`. Ablehnung oder Ablauf (`approvalTimeoutHours`) → `Rejected`.
+
+**Anwenden nur nach Planung:** Ist `requirePlanBeforeApply` aktiv, verlangt `confirmApply: true` eine `planRunId`. Der
+Planungslauf muss erfolgreich sein und in Bereich, Add-ons, DC (ohne Groß-/Kleinschreibung), ADML-Sprache und den
+Konfigurationsversionen mit dem aktuellen Stand übereinstimmen und darf nicht älter als `planMaxAgeHours` sein;
+sonst 400 mit Meldung zu `planRunId`. Der Anwenden-Lauf übernimmt die Versionen des Planungslaufs (auch bei Freigabe).
 
 ## Zeitpläne (geplante Audits)
 
@@ -228,6 +252,8 @@ interface Settings {
   requireApproval: boolean        // Vier-Augen-Prinzip für Deploy/Anwenden
   approvalTimeoutHours: number    // 1–720, danach verfällt ein Antrag
   publicBaseUrl: string           // z. B. https://tiermodel01.contoso.com:8443 – für Links in Benachrichtigungen; leer erlaubt
+  requirePlanBeforeApply: boolean // Anwenden nur aus passendem Planungslauf (Standard true)
+  planMaxAgeHours: number         // 1–720, Gültigkeit einer Planung (Standard 24)
   frameworkPath: string           // nur lesen
   pwshPath: string                // nur lesen
 }
@@ -259,7 +285,7 @@ type ChannelType = 'Email' | 'Teams' | 'Webhook'
 interface NotificationChannel {
   id: number; name: string; type: ChannelType; enabled: boolean
   target: string       // Email: Empfänger, durch Komma getrennt · Teams/Webhook: URL (in Antworten gekürzt: nur Schema+Host+"…")
-  events: { drift: boolean; failure: boolean; apply: boolean; approval: boolean }
+  events: { drift: boolean; failure: boolean; apply: boolean; approval: boolean; certificate: boolean }
   lastSentAt: string | null; lastError: string | null; createdAt: string
 }
 interface SmtpSettings {
@@ -281,7 +307,7 @@ interface SmtpSettings {
 | PUT    | `/api/notifications/smtp` | `SmtpSettings` → `SmtpSettings` |
 
 Ereignisse: **drift** (Audit mit Abweichungen), **failure** (Lauf fehlgeschlagen), **apply** (Deploy/Anwenden erfolgreich
-abgeschlossen), **approval** (Freigabe angefordert). Geheimnisse (SMTP-Passwort, Webhook-URLs) werden verschlüsselt gespeichert.
+abgeschlossen), **approval** (Freigabe angefordert, mit Anzahl der geplanten Änderungen), **certificate** (HTTPS-Zertifikat läuft in weniger als 30 Tagen ab; täglich geprüft). Geheimnisse (SMTP-Passwort, Webhook-URLs) werden verschlüsselt gespeichert.
 
 ## Vorschläge für Eingabefelder (alle angemeldeten Benutzer)
 
@@ -297,4 +323,7 @@ Damit keine Werte aus dem Gedächtnis getippt oder als JSON eingegeben werden m�
 ## Sonstiges
 
 - `GET /healthz`: 200 wenn die Datenbank erreichbar ist.
+- `GET /api/health/details` (Admin): `{ status, checkedAt, version, items: { key, title, status: 'ok' | 'warn' | 'error', message, facts: { label, value }[] }[] }`
+  – Anwendung, Zertifikat, Datenbank, Warteschlange, letzte Läufe, Arbeitsverzeichnis, PowerShell, Framework,
+  Hintergrunddienste, Schlüsselspeicher.
 - Alles außerhalb von `/api` liefert die SPA aus (Fallback auf `index.html`).

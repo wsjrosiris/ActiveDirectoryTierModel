@@ -1,20 +1,21 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router'
-import { AlertTriangle, FlaskConical, Info, Rocket, ShieldAlert, UsersRound, Zap } from 'lucide-react'
+import { Link, useNavigate } from 'react-router'
+import { AlertTriangle, ArrowRight, FlaskConical, Info, Lock, Rocket, ShieldAlert, UsersRound, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
-import type { RunRequest } from '@/api/types'
+import type { PlanCandidate, RunRequest } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Tooltip } from '@/components/ui/tooltip'
 import { Page, PageHeader } from '@/components/shared/page-header'
 import { useCan } from '@/features/auth/auth'
 import { useDirtyKeys } from '@/features/config/draft-store'
 import { scopeLabels } from '@/lib/labels'
-import { cn } from '@/lib/utils'
+import { cn, formatDateTime, formatRelative } from '@/lib/utils'
 import { emptyRunRequest, includesFromRequest, RunRequestFields, runRequestError, settingsQuery } from './run-request-form'
+import { useApplyPlan } from './plan-apply'
+import { planCountsText } from './plan-model'
 
 type Mode = 'plan' | 'apply'
 
@@ -23,7 +24,6 @@ export function Component() {
   const canApply = useCan('Operator')
   const [req, setReq] = React.useState<RunRequest>(emptyRunRequest)
   const [mode, setMode] = React.useState<Mode>('plan')
-  const confirm = useConfirm()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const dirty = useDirtyKeys()
@@ -31,68 +31,35 @@ export function Component() {
   const settings = useQuery(settingsQuery)
   const needsApproval = mode === 'apply' && !!settings.data?.requireApproval
 
+  const requirePlan = settings.data?.requirePlanBeforeApply ?? true
+  const applyPlan = useApplyPlan()
+  // Apply only via a reviewed planning run with the same parameters: look for one whenever they change.
+  const candidates = useQuery({
+    queryKey: ['plan-candidates', req],
+    queryFn: () => api.runs.planCandidates(req),
+    enabled: mode === 'apply' && requirePlan && !error && canApply,
+    staleTime: 10_000,
+    meta: { silent: true },
+  })
+  const candidate = requirePlan ? candidates.data?.candidate ?? null : null
+  const blockedByPlan = mode === 'apply' && requirePlan && !candidate
+
   const deploy = useMutation({
-    mutationFn: (confirmApply: boolean) =>
-      api.runs.deploy({ ...req, preferredDc: req.preferredDc.trim(), confirmApply }),
+    mutationFn: () => api.runs.deploy({ ...req, preferredDc: req.preferredDc.trim(), confirmApply: false }),
     onSuccess: (run) => {
       qc.invalidateQueries({ queryKey: ['runs'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
-      if (run.status === 'AwaitingApproval') {
-        toast.success(`Deploy #${run.id} zur Freigabe eingereicht`, { description: 'Ein zweiter Operator muss den Deploy freigeben, bevor er ausgeführt wird.' })
-      } else {
-        toast.success(`Deploy #${run.id} eingereiht`, { description: run.mode === 'Apply' ? 'Änderungen werden angewendet.' : 'Planungslauf (WhatIf).' })
-      }
+      qc.invalidateQueries({ queryKey: ['plan-candidates'] })
+      toast.success(`Deploy #${run.id} eingereiht`, { description: 'Planungslauf (WhatIf).' })
       navigate(`/laeufe/${run.id}`)
     },
   })
 
-  const submit = async () => {
+  const submit = () => {
     if (error) return
-    if (mode === 'apply' && needsApproval) {
-      const ok = await confirm({
-        title: 'Deploy zur Freigabe einreichen?',
-        description: (
-          <div className="grid gap-2">
-            <p>
-              Der Deploy wird erst ausgeführt, wenn ein zweiter Operator ihn freigibt
-              {settings.data?.approvalTimeoutHours ? <> (innerhalb von <strong className="text-foreground">{settings.data.approvalTimeoutHours} Stunden</strong>, danach verfällt der Antrag)</> : null}.
-              Die aktuell gespeicherten Konfigurationsversionen werden dabei festgeschrieben.
-            </p>
-            <p>
-              Nach der Freigabe verändert er das Active Directory über <span className="font-mono font-medium text-foreground">{req.preferredDc}</span>.
-            </p>
-            <p className="text-foreground">
-              Bereich: <strong>{req.scope ? scopeLabels[req.scope] : 'Nur Add-ons'}</strong>
-              {includesFromRequest(req).length > 0 && <> · Add-ons: <strong>{includesFromRequest(req).join(', ')}</strong></>}
-            </p>
-          </div>
-        ),
-        confirmText: 'Zur Freigabe einreichen',
-      })
-      if (!ok) return
-      deploy.mutate(true)
-    } else if (mode === 'apply') {
-      const ok = await confirm({
-        title: 'Änderungen im Active Directory anwenden?',
-        description: (
-          <div className="grid gap-2">
-            <p>
-              Dieser Lauf verändert das produktive Active Directory über <span className="font-mono font-medium text-foreground">{req.preferredDc}</span>.
-              Führen Sie vorher einen Planungslauf aus und prüfen Sie dessen Ausgabe.
-            </p>
-            <p className="text-foreground">
-              Bereich: <strong>{req.scope ? scopeLabels[req.scope] : 'Nur Add-ons'}</strong>
-              {includesFromRequest(req).length > 0 && <> · Add-ons: <strong>{includesFromRequest(req).join(', ')}</strong></>}
-            </p>
-          </div>
-        ),
-        confirmText: 'Jetzt anwenden',
-        destructive: true,
-        typeToConfirm: 'ANWENDEN',
-      })
-      if (!ok) return
-      deploy.mutate(true)
-    } else deploy.mutate(false)
+    if (mode === 'plan') deploy.mutate()
+    else if (!requirePlan) applyPlan.start(req, null)
+    else if (candidate) applyPlan.start(req, candidate.id, candidate.changes)
   }
 
   return (
@@ -145,7 +112,15 @@ export function Component() {
                       onSelect={() => setMode('apply')}
                       icon={<Zap />}
                       title="Anwenden"
-                      description={!canApply ? 'Nur für Operatoren' : settings.data?.requireApproval ? 'Ins AD schreiben – nach Freigabe durch eine zweite Person' : 'Änderungen werden ins AD geschrieben'}
+                      description={
+                        !canApply
+                          ? 'Nur für Operatoren'
+                          : requirePlan
+                            ? 'Ergebnis einer geprüften Planung ins AD schreiben'
+                            : settings.data?.requireApproval
+                              ? 'Ins AD schreiben – nach Freigabe durch eine zweite Person'
+                              : 'Änderungen werden ins AD geschrieben'
+                      }
                       tone="rose"
                       disabled={!canApply}
                     />
@@ -181,6 +156,17 @@ export function Component() {
                 <Row label="Add-ons">{includesFromRequest(req).join(', ') || '–'}</Row>
                 {req.admlLanguage && <Row label="ADML-Sprache"><span className="font-mono">{req.admlLanguage}</span></Row>}
               </dl>
+              {mode === 'apply' && requirePlan && canApply && (
+                <PlanCandidateBox
+                  loading={candidates.isLoading && !error}
+                  invalid={!!error}
+                  candidate={candidate}
+                  reason={candidates.data?.reason ?? null}
+                  latestPlanRunId={candidates.data?.latestPlanRunId ?? null}
+                  maxAgeHours={candidates.data?.maxAgeHours ?? settings.data?.planMaxAgeHours ?? 24}
+                  onPlan={() => setMode('plan')}
+                />
+              )}
               {needsApproval ? (
                 <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
                   <UsersRound className="size-4 shrink-0" />
@@ -200,18 +186,83 @@ export function Component() {
                 type="submit"
                 size="lg"
                 variant={mode === 'apply' && !needsApproval ? 'destructive' : 'default'}
-                disabled={!canEdit || !!error}
-                loading={deploy.isPending}
+                disabled={!canEdit || !!error || blockedByPlan}
+                loading={deploy.isPending || applyPlan.isPending}
                 className="w-full"
               >
-                {!deploy.isPending && (needsApproval ? <UsersRound /> : mode === 'apply' ? <Zap /> : <FlaskConical />)}
-                {needsApproval ? 'Zur Freigabe einreichen …' : mode === 'apply' ? 'Deploy anwenden …' : 'Planungslauf starten'}
+                {!(deploy.isPending || applyPlan.isPending) && (blockedByPlan ? <Lock /> : needsApproval ? <UsersRound /> : mode === 'apply' ? <Zap /> : <FlaskConical />)}
+                {blockedByPlan
+                  ? 'Anwenden gesperrt'
+                  : needsApproval
+                    ? candidate ? `Planung #${candidate.id} zur Freigabe einreichen …` : 'Zur Freigabe einreichen …'
+                    : mode === 'apply'
+                      ? candidate ? `Planung #${candidate.id} anwenden …` : 'Deploy anwenden …'
+                      : 'Planungslauf starten'}
               </Button>
             </CardContent>
           </Card>
         </div>
       </form>
     </Page>
+  )
+}
+
+function PlanCandidateBox({
+  loading,
+  invalid,
+  candidate,
+  reason,
+  latestPlanRunId,
+  maxAgeHours,
+  onPlan,
+}: {
+  loading: boolean
+  invalid: boolean
+  candidate: PlanCandidate | null
+  reason: string | null
+  latestPlanRunId: number | null
+  maxAgeHours: number
+  onPlan: () => void
+}) {
+  if (invalid) return null
+  if (loading) return <div className="h-20 animate-pulse rounded-lg bg-muted/60" aria-label="Passende Planung wird gesucht" />
+  if (candidate) {
+    const counts = candidate.summary ? planCountsText(candidate.summary) : ''
+    return (
+      <div className="grid gap-2 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 text-xs">
+        <div className="flex items-center gap-2">
+          <FlaskConical className="size-4 shrink-0 text-sky-600 dark:text-sky-400" />
+          <span className="min-w-0 flex-1 text-[13px] font-medium">Geprüfte Planung #{candidate.id}</span>
+          <Link to={`/laeufe/${candidate.id}`} className="inline-flex items-center gap-0.5 text-sky-700 hover:underline dark:text-sky-300">
+            Ansehen <ArrowRight className="size-3" />
+          </Link>
+        </div>
+        <p className="text-muted-foreground">
+          {candidate.requestedBy} · {formatRelative(candidate.finishedAt)} ·{' '}
+          <span title={formatDateTime(candidate.expiresAt)}>gültig bis {formatDateTime(candidate.expiresAt)}</span>
+        </p>
+        <p className="text-foreground">
+          {candidate.changes === 0 ? 'Keine Änderungen nötig.' : <><strong className="tabular">{candidate.changes}</strong> {candidate.changes === 1 ? 'Änderung' : 'Änderungen'}{counts && <span className="text-muted-foreground"> ({counts})</span>}</>}
+        </p>
+      </div>
+    )
+  }
+  return (
+    <div className="grid gap-2 rounded-lg border bg-muted/40 p-3 text-xs">
+      <p className="flex items-center gap-2 text-[13px] font-medium"><Lock className="size-4 shrink-0 text-muted-foreground" /> Zuerst Planung starten</p>
+      <p className="text-muted-foreground">
+        Anwenden ist nur mit einer erfolgreichen Planung mit denselben Parametern und demselben Konfigurationsstand möglich (höchstens {maxAgeHours} Stunden alt).
+      </p>
+      {reason && <p className="text-foreground">{reason}</p>}
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="xs" variant="outline" onClick={onPlan}><FlaskConical /> Zum Planungsmodus</Button>
+        {latestPlanRunId && (
+          <Button type="button" size="xs" variant="ghost" asChild>
+            <Link to={`/laeufe/${latestPlanRunId}`}>Planung #{latestPlanRunId} ansehen</Link>
+          </Button>
+        )}
+      </div>
+    </div>
   )
 }
 

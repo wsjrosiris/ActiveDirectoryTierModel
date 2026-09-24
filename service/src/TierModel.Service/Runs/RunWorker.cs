@@ -14,13 +14,18 @@ namespace TierModel.Service.Runs;
 /// Executes queued runs one at a time. Active Directory changes must not interleave,
 /// so there is deliberately no parallelism.
 /// </summary>
-public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, NotificationQueue notifications, IOptions<TierModelOptions> options, ILogger<RunWorker> logger) : BackgroundService
+public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, NotificationQueue notifications, IOptions<TierModelOptions> options,
+    WorkerHeartbeats heartbeats, ILogger<RunWorker> logger) : BackgroundService
 {
+    public const string HeartbeatName = "RunWorker";
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        heartbeats.Beat(HeartbeatName, TimeSpan.FromSeconds(10));
         await RecoverAsync(stoppingToken);
         while (!stoppingToken.IsCancellationRequested)
         {
+            heartbeats.Beat(HeartbeatName, TimeSpan.FromSeconds(10));
             long? next;
             try
             {
@@ -36,6 +41,8 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
             {
                 try
                 {
+                    // A run can take hours; the worker is busy, not stuck.
+                    heartbeats.Busy(HeartbeatName, $"Führt Lauf #{id} aus");
                     await ExecuteRunAsync(id, stoppingToken);
                 }
                 catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
@@ -120,7 +127,9 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
             // Runs approved under the four-eyes principle execute exactly the configuration that was reviewed.
             var pinned = run.ConfigVersions is { } pinnedJson ? JsonSerializer.Deserialize<Dictionary<string, int>>(pinnedJson) : null;
             var snapshot = pinned is null ? await config.SnapshotAsync(linked.Token) : await config.SnapshotAsync(pinned, linked.Token);
-            if (pinned is not null) log.System("Freigegebene Konfigurationsversionen werden verwendet" + (run.ApprovedBy is null ? "." : $" (freigegeben von {run.ApprovedBy})."));
+            if (pinned is not null)
+                log.System((run.PlanRunId is { } planId ? $"Konfigurationsversionen der Planung #{planId} werden verwendet" : "Freigegebene Konfigurationsversionen werden verwendet")
+                    + (run.ApprovedBy is null ? "." : $" (freigegeben von {run.ApprovedBy})."));
             run.ConfigVersions = JsonSerializer.Serialize(snapshot.ToDictionary(s => s.Def.Key, s => s.Version));
             await db.SaveChangesAsync(CancellationToken.None);
             log.System("Konfiguration: " + string.Join(", ", snapshot.Select(s => $"{s.Def.Key} v{s.Version}")));
@@ -144,13 +153,14 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
             run.ExitCode = exitCode;
 
             if (run.Kind == RunKind.Audit) ReadAuditReport(run, workDir, log);
+            var plan = run.Kind == RunKind.Deploy && run.Mode == RunMode.Plan ? ReadDeployPlan(run, workDir, (text, level) => log.System(text, level)) : null;
 
             run.ErrorCount ??= log.ErrorLines;
             status = exitCode == 0 ? RunStatus.Succeeded : RunStatus.Failed;
             message = exitCode == 0
                 ? run.Kind == RunKind.Audit
                     ? run.DriftCount is > 0 ? $"{run.DriftCount} Abweichung(en) gefunden" : "Keine Abweichungen"
-                    : run.Mode == RunMode.Apply ? "Bereitstellung abgeschlossen" : "Planung abgeschlossen"
+                    : run.Mode == RunMode.Apply ? "Bereitstellung abgeschlossen" : PlanMessage(plan)
                 : $"PowerShell wurde mit Code {exitCode} beendet";
         }
         catch (OperationCanceledException) when (cancel.IsCancellationRequested)
@@ -296,6 +306,45 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
     {
         while (await reader.ReadLineAsync() is { } line)
             log.Add(stream, line);
+    }
+
+    public static string PlanMessage(DeployPlan? plan)
+    {
+        if (plan is null) return "Planung abgeschlossen";
+        var n = DeployPlanReader.TotalChanges(plan);
+        return n switch
+        {
+            0 => "Planung abgeschlossen: keine Änderungen nötig",
+            1 => "Planung abgeschlossen: 1 Änderung",
+            _ => $"Planung abgeschlossen: {n} Änderungen",
+        };
+    }
+
+    /// <summary>Reads out/deploy-plan.json of a planning run into <see cref="Run.Plan"/>. Never fails the run.</summary>
+    public static DeployPlan? ReadDeployPlan(Run run, string workDir, Action<string, string> log)
+    {
+        var file = Path.Combine(workDir, "out", DeployPlanReader.FileName);
+        if (!File.Exists(file))
+        {
+            log($"Keine Plandatei ({DeployPlanReader.FileName}) gefunden – geplante Änderungen stehen nur im Protokoll.", "warn");
+            return null;
+        }
+        try
+        {
+            var plan = DeployPlanReader.Parse(File.ReadAllText(file));
+            run.Plan = DeployPlanReader.Serialize(plan);
+            log($"Plan gelesen: {DeployPlanReader.TotalChanges(plan)} Änderung(en)"
+                + (plan.Truncated ? $", die ersten {DeployPlanReader.MaxActions} werden gespeichert" : "")
+                + (plan.Warnings.Count > 0 ? $", {plan.Warnings.Count} Warnung(en)" : "")
+                + (plan.Errors.Count > 0 ? $", {plan.Errors.Count} Fehler" : "") + ".",
+                plan.Errors.Count > 0 ? "error" : plan.Warnings.Count > 0 || plan.Truncated ? "warn" : "info");
+            return plan;
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException or FormatException)
+        {
+            log($"Plandatei konnte nicht gelesen werden: {ex.Message}", "warn");
+            return null;
+        }
     }
 
     private static void ReadAuditReport(Run run, string workDir, RunLogWriter log)

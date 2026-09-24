@@ -12,6 +12,8 @@ import { TierBadge, TierBadgeFor } from '@/components/shared/badges'
 import { OuTree } from '@/components/shared/ou-tree'
 import { DOMAIN, ouFullDn, ouParentOptions, toFullDn, type OuItem } from '@/lib/ou'
 import { tierOf, type Tier } from '@/lib/tier'
+import { aclTierIssues, lapsTierIssues, userTierIssues } from '@/lib/tier-rules'
+import { useGroupTierMap } from './tier-rule-alerts'
 import { ListEditor, type Column, type FormProps, type Item } from './list-editor'
 import {
   CheckboxGrid,
@@ -320,10 +322,12 @@ function UserForm({ value, onChange, errors }: FormProps) {
 
 export function UsersEditor(props: EditorProps) {
   const { items, onItemsChange } = useListBinding(props, 'users')
+  const groupTiers = useGroupTierMap()
   return (
     <ListEditor
       items={items}
       onItemsChange={onItemsChange}
+      hints={(u) => userTierIssues(u, groupTiers)}
       columns={[
         { id: 'sam', header: 'sAMAccountName', cell: (u) => <Mono>{u.samAccountName}</Mono>, sortValue: (u) => u.samAccountName ?? '' },
         { id: 'dn', header: 'Anzeigename', cell: (u) => u.displayName, sortValue: (u) => u.displayName ?? '', className: 'hidden @2xl:table-cell' },
@@ -453,6 +457,7 @@ function makeAclForm(objectTypes: string[], showTier: boolean) {
 
 export function AclsEditor(props: EditorProps) {
   const { items, onItemsChange } = useListBinding(props, 'aclDelegations')
+  const groupTiers = useGroupTierMap()
   const isMsa = props.sectionKey !== 'acls'
   const objectTypes = React.useMemo(() => {
     const s = new Set(COMMON_OBJECT_TYPES)
@@ -473,6 +478,7 @@ export function AclsEditor(props: EditorProps) {
       <ListEditor
         items={items}
         onItemsChange={onItemsChange}
+        hints={(a) => aclTierIssues(a, groupTiers)}
         columns={[
           { id: 'principal', header: 'Prinzipal', cell: (a) => <span className="font-medium">{a.identityreference}</span>, sortValue: (a) => a.identityreference ?? '' },
           {
@@ -556,10 +562,12 @@ function WinLapsForm({ value, onChange, errors }: FormProps) {
 
 export function WinLapsEditor(props: EditorProps) {
   const { items, onItemsChange } = useListBinding(props, 'winLapsDelegations')
+  const groupTiers = useGroupTierMap()
   return (
     <ListEditor
       items={items}
       onItemsChange={onItemsChange}
+      hints={(w) => lapsTierIssues(w, groupTiers)}
       columns={[
         { id: 'ou', header: 'OU', cell: (w) => <DnText value={w.ouDn} />, sortValue: (w) => w.ouDn ?? '' },
         { id: 'read', header: 'Lesen', cell: (w) => w.readGroup, sortValue: (w) => w.readGroup ?? '' },

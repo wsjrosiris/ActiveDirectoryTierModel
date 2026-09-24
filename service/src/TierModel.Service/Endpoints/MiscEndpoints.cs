@@ -42,6 +42,9 @@ public static class MiscEndpoints
 
         var api = app.MapGroup("/api").RequireAuthorization(nameof(Role.Viewer));
 
+        api.MapGet("/health/details", (HealthService health, CancellationToken ct) => health.GetAsync(ct))
+            .RequireAuthorization(nameof(Role.Admin));
+
         api.MapGet("/changelog", async (AppDbContext db, string? entityType, int? page, int? pageSize) =>
         {
             var size = Math.Clamp(pageSize ?? 50, 1, 200);
@@ -67,6 +70,7 @@ public static class MiscEndpoints
                 errors["admlLanguage"] = ["Sprache im Format xx-XX angeben."];
             if (r.RunRetentionDays is < 0 or > 3650) errors["runRetentionDays"] = ["0 bis 3650 Tage (0 = unbegrenzt)."];
             if (r.ApprovalTimeoutHours is < 1 or > 720) errors["approvalTimeoutHours"] = ["1 bis 720 Stunden."];
+            if (r.PlanMaxAgeHours is < 1 or > 720) errors["planMaxAgeHours"] = ["1 bis 720 Stunden."];
             if (!string.IsNullOrWhiteSpace(r.PublicBaseUrl)
                 && !(Uri.TryCreate(r.PublicBaseUrl.Trim(), UriKind.Absolute, out var url) && url.Scheme is "https" or "http"))
                 errors["publicBaseUrl"] = ["Vollständige Adresse angeben, z. B. https://tiermodel01.contoso.com:8443"];
@@ -76,6 +80,9 @@ public static class MiscEndpoints
             await s.UpdateAsync(r);
             var approvalText = r.RequireApproval is { } ra && ra != before.RequireApproval
                 ? ra ? ", Vier-Augen-Prinzip EIN" : ", Vier-Augen-Prinzip AUS" : "";
+            if (r.RequirePlanBeforeApply is { } rp && rp != before.RequirePlanBeforeApply)
+                approvalText += rp ? ", Anwenden nur nach Planung EIN" : ", Anwenden nur nach Planung AUS";
+            if (r.PlanMaxAgeHours is { } ph && ph != before.PlanMaxAgeHours) approvalText += $", Planung gültig {ph} Stunden";
             log.Add(ctx.User.UserName(), "settings.update", "settings", null,
                 $"Einstellungen geändert: DC '{r.DefaultPreferredDc}', ADML {r.AdmlLanguage}, Aufbewahrung {r.RunRetentionDays} Tage{approvalText}");
             await db.SaveChangesAsync();

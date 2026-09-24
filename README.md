@@ -80,12 +80,12 @@ Beim TierModel Service gelten diese Anforderungen für das **Dienstkonto**.
 | Bereich | Funktionen |
 |---|---|
 | **Dashboard** | Kennzahlen, letzter Audit-/Deploy-Status, Drift-Verlauf, OU-Baum mit Tier-Farben, letzte Läufe und Änderungen |
-| **Konfiguration** | Formulare für OUs, Gruppen, Konten, ACL-Delegationen, MSA/gMSA/dMSA und Windows LAPS; Formulare auch für GPOs, ADMX/ADML, GUID-Zuordnungen und Abhängigkeiten (kein JSON-Editor, Auswahlfelder mit Suche und Vorschlägen aus Konfiguration und AD); Rückgängig/Wiederholen, Diff vor dem Speichern, Versionen und Wiederherstellung, Validierung, OUs umbenennen und verschieben mit Anpassung aller Verweise, Export |
-| **Deploy** | Planen (WhatIf) oder Anwenden – Anwenden nur für Operatoren, mit Bestätigung und nur ohne Validierungsfehler |
+| **Konfiguration** | Formulare für OUs, Gruppen, Konten, ACL-Delegationen, MSA/gMSA/dMSA und Windows LAPS; Formulare auch für GPOs, ADMX/ADML, GUID-Zuordnungen und Abhängigkeiten (kein JSON-Editor, Auswahlfelder mit Suche und Vorschlägen aus Konfiguration und AD); Rückgängig/Wiederholen, Diff vor dem Speichern, Versionen und Wiederherstellung, Validierung mit Tier-Regeln (Warnung direkt im Formular, wenn ein niedrigeres Tier ein höheres steuern würde), OUs umbenennen und verschieben mit Anpassung aller Verweise, Export |
+| **Deploy** | Planen (WhatIf) mit lesbarer Liste der geplanten Änderungen; Anwenden nur aus einer passenden, aktuellen Planung, nur für Operatoren, mit Bestätigung und nur ohne Validierungsfehler |
 | **Audits** | sofort oder per Zeitplan (Cron + Zeitzone), Befunde je Lauf |
 | **Läufe** | Warteschlange, Live-Protokoll, Abbrechen, verwendete Konfigurationsversionen |
 | **Änderungsprotokoll** | wer hat wann was geändert, gestartet oder freigegeben |
-| **Administration** | Benutzer mit Rollen (Betrachter, Bearbeiter, Operator, Administrator), Windows-Anmeldung mit AD-Gruppen, Benachrichtigungen, Vier-Augen-Prinzip, Einstellungen |
+| **Administration** | Benutzer mit Rollen (Betrachter, Bearbeiter, Operator, Administrator), Windows-Anmeldung mit AD-Gruppen, Benachrichtigungen, Vier-Augen-Prinzip, Systemzustand (Zertifikat, Datenbank, Warteschlange, Hintergrunddienste), Einstellungen |
 
 **Technik:** ASP.NET Core 10 als Windows-Dienst (self-contained, keine .NET-Installation nötig), PostgreSQL,
 React/TypeScript-Oberfläche, die der Dienst selbst ausliefert. Nur HTTPS, eigene Konten mit Sperre nach
@@ -98,6 +98,7 @@ Fehlversuchen, CSRF-Schutz, Content-Security-Policy.
 | [Überblick & Architektur](docs/service/index.md) | Wie der Dienst aufgebaut ist und einen Lauf ausführt |
 | [Installation](docs/service/installation.md) | Voraussetzungen, Dienstkonto, Assistent, Aktualisieren, Deinstallieren |
 | [Bedienung](docs/service/bedienung.md) | Rollen, Konfiguration, Deploy, Audits, Zeitpläne, Läufe |
+| [Roadmap](docs/service/roadmap.md) | Geplante Funktionen und Umsetzungsstand |
 | [Betrieb](docs/service/betrieb.md) | Konfigurationsdatei, Protokolle, Sicherung, Zertifikat, Kommandozeile, Fehlerbehebung |
 | [Sicherheit](docs/service/sicherheit.md) | Einstufung als Tier-0-System, Schutzmaßnahmen, Härtung |
 | [Entwicklung](docs/service/entwicklung.md) | Lokale Umgebung, Tests, Release-Paket, Datenbank |

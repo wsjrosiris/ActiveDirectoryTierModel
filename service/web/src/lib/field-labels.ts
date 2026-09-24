@@ -159,6 +159,26 @@ export const fieldLabels: Record<string, string> = {
   error: 'Fehler',
   ip: 'IP-Adresse',
   count: 'Anzahl',
+  // deploy plan details
+  groupScope: 'Gruppenbereich',
+  groupCategory: 'Gruppentyp',
+  principal: 'Prinzipal',
+  identityReference: 'Prinzipal',
+  rights: 'Rechte',
+  activeDirectoryRights: 'Rechte',
+  objectType: 'Objekttyp',
+  inheritance: 'Vererbung',
+  accessControlType: 'Zugriffstyp',
+  backupId: 'Backup-ID',
+  enforced: 'Erzwungen',
+  addGroups: 'Hinzuzufügende Gruppen',
+  removeGroups: 'Zu entfernende Gruppen',
+  language: 'Sprache',
+  distinguishedName: 'Distinguished Name',
+  gpoName: 'GPO',
+  file: 'Datei',
+  existing: 'Vorhanden',
+  reasonText: 'Begründung',
 }
 
 /** "protectFromAccidentalDeletion" → "Protect from accidental deletion" (fallback for unknown field names).

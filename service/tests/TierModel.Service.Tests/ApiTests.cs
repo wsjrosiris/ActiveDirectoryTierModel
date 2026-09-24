@@ -48,7 +48,8 @@ public sealed class ApiFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("TierModel__PwshPath", Path.Combine(TestPaths.RepoRoot, "service", "dev", "fake-pwsh.sh"));
         Environment.SetEnvironmentVariable("TierModel__RequireHttps", "false");
 
-        Factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.UseEnvironment("Testing"));
+        Factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.UseEnvironment("Testing")
+            .ConfigureServices(services => services.AddSingleton<Microsoft.AspNetCore.Hosting.IStartupFilter, TestClientAddressFilter>()));
         _ = Factory.Server; // start the host: migrates and imports the framework config
 
         await using var scope = Factory.Services.CreateAsyncScope();
@@ -66,6 +67,25 @@ public sealed class ApiFixture : IAsyncLifetime
         await conn.OpenAsync();
         await new NpgsqlCommand($"DROP DATABASE IF EXISTS {_database} WITH (FORCE)", conn).ExecuteNonQueryAsync();
     }
+}
+
+/// <summary>
+/// Lets a test client pick its remote address (header X-Test-Client-Ip). Logins are rate limited per address,
+/// and the test server has none, so otherwise all tests would share one small login budget.
+/// </summary>
+public sealed class TestClientAddressFilter : Microsoft.AspNetCore.Hosting.IStartupFilter
+{
+    public const string Header = "X-Test-Client-Ip";
+
+    public Action<Microsoft.AspNetCore.Builder.IApplicationBuilder> Configure(Action<Microsoft.AspNetCore.Builder.IApplicationBuilder> next) => app =>
+    {
+        app.Use(nextMiddleware => ctx =>
+        {
+            if (ctx.Request.Headers.TryGetValue(Header, out var ip) && IPAddress.TryParse(ip.ToString(), out var address)) ctx.Connection.RemoteIpAddress = address;
+            return nextMiddleware(ctx);
+        });
+        next(app);
+    };
 }
 
 /// <summary>All API tests share one host and database: the host is configured through process-wide environment variables.</summary>

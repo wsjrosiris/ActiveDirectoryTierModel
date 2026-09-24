@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FolderCog, Globe, Lock, Save, Settings2, Terminal, UsersRound } from 'lucide-react'
+import { FlaskConical, FolderCog, Globe, Lock, Save, Settings2, Terminal, UsersRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import type { Settings, SettingsUpdate } from '@/api/types'
@@ -46,9 +46,10 @@ function SettingsPage() {
   const dirty = form && q.data && JSON.stringify(form) !== JSON.stringify(q.data)
   const retentionInvalid = form ? !Number.isInteger(form.runRetentionDays) || (form.runRetentionDays < 0 || form.runRetentionDays > 3650) : false
   const timeoutInvalid = form ? !Number.isInteger(form.approvalTimeoutHours) || form.approvalTimeoutHours < 1 || form.approvalTimeoutHours > 720 : false
+  const planAgeInvalid = form ? !Number.isInteger(form.planMaxAgeHours) || form.planMaxAgeHours < 1 || form.planMaxAgeHours > 720 : false
   const urlError = form ? publicUrlError(form.publicBaseUrl) : null
   const langError = form ? (form.admlLanguage.trim() ? languageError(form.admlLanguage.trim()) : 'Bitte eine Sprache wählen.') : null
-  const invalid = retentionInvalid || timeoutInvalid || !!urlError || !!langError
+  const invalid = retentionInvalid || timeoutInvalid || planAgeInvalid || !!urlError || !!langError
 
   return (
     <Page className="max-w-3xl">
@@ -153,6 +154,43 @@ function SettingsPage() {
                   aria-invalid={!!urlError || undefined}
                 />
               </Field>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle className="flex items-center gap-2"><FlaskConical className="size-4 text-muted-foreground" /> Planung vor dem Anwenden</CardTitle>
+                <CardDescription>Angewendet wird nur, was vorher in einem Planungslauf sichtbar war – mit denselben Parametern und demselben Konfigurationsstand.</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-5">
+              <label htmlFor="st-require-plan" className="flex items-center justify-between gap-4 rounded-lg border px-3.5 py-3">
+                <span className="grid">
+                  <span className="text-[13px] font-medium">Anwenden nur nach geprüfter Planung</span>
+                  <span className="text-xs text-muted-foreground">
+                    „Anwenden“ ist nur aus einem erfolgreichen Planungslauf mit gleichem Bereich, Domain Controller und gleichen Konfigurationsversionen möglich.
+                  </span>
+                </span>
+                <Switch id="st-require-plan" checked={form.requirePlanBeforeApply} onCheckedChange={(v) => setForm({ ...form, requirePlanBeforeApply: v })} />
+              </label>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <Field
+                  label="Gültigkeit einer Planung (Stunden)"
+                  htmlFor="st-plan-age"
+                  error={planAgeInvalid ? 'Bitte eine ganze Zahl von 1 bis 720 angeben.' : undefined}
+                  hint={`Ältere Planungen können nicht mehr angewendet werden${form.planMaxAgeHours >= 24 && Number.isInteger(form.planMaxAgeHours) ? ` (≈ ${formatDays(form.planMaxAgeHours)})` : ''}.`}
+                >
+                  <Input
+                    id="st-plan-age"
+                    type="number"
+                    min={1}
+                    max={720}
+                    value={Number.isNaN(form.planMaxAgeHours) ? '' : form.planMaxAgeHours}
+                    onChange={(e) => setForm({ ...form, planMaxAgeHours: e.target.valueAsNumber })}
+                    aria-invalid={planAgeInvalid || undefined}
+                  />
+                </Field>
+              </div>
             </CardContent>
           </Card>
           <Card>

@@ -45,7 +45,13 @@ public static class RunEndpoints
                 return Results.Problem(title: "Nur Operatoren dürfen Änderungen im Active Directory anwenden", statusCode: 403);
             var errors = RunValidation.Validate(r.ToRunRequest());
             if (errors.Count > 0) return Results.ValidationProblem(errors);
-            var run = await service.EnqueueAsync(RunKind.Deploy, r.ToRunRequest(), r.ConfirmApply, ctx.User.UserName());
+            Run? plan = null;
+            if (r.ConfirmApply)
+            {
+                (plan, var planError) = await service.CheckPlanForApplyAsync(r);
+                if (planError is not null) return Results.ValidationProblem(new Dictionary<string, string[]> { ["planRunId"] = [planError] });
+            }
+            var run = await service.EnqueueAsync(RunKind.Deploy, r.ToRunRequest(), r.ConfirmApply, ctx.User.UserName(), planRun: plan);
             return Results.Accepted($"/api/runs/{run.Id}", RunSummaryDto.From(run));
         }).RequireAuthorization(nameof(Role.Editor));
 
@@ -57,15 +63,36 @@ public static class RunEndpoints
             return Results.Accepted($"/api/runs/{run.Id}", RunSummaryDto.From(run));
         }).RequireAuthorization(nameof(Role.Editor));
 
-        runs.MapGet("/{id:long}", async (long id, AppDbContext db) =>
+        runs.MapGet("/{id:long}", async (long id, AppDbContext db, RunService service, CancellationToken ct) =>
         {
-            var run = await db.Runs.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id);
+            var run = await db.Runs.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id, ct);
             if (run is null) return Results.NotFound();
             var dto = (JsonObject)JsonSerializer.SerializeToNode(RunSummaryDto.From(run), JsonDefaults.Options)!;
             dto["summary"] = run.Summary is null ? null : JsonNode.Parse(run.Summary);
             dto["findings"] = run.Findings is null ? new JsonArray() : JsonNode.Parse(run.Findings);
             dto["configVersions"] = run.ConfigVersions is null ? new JsonObject() : JsonNode.Parse(run.ConfigVersions);
+            dto["plan"] = JsonSerializer.SerializeToNode(DeployPlanReader.Deserialize(run.Plan), JsonDefaults.Options);
+            dto["planApplicability"] = JsonSerializer.SerializeToNode(await service.PlanApplicabilityAsync(run, ct), JsonDefaults.Options);
             return Results.Json(dto, JsonDefaults.Options);
+        });
+
+        // The plan of a planning run on its own, e.g. for the approval view of the apply run that refers to it.
+        runs.MapGet("/{id:long}/plan", async (long id, AppDbContext db, CancellationToken ct) =>
+        {
+            var run = await db.Runs.AsNoTracking().Where(r => r.Id == id).Select(r => new { r.Plan }).FirstOrDefaultAsync(ct);
+            if (run is null) return Results.NotFound();
+            return DeployPlanReader.Deserialize(run.Plan) is { } plan
+                ? Results.Json(plan, JsonDefaults.Options)
+                : Results.Problem(title: "Für diesen Lauf liegt keine Planung vor", statusCode: 404);
+        });
+
+        runs.MapGet("/plan-candidates", async (string? preferredDc, DeployScope? scope, bool? includeMsa, bool? includeGmsa, bool? includeDmsa, bool? includeWinLaps,
+            string? admlLanguage, RunService service, CancellationToken ct) =>
+        {
+            var r = new RunRequest(preferredDc ?? "", scope, includeMsa ?? false, includeGmsa ?? false, includeDmsa ?? false, includeWinLaps ?? false, admlLanguage);
+            var errors = RunValidation.Validate(r);
+            if (errors.Count > 0) return Results.ValidationProblem(errors);
+            return Results.Json(await service.FindPlanCandidateAsync(r, ct), JsonDefaults.Options);
         });
 
         runs.MapGet("/{id:long}/log", async (long id, int? after, AppDbContext db) =>

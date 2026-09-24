@@ -132,6 +132,9 @@ Damit die Links funktionieren, unter *Einstellungen* die **öffentliche Adresse*
 Webhook-URLs und das SMTP-Passwort werden verschlüsselt gespeichert und nicht wieder angezeigt. Fehlgeschlagene
 Zustellungen werden dreimal wiederholt und stehen danach am Kanal und im Änderungsprotokoll.
 
+Das Ereignis **Zertifikat** meldet einmal täglich, wenn das HTTPS-Zertifikat in weniger als 30 Tagen abläuft. Den
+Gesamtzustand des Dienstes zeigt *Administration › Systemzustand*.
+
 Der Dienst braucht für E-Mail Zugang zum SMTP-Server und für Teams/Webhooks ausgehenden HTTPS-Zugang (ggf. über den
 System-Proxy).
 

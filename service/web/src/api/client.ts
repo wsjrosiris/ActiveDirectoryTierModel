@@ -10,7 +10,10 @@ import type {
   ChangePasswordRequest,
   CreateUserRequest,
   Dashboard,
+  DeployPlan,
   DeployRequest,
+  HealthDetails,
+  PlanCandidates,
   LoginRequest,
   LogResponse,
   MeResponse,
@@ -229,6 +232,22 @@ export const api = {
     cancel: (id: number) => post<void>(`/api/runs/${id}/cancel`),
     approve: (id: number, body: ApproveRequest) => post<RunSummary>(`/api/runs/${id}/approve`, body),
     reject: (id: number, body: RejectRequest) => post<RunSummary>(`/api/runs/${id}/reject`, body),
+    plan: (id: number) => get<DeployPlan>(`/api/runs/${id}/plan`),
+    planCandidates: (r: RunRequest) =>
+      get<PlanCandidates>(
+        `/api/runs/plan-candidates${qs({
+          preferredDc: r.preferredDc.trim(),
+          scope: r.scope,
+          includeMsa: r.includeMsa ? 'true' : undefined,
+          includeGmsa: r.includeGmsa ? 'true' : undefined,
+          includeDmsa: r.includeDmsa ? 'true' : undefined,
+          includeWinLaps: r.includeWinLaps ? 'true' : undefined,
+          admlLanguage: r.admlLanguage,
+        })}`,
+      ),
+  },
+  health: {
+    details: () => get<HealthDetails>('/api/health/details'),
   },
   schedules: {
     list: () => get<Schedule[]>('/api/schedules'),

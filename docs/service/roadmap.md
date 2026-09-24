@@ -249,6 +249,10 @@ Geführte Dialoge, die mehrere Bereiche in **einem** Entwurf ändern (bestehende
 
 | Punkt | Stand |
 |---|---|
-| Phase 0 | in Arbeit |
-| 1, 2, 3, 13, 21 | geplant |
-| übrige | geplant |
+| Phase 0 (Audit-Bericht, Plan als JSON, `Resolve-ADPrincipalSid`) | umgesetzt |
+| 1 Übersetzte Gruppennamen | umgesetzt (Test auf echtem DC ausstehend) |
+| 2 Lesbarer Planungslauf | umgesetzt |
+| 3 Anwenden nur nach Planung | umgesetzt |
+| 13 Tier-Regeln | umgesetzt |
+| 21 Systemzustand | umgesetzt |
+| Phase 2–5 | geplant |

@@ -73,6 +73,8 @@ import {
   type GpoKind,
   type Obj,
 } from './gpo-model'
+import { gpoLinkTierIssues } from '@/lib/tier-rules'
+import { TierRuleAlerts } from './tier-rule-alerts'
 
 /* Form editor for tiermodel-gpos.json: link targets (master) → GPO lists (detail) → edit sheet.
  * Content is immutable; every edit spreads the original objects so unknown keys survive. */
@@ -931,6 +933,7 @@ function GpoSheetBody({
       </SheetHeader>
       <SheetBody>
         <div className="grid min-w-0 gap-6 [&>*]:min-w-0">
+          <TierRuleAlerts issues={state.targetKey === TEMPLATE_KEY ? [] : gpoLinkTierIssues(value.name, state.targetKey)} />
           <GpoForm value={value} update={update} errors={errors} readOnly={readOnly} targetKey={state.targetKey} kind={state.kind} reference={state.reference} />
         </div>
       </SheetBody>

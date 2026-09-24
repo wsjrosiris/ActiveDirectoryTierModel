@@ -5,6 +5,7 @@ import {
   Bell,
   CheckCircle2,
   Hourglass,
+  KeySquare,
   Mail,
   MessagesSquare,
   MoreHorizontal,
@@ -71,7 +72,8 @@ const eventMeta: { key: keyof ChannelEvents; label: string; description: string;
   { key: 'drift', label: 'Drift', description: 'Ein Audit hat Abweichungen vom Soll-Zustand gefunden.', icon: <ScanSearch /> },
   { key: 'failure', label: 'Fehler', description: 'Ein Deploy oder Audit ist fehlgeschlagen.', icon: <XCircle /> },
   { key: 'apply', label: 'Angewendet', description: 'Ein Deploy im Modus „Anwenden“ wurde erfolgreich abgeschlossen.', icon: <Rocket /> },
-  { key: 'approval', label: 'Freigabe', description: 'Ein Deploy wartet auf die Freigabe durch eine zweite Person.', icon: <Hourglass /> },
+  { key: 'approval', label: 'Freigabe', description: 'Ein Deploy wartet auf die Freigabe durch eine zweite Person (mit den Zählern der Planung).', icon: <Hourglass /> },
+  { key: 'certificate', label: 'Zertifikat', description: 'Das HTTPS-Zertifikat des Dienstes läuft in weniger als 30 Tagen ab (tägliche Prüfung).', icon: <KeySquare /> },
 ]
 
 function NotificationsPage() {
@@ -243,7 +245,7 @@ function ChannelCard({ channel: c, onEdit, smtpMissing }: { channel: Notificatio
   )
 }
 
-const emptyEvents: ChannelEvents = { drift: true, failure: true, apply: false, approval: false }
+const emptyEvents: ChannelEvents = { drift: true, failure: true, apply: false, approval: false, certificate: true }
 
 const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+$/
 

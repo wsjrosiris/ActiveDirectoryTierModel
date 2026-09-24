@@ -52,6 +52,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.ConfigVersions).HasColumnType("jsonb");
             e.Property(x => x.Summary).HasColumnType("jsonb");
             e.Property(x => x.Findings).HasColumnType("jsonb");
+            e.Property(x => x.Plan).HasColumnType("jsonb");
+            e.HasIndex(x => x.PlanRunId);
         });
 
         b.Entity<RunLogLine>(e =>

@@ -6,9 +6,11 @@ using TierModel.Service.Data;
 namespace TierModel.Service.Runs;
 
 /// <summary>Queues scheduled audits when they are due and removes expired run data once a day.</summary>
-public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptions> options, ILogger<ScheduleWorker> logger) : BackgroundService
+public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptions> options, WorkerHeartbeats heartbeats, ILogger<ScheduleWorker> logger) : BackgroundService
 {
+    public const string HeartbeatName = "ScheduleWorker";
     private DateTimeOffset _lastCleanup = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastCertificateCheck = DateTimeOffset.MinValue;
 
     public static DateTimeOffset? NextOccurrence(string cron, string timeZone, DateTimeOffset after)
     {
@@ -44,6 +46,7 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
         do
         {
+            heartbeats.Beat(HeartbeatName, TimeSpan.FromSeconds(30));
             try
             {
                 await QueueDueAsync(stoppingToken);
@@ -52,6 +55,12 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
                 {
                     await CleanupAsync(stoppingToken);
                     _lastCleanup = DateTimeOffset.UtcNow;
+                }
+                if (DateTimeOffset.UtcNow - _lastCertificateCheck > TimeSpan.FromDays(1))
+                {
+                    _lastCertificateCheck = DateTimeOffset.UtcNow;
+                    await using var scope = scopes.CreateAsyncScope();
+                    await scope.ServiceProvider.GetRequiredService<HealthService>().CheckCertificateExpiryAsync(stoppingToken);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

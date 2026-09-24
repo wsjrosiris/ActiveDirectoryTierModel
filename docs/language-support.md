@@ -1,11 +1,15 @@
 # Language Support
 
-> **Update (this fork, v1.3.0+):** The host operating system check now accepts 19 languages
-> (English, German, French, Spanish, Italian, Dutch, Portuguese, Turkish, Japanese, Korean, Chinese,
-> Polish, Russian, Swedish, Danish, Finnish, Greek, Czech, Hungarian). The Active Directory language is
-> detected and recorded but **not used yet**: configuration and the Domain Admins check rely on the
-> English group names, so **domains with localized group names are still unsupported**. The rest of this
-> page describes the original English-only behaviour.
+> **Update (this fork, Unreleased):** Domains with localized group names (e.g. German `Domänen-Admins`)
+> are **supported**. The configuration keeps the English names; built-in users and groups are resolved via their
+> fixed SIDs/RIDs (`Get-TierModelWellKnownPrincipal`): domain-relative RIDs such as 512 *Domain Admins* or
+> 516 *Domain Controllers*, BUILTIN SIDs `S-1-5-32-5xx` and NT AUTHORITY SIDs. Schema Admins, Enterprise Admins,
+> Enterprise Key Admins and Enterprise Read-only Domain Controllers are built from the **forest root** domain SID,
+> so child domains work as well. The Domain Admins prerequisite check, Deny-Apply entries of GPOs, user rights
+> (`resolvableGroups`, `forestRootOnly`) and Windows LAPS groups use this resolution. The detected AD language is
+> reported for information only. Groups without a fixed RID (e.g. *DnsAdmins*) are still looked up by name.
+> The host operating system check accepts 19 languages. The rest of this page describes the original English-only
+> behaviour and is kept for background.
 
 > **Status: English (`en-US`) only.** At this time the Active Directory Tier Model
 > supports deploying and auditing only where **both** the host operating system (the

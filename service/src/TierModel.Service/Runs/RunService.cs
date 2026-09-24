@@ -8,9 +8,18 @@ namespace TierModel.Service.Runs;
 
 public enum ApprovalOutcome { Done, NotFound, NotAwaiting, OwnRequest, Expired }
 
+public record PlanCandidateDto(long Id, string RequestedBy, DateTimeOffset? FinishedAt, DateTimeOffset? ExpiresAt, PlanSummaryDto? Summary, int Changes);
+
+/// <summary>Latest planning run usable for an apply with the given parameters, or why none is.</summary>
+public record PlanCandidatesDto(bool RequirePlan, int MaxAgeHours, PlanCandidateDto? Candidate, long? LatestPlanRunId, string? Reason);
+
+/// <summary>Whether a planning run can be applied right now.</summary>
+public record PlanApplicabilityDto(bool Applicable, string? Reason, DateTimeOffset? ExpiresAt);
+
 public class RunService(AppDbContext db, RunQueue queue, ChangeLogService changeLog, SettingsService settings, ConfigService config, NotificationQueue notifications)
 {
-    public async Task<Run> EnqueueAsync(RunKind kind, RunRequest r, bool confirmApply, string user, RunTrigger trigger = RunTrigger.Manual, long? scheduleId = null, CancellationToken ct = default)
+    public async Task<Run> EnqueueAsync(RunKind kind, RunRequest r, bool confirmApply, string user, RunTrigger trigger = RunTrigger.Manual, long? scheduleId = null,
+        CancellationToken ct = default, Run? planRun = null)
     {
         var s = await settings.GetAsync(ct);
         var run = new Run
@@ -30,6 +39,12 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
             ScheduleId = scheduleId,
             CreatedAt = DateTimeOffset.UtcNow,
         };
+        if (run.Mode == RunMode.Apply && planRun is not null)
+        {
+            // Apply exactly the configuration the reviewed planning run was made with.
+            run.PlanRunId = planRun.Id;
+            run.ConfigVersions = planRun.ConfigVersions;
+        }
         if (run.Mode == RunMode.Apply && s.RequireApproval)
         {
             // Four-eyes principle: a second operator must approve. Pin the configuration now, so exactly
@@ -37,12 +52,13 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
             run.Status = RunStatus.AwaitingApproval;
             run.ApprovalRequired = true;
             run.ApprovalExpiresAt = run.CreatedAt.AddHours(s.ApprovalTimeoutHours);
-            run.ConfigVersions = JsonSerializer.Serialize((await config.SnapshotAsync(ct)).ToDictionary(x => x.Def.Key, x => x.Version));
+            run.ConfigVersions ??= JsonSerializer.Serialize((await config.SnapshotAsync(ct)).ToDictionary(x => x.Def.Key, x => x.Version));
         }
         db.Runs.Add(run);
         await db.SaveChangesAsync(ct);
 
         var what = kind == RunKind.Audit ? "Audit" : run.Mode == RunMode.Apply ? "Deploy (Anwenden)" : "Deploy (Planung)";
+        if (run.PlanRunId is { } planId) what += $" nach Planung #{planId}";
         var scope = run.Scope?.ToString() ?? string.Join(", ", RunSummaryDto.IncludeList(run.IncludeMsa, run.IncludeGmsa, run.IncludeDmsa, run.IncludeWinLaps));
         changeLog.Add(user, kind == RunKind.Audit ? "run.audit" : "run.deploy", "run", run.Id.ToString(),
             run.Status == RunStatus.AwaitingApproval
@@ -52,6 +68,67 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
         if (run.Status == RunStatus.AwaitingApproval) notifications.Enqueue(NotificationEvent.ApprovalRequested, run.Id);
         else queue.Notify();
         return run;
+    }
+
+    private async Task<Dictionary<string, int>> CurrentVersionsAsync(CancellationToken ct) =>
+        (await config.SnapshotAsync(ct)).ToDictionary(x => x.Def.Key, x => x.Version);
+
+    /// <summary>
+    /// Checks the planning run an apply refers to. Returns the plan run (null when none is needed and none was given)
+    /// or a German error for the <c>planRunId</c> field.
+    /// </summary>
+    public async Task<(Run? Plan, string? Error)> CheckPlanForApplyAsync(DeployRequest r, CancellationToken ct = default)
+    {
+        var s = await settings.GetAsync(ct);
+        if (r.PlanRunId is not { } planId)
+            return s.RequirePlanBeforeApply
+                ? (null, "Anwenden ist nur nach einer geprüften Planung möglich. Bitte zuerst einen Planungslauf mit denselben Parametern starten und dessen Ergebnis anwenden.")
+                : (null, null);
+        var plan = await db.Runs.AsNoTracking().FirstOrDefaultAsync(x => x.Id == planId, ct);
+        var error = PlanGate.Check(plan, PlanGate.From(r.ToRunRequest(), s.AdmlLanguage), await CurrentVersionsAsync(ct), DateTimeOffset.UtcNow, s.PlanMaxAgeHours);
+        return error is null ? (plan, null) : (null, error);
+    }
+
+    /// <summary>Whether the given planning run could be applied now (same parameters as itself, current configuration, not expired).</summary>
+    public async Task<PlanApplicabilityDto?> PlanApplicabilityAsync(Run plan, CancellationToken ct = default)
+    {
+        if (plan.Kind != RunKind.Deploy || plan.Mode != RunMode.Plan) return null;
+        var s = await settings.GetAsync(ct);
+        var target = new PlanGate.Target(plan.Scope, plan.IncludeMsa, plan.IncludeGmsa, plan.IncludeDmsa, plan.IncludeWinLaps, plan.PreferredDc, plan.AdmlLanguage);
+        var error = PlanGate.Check(plan, target, await CurrentVersionsAsync(ct), DateTimeOffset.UtcNow, s.PlanMaxAgeHours);
+        return new PlanApplicabilityDto(error is null, error, plan.Status == RunStatus.Succeeded ? PlanGate.ExpiresAt(plan, s.PlanMaxAgeHours) : null);
+    }
+
+    /// <summary>The newest planning run an apply with these parameters could use.</summary>
+    public async Task<PlanCandidatesDto> FindPlanCandidateAsync(RunRequest r, CancellationToken ct = default)
+    {
+        var s = await settings.GetAsync(ct);
+        var target = PlanGate.From(r, s.AdmlLanguage);
+        var since = DateTimeOffset.UtcNow.AddHours(-Math.Max(s.PlanMaxAgeHours, 24) * 2);
+        var recent = await db.Runs.AsNoTracking()
+            .Where(x => x.Kind == RunKind.Deploy && x.Mode == RunMode.Plan && x.Scope == r.Scope
+                && x.IncludeMsa == r.IncludeMsa && x.IncludeGmsa == r.IncludeGmsa && x.IncludeDmsa == r.IncludeDmsa && x.IncludeWinLaps == r.IncludeWinLaps
+                && x.CreatedAt >= since)
+            .OrderByDescending(x => x.Id).Take(50).ToListAsync(ct);
+        var sameParameters = recent.Where(x => PlanGate.ParameterMismatch(x, target) is null).ToList();
+        var versions = await CurrentVersionsAsync(ct);
+        var now = DateTimeOffset.UtcNow;
+        foreach (var plan in sameParameters.Where(x => x.Status == RunStatus.Succeeded))
+        {
+            if (PlanGate.Check(plan, target, versions, now, s.PlanMaxAgeHours) is not null) continue;
+            var parsed = DeployPlanReader.Deserialize(plan.Plan);
+            return new PlanCandidatesDto(s.RequirePlanBeforeApply, s.PlanMaxAgeHours,
+                new PlanCandidateDto(plan.Id, plan.RequestedBy, plan.FinishedAt, PlanGate.ExpiresAt(plan, s.PlanMaxAgeHours), parsed?.Summary,
+                    parsed is null ? 0 : DeployPlanReader.TotalChanges(parsed)),
+                plan.Id, null);
+        }
+        var latest = sameParameters.FirstOrDefault();
+        var reason = latest is null
+            ? "Für diese Parameter gibt es noch keinen Planungslauf."
+            : latest.Status is RunStatus.Queued or RunStatus.Running
+                ? $"Planung #{latest.Id} läuft noch."
+                : PlanGate.Check(latest, target, versions, now, s.PlanMaxAgeHours);
+        return new PlanCandidatesDto(s.RequirePlanBeforeApply, s.PlanMaxAgeHours, null, latest?.Id, reason);
     }
 
     /// <summary>Cancels a queued or running run. Returns null if the run does not exist, false if it has already finished.</summary>

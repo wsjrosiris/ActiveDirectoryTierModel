@@ -113,8 +113,24 @@ Version, es geht nichts verloren.
 
 | Schwere | Beispiele |
 |---|---|
-| Fehler | übergeordnete OU fehlt, OU doppelt, `samaccountname` doppelt, ACL ohne Rechte |
-| Warnung | Ziel-OU oder Principal nicht in der Konfiguration (kann im AD existieren), unbekannte LAPS-Gruppe |
+| Fehler | übergeordnete OU fehlt, OU doppelt, `samaccountname` doppelt, ACL ohne Rechte, Tier-Verstoß |
+| Warnung | Ziel-OU oder Principal nicht in der Konfiguration (kann im AD existieren), unbekannte LAPS-Gruppe, Konto oder GPO in einem anderen Tier |
+
+**Tier-Regeln** prüfen, dass keine Kontrolle von einem weniger geschützten Tier auf ein höheres übergeht. Das Tier
+ergibt sich aus Namen und Pfaden („Tier 0“, „Tier0Admins“); der Domänenstamm, die OU *Domain Controllers* und
+eingebaute Admin-Gruppen gelten als Tier 0, breite Gruppen wie *Authenticated Users* als weniger vertrauenswürdig als
+jedes Tier.
+
+| Regel | Schwere |
+|---|---|
+| Gruppe eines niedrigeren Tiers erhält Schreibrechte auf eine OU eines höheren Tiers (ACL, MSA, gMSA, dMSA) | Fehler |
+| LAPS-Lese-, Zurücksetzen- oder Entschlüsselungsgruppe eines niedrigeren Tiers | Fehler |
+| Konto wird Mitglied einer Gruppe eines höheren Tiers | Fehler |
+| Konto ist Mitglied einer Gruppe eines niedrigeren Tiers | Warnung |
+| GPO eines Tiers ist mit einer OU eines anderen Tiers verknüpft | Warnung |
+
+Reine Leserechte und Verweigern-Einträge verletzen keine Regel. Die Meldungen erscheinen beim Bearbeiten direkt im
+Formular des Eintrags.
 
 Solange **Fehler** bestehen, startet kein Deploy im Modus *Anwenden*.
 **Export** lädt alle Bereiche als ZIP im Format des Frameworks herunter (`config\*.json` + `versions.json`).
@@ -134,8 +150,21 @@ Solange **Fehler** bestehen, startet kein Deploy im Modus *Anwenden*.
 
 Anschließend öffnet sich der Lauf mit Live-Protokoll.
 
-!!! tip "Empfohlenes Vorgehen"
-    Immer zuerst planen, das Protokoll prüfen und erst dann mit denselben Parametern anwenden.
+### Geplante Änderungen prüfen und anwenden
+
+Nach einem Planungslauf zeigt der Lauf den Reiter **Geplante Änderungen**: Zähler je Aktionsart (Anlegen, Ändern,
+Verknüpfen, Konfigurieren, bereits vorhanden), darunter jede Änderung als Satz – z. B. „OU *Tier 1 Servers* anlegen in
+*Tier 1*“ – gruppiert nach Phase, mit Suche, Filter nach Bereich und Aktion und aufklappbaren Details.
+Hinweise und Fehler der Planung stehen darüber.
+
+![Geplante Änderungen](img/plan-light.png)
+
+Ist **Anwenden nur nach Planung** aktiv (Standard), lässt sich ein Deploy nur noch aus einer passenden Planung
+anwenden: **Diesen Plan anwenden** im Planungslauf bzw. auf der Deploy-Seite der vorgeschlagene Plan. Passend heißt:
+erfolgreich, gleicher Bereich, gleiche Add-ons, gleicher Domain Controller, gleiche ADML-Sprache, **gleicher
+Konfigurationsstand** und nicht älter als die eingestellte Gültigkeit (Standard 24 Stunden). Der Anwenden-Lauf
+verwendet genau die Konfigurationsversionen der Planung. Wurde die Konfiguration danach geändert, muss neu geplant
+werden – der Knopf ist dann gesperrt und nennt den Grund.
 
 ### Freigabe durch eine zweite Person (Vier-Augen-Prinzip)
 
@@ -145,7 +174,8 @@ sofort ausgeführt, sondern **zur Freigabe eingereicht** (Status *Wartet auf Fre
 1. Beim Einreichen werden die Versionen aller Konfigurationsbereiche **festgeschrieben**. Ausgeführt wird genau
    dieser Stand – auch wenn die Konfiguration danach weiter bearbeitet wird.
 2. Eine **zweite Person mit der Rolle Operator** öffnet den Lauf (Dashboard › *Freigaben ausstehend* oder
-   Benachrichtigung), prüft Parameter, festgeschriebene Versionen und den zugehörigen Planungslauf und wählt
+   Benachrichtigung), prüft Parameter, festgeschriebene Versionen und die **geplanten Änderungen** des zugehörigen
+   Planungslaufs (werden direkt im Freigabefeld angezeigt) und wählt
    **Freigeben** (optional mit Kommentar) oder **Ablehnen** (mit Begründung).
 3. Nach der Freigabe läuft der Deploy wie gewohnt. Wer freigegeben hat, steht im Lauf und im Änderungsprotokoll.
 
@@ -226,6 +256,7 @@ wählen, bei welchen Ereignissen er benachrichtigt wird:
 | Fehler | ein Lauf ist fehlgeschlagen |
 | Anwenden | ein Deploy hat Änderungen im AD angewendet |
 | Freigabe | ein Deploy wartet auf Freigabe |
+| Zertifikat | das HTTPS-Zertifikat läuft in weniger als 30 Tagen ab (täglich geprüft) |
 
 ![Benachrichtigungen](img/notifications-light.png)
 
@@ -240,8 +271,17 @@ wählen, bei welchen Ereignissen er benachrichtigt wird:
 | ADML-Sprache | Standard für `-AdmlLanguage` |
 | Vier-Augen-Prinzip | Deploys im Modus *Anwenden* brauchen die Freigabe einer zweiten Person |
 | Freigabefrist (Stunden) | danach verfällt ein Antrag automatisch |
+| Anwenden nur nach Planung | *Anwenden* nur aus einem passenden, erfolgreichen Planungslauf (Standard: an) |
+| Gültigkeit einer Planung (Stunden) | so lange lässt sich eine Planung anwenden (Standard 24) |
 | Öffentliche Adresse | z. B. `https://tiermodel01.contoso.com:8443` – für Links in Benachrichtigungen |
 | Aufbewahrung von Läufen (Tage) | Protokollzeilen und Arbeitsverzeichnisse älterer Läufe werden gelöscht; Status, Ergebnis und Befunde bleiben. `0` = unbegrenzt |
+
+**Systemzustand**: Ampel über alle Prüfpunkte – Anwendung (Version, Laufzeit), HTTPS-Zertifikat (Ablauf),
+Datenbank (Größe, Migrationen), Warteschlange, letzte erfolgreiche Läufe, freier Platz im Arbeitsverzeichnis,
+PowerShell, Framework, Hintergrunddienste und Schlüsselspeicher. Jeder Punkt nennt bei *Hinweis* oder *Fehler*, was zu
+tun ist.
+
+![Systemzustand](img/health-light.png)
 
 Framework- und PowerShell-Pfad werden angezeigt, sind aber nur in der Dienstkonfiguration änderbar
 ([Betrieb](betrieb.md#konfigurationsdatei)).

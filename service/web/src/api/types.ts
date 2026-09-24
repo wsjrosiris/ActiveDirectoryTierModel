@@ -136,6 +136,8 @@ export interface RunRequest {
 
 export interface DeployRequest extends RunRequest {
   confirmApply: boolean
+  /** Apply: the reviewed planning run (required when settings.requirePlanBeforeApply). */
+  planRunId?: number | null
 }
 
 export type RunKind = 'Deploy' | 'Audit'
@@ -167,6 +169,9 @@ export interface RunSummary {
   approvalComment: string | null
   /** Only while 'AwaitingApproval'. */
   approvalExpiresAt: string | null
+  /** Apply runs: the planning run whose result is applied. */
+  planRunId: number | null
+  admlLanguage: string
 }
 
 export interface ApproveRequest {
@@ -190,6 +195,80 @@ export interface RunDetail extends RunSummary {
   summary: Record<string, number> | null
   findings: Finding[]
   configVersions: Record<string, number>
+  /** Deploy/Plan runs: the planned changes (null when the framework wrote no plan file). */
+  plan: DeployPlan | null
+  /** Deploy/Plan runs: whether this plan can be applied now. */
+  planApplicability: PlanApplicability | null
+}
+
+// ---------- Planung ----------
+
+export type PlanArea = 'ous' | 'groups' | 'users' | 'acls' | 'gpos' | 'admx' | 'msa' | 'gmsa' | 'dmsa' | 'winlaps'
+
+export type PlanDetailValue = string | number | boolean | string[]
+
+export interface PlanAction {
+  phase: number
+  area: PlanArea | string
+  /** CreateOU, CreateGroup, CreateUser, UpdateUserMembership, CreateAcl, CreateGPO, ImportGPO, LinkGPO, ConfigureLapsDecryptor, … */
+  action: string
+  resourceType: string
+  name: string
+  path: string | null
+  details: Record<string, PlanDetailValue> | null
+}
+
+export interface PlanSummary {
+  totalActions: number
+  create: number
+  update: number
+  link: number
+  configure: number
+  existing: number
+}
+
+export interface PlanPhase {
+  phase: number
+  name: string
+  area: string
+  actionCount: number
+  existingCount: number
+}
+
+export interface DeployPlan {
+  metadata: { version: string | null; scope: string | null; preferredDc: string | null; timestamp: string | null; includes: string[] }
+  summary: PlanSummary
+  phases: PlanPhase[]
+  actions: PlanAction[]
+  /** Per action type, counted before truncation. */
+  actionCounts: Record<string, number>
+  warnings: string[]
+  errors: string[]
+  /** Only the first 5000 actions are stored. */
+  truncated: boolean
+}
+
+export interface PlanApplicability {
+  applicable: boolean
+  reason: string | null
+  expiresAt: string | null
+}
+
+export interface PlanCandidate {
+  id: number
+  requestedBy: string
+  finishedAt: string | null
+  expiresAt: string | null
+  summary: PlanSummary | null
+  changes: number
+}
+
+export interface PlanCandidates {
+  requirePlan: boolean
+  maxAgeHours: number
+  candidate: PlanCandidate | null
+  latestPlanRunId: number | null
+  reason: string | null
 }
 
 export interface LogLine {
@@ -268,6 +347,9 @@ export interface Settings {
   requireApproval: boolean
   approvalTimeoutHours: number
   publicBaseUrl: string
+  /** Apply only with a reviewed, matching planning run. */
+  requirePlanBeforeApply: boolean
+  planMaxAgeHours: number
   frameworkPath: string
   pwshPath: string
 }
@@ -303,6 +385,7 @@ export interface ChannelEvents {
   failure: boolean
   apply: boolean
   approval: boolean
+  certificate: boolean
 }
 
 export interface NotificationChannel {
@@ -342,6 +425,25 @@ export interface SmtpSettings {
 }
 
 export type SmtpUpdate = Omit<SmtpSettings, 'hasPassword'>
+
+// ---------- Systemzustand ----------
+
+export type HealthStatus = 'ok' | 'warn' | 'error'
+
+export interface HealthItem {
+  key: string
+  title: string
+  status: HealthStatus
+  message: string
+  facts: { label: string; value: string }[]
+}
+
+export interface HealthDetails {
+  status: HealthStatus
+  checkedAt: string
+  version: string
+  items: HealthItem[]
+}
 
 // ---------- Fehler ----------
 
