@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TierModel.Service.Config;
 using TierModel.Service.Data;
+using TierModel.Service.Notifications;
 
 namespace TierModel.Service.Runs;
 
@@ -13,7 +14,7 @@ namespace TierModel.Service.Runs;
 /// Executes queued runs one at a time. Active Directory changes must not interleave,
 /// so there is deliberately no parallelism.
 /// </summary>
-public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, IOptions<TierModelOptions> options, ILogger<RunWorker> logger) : BackgroundService
+public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, NotificationQueue notifications, IOptions<TierModelOptions> options, ILogger<RunWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -116,7 +117,10 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, IOptions<Tie
         {
             log.System($"Lauf #{id} gestartet: {Describe(run)}");
 
-            var snapshot = await config.SnapshotAsync(linked.Token);
+            // Runs approved under the four-eyes principle execute exactly the configuration that was reviewed.
+            var pinned = run.ConfigVersions is { } pinnedJson ? JsonSerializer.Deserialize<Dictionary<string, int>>(pinnedJson) : null;
+            var snapshot = pinned is null ? await config.SnapshotAsync(linked.Token) : await config.SnapshotAsync(pinned, linked.Token);
+            if (pinned is not null) log.System("Freigegebene Konfigurationsversionen werden verwendet" + (run.ApprovedBy is null ? "." : $" (freigegeben von {run.ApprovedBy})."));
             run.ConfigVersions = JsonSerializer.Serialize(snapshot.ToDictionary(s => s.Def.Key, s => s.Version));
             await db.SaveChangesAsync(CancellationToken.None);
             log.System("Konfiguration: " + string.Join(", ", snapshot.Select(s => $"{s.Def.Key} v{s.Version}")));
@@ -192,6 +196,7 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, IOptions<Tie
             }
         }
         logger.LogInformation("Run {RunId} finished with {Status}: {Message}", id, status, message);
+        foreach (var e in NotificationService.EventsFor(run)) notifications.Enqueue(e, id);
     }
 
     private static string Describe(Run r)

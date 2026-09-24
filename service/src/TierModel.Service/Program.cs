@@ -5,6 +5,7 @@ using TierModel.Service.Auth;
 using TierModel.Service.Config;
 using TierModel.Service.Data;
 using TierModel.Service.Endpoints;
+using TierModel.Service.Notifications;
 using TierModel.Service.Runs;
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
@@ -61,6 +62,9 @@ builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<ConfigService>();
 builder.Services.AddScoped<RunService>();
 builder.Services.AddSingleton<RunQueue>();
+builder.Services.AddSingleton<NotificationQueue>();
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddHttpClient("notifications", c => c.Timeout = TimeSpan.FromSeconds(20));
 
 // Command-line maintenance used by the installer: runs without starting the web server.
 if (isCli)
@@ -71,6 +75,7 @@ if (isCli)
 
 builder.Services.AddHostedService<RunWorker>();
 builder.Services.AddHostedService<ScheduleWorker>();
+builder.Services.AddHostedService<NotificationWorker>();
 
 var app = builder.Build();
 
@@ -103,6 +108,8 @@ app.MapAuthEndpoints();
 app.MapConfigEndpoints();
 app.MapRunEndpoints();
 app.MapMiscEndpoints();
+app.MapWindowsAuthSettings();
+app.MapNotificationEndpoints();
 app.Map("/api/{**rest}", () => Results.Problem(title: "Nicht gefunden", statusCode: 404));
 app.MapFallbackToFile("index.html", new StaticFileOptions { OnPrepareResponse = CacheHeaders });
 

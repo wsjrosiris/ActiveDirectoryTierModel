@@ -168,6 +168,28 @@ public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions
             .ToList();
     }
 
+    /// <summary>
+    /// Content of the given section versions (e.g. pinned when a deploy was submitted for approval);
+    /// sections without a pinned version use their current version.
+    /// </summary>
+    public async Task<List<(SectionDefinition Def, int Version, string Content)>> SnapshotAsync(IReadOnlyDictionary<string, int> pinned, CancellationToken ct = default)
+    {
+        var current = await SnapshotAsync(ct);
+        var result = new List<(SectionDefinition, int, string)>();
+        foreach (var (def, version, content) in current)
+        {
+            if (!pinned.TryGetValue(def.Key, out var wanted) || wanted == version)
+            {
+                result.Add((def, version, content));
+                continue;
+            }
+            var v = await db.ConfigVersions.AsNoTracking().FirstOrDefaultAsync(x => x.SectionKey == def.Key && x.Version == wanted, ct)
+                ?? throw new InvalidOperationException($"Festgeschriebene Version {wanted} von '{def.Key}' existiert nicht mehr.");
+            result.Add((def, wanted, v.Content));
+        }
+        return result;
+    }
+
     /// <summary>Current content of every section as parsed JSON, keyed by section key.</summary>
     public async Task<Dictionary<string, JsonNode?>> CurrentContentAsync(CancellationToken ct = default) =>
         (await SnapshotAsync(ct)).ToDictionary(s => s.Def.Key, s => JsonNode.Parse(s.Content));

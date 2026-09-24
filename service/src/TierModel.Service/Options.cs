@@ -20,6 +20,9 @@ public class TierModelOptions
     public string AdmlLanguage { get; set; } = "en-US";
     public int RunRetentionDays { get; set; } = 90;
 
+    /// <summary>Address users reach the UI at (for links in notifications), e.g. https://tiermodel01.contoso.com:8443.</summary>
+    public string PublicBaseUrl { get; set; } = "";
+
     /// <summary>Thumbprint of the HTTPS certificate in LocalMachine\My. Empty = Kestrel configuration decides.</summary>
     public string CertificateThumbprint { get; set; } = "";
 

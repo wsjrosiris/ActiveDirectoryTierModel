@@ -68,7 +68,12 @@ public sealed class ApiFixture : IAsyncLifetime
     }
 }
 
-public class ApiTests(ApiFixture fixture) : IClassFixture<ApiFixture>
+/// <summary>All API tests share one host and database: the host is configured through process-wide environment variables.</summary>
+[CollectionDefinition("api")]
+public class ApiCollection : ICollectionFixture<ApiFixture>;
+
+[Collection("api")]
+public class ApiTests(ApiFixture fixture)
 {
     private async Task<HttpClient> LoginAsync(string user = ApiFixture.AdminUser, string password = ApiFixture.AdminPassword)
     {

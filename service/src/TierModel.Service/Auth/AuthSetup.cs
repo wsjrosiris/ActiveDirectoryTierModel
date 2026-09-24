@@ -19,7 +19,11 @@ public static class AuthSetup
         services.AddScoped<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
         services.AddScoped<UserService>();
 
-        services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+        var authentication = services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme);
+        // Windows sign-in (Kerberos/NTLM) only on Windows; used solely by GET /api/auth/windows,
+        // which then issues the normal cookie.
+        if (WindowsAuth.Available) authentication.AddNegotiate();
+        authentication
             .AddCookie(o =>
             {
                 o.Cookie.Name = "TierModel.Auth";

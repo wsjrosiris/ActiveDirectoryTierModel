@@ -7,10 +7,10 @@ using TierModel.Service.Data;
 
 namespace TierModel.Service.Auth;
 
-public record UserDto(Guid Id, string Username, string DisplayName, Role Role, bool IsActive, bool MustChangePassword,
+public record UserDto(Guid Id, string Username, string DisplayName, Role Role, AuthType AuthType, bool IsActive, bool MustChangePassword,
     DateTimeOffset? LastLoginAt, DateTimeOffset? LockedUntil, DateTimeOffset CreatedAt)
 {
-    public static UserDto From(AppUser u) => new(u.Id, u.Username, u.DisplayName, u.Role, u.IsActive, u.MustChangePassword,
+    public static UserDto From(AppUser u) => new(u.Id, u.Username, u.DisplayName, u.Role, u.AuthType, u.IsActive, u.MustChangePassword,
         u.LastLoginAt, u.LockedUntil > DateTimeOffset.UtcNow ? u.LockedUntil : null, u.CreatedAt);
 }
 
@@ -66,7 +66,8 @@ public class UserService(AppDbContext db, IPasswordHasher<AppUser> hasher)
     public async Task<(LoginResult, AppUser?)> LoginAsync(string username, string password, CancellationToken ct = default)
     {
         var user = await FindByNameAsync(username, ct);
-        if (user is null || !user.IsActive)
+        // Windows accounts have no password here; they sign in through /api/auth/windows.
+        if (user is null || !user.IsActive || user.AuthType != AuthType.Local)
         {
             // Burn comparable time so response timing does not reveal whether the account exists.
             hasher.HashPassword(new AppUser { Username = "x", NormalizedUsername = "X", DisplayName = "x" }, password);

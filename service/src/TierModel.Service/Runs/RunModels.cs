@@ -15,11 +15,14 @@ public record DeployRequest(string PreferredDc, DeployScope? Scope, bool Include
 public record RunSummaryDto(
     long Id, RunKind Kind, RunStatus Status, RunTrigger Trigger, RunMode? Mode, DeployScope? Scope, string[] Includes,
     string PreferredDc, string RequestedBy, long? ScheduleId, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt,
-    DateTimeOffset? FinishedAt, int? ExitCode, int? DriftCount, int? ErrorCount, string? Message)
+    DateTimeOffset? FinishedAt, int? ExitCode, int? DriftCount, int? ErrorCount, string? Message,
+    bool ApprovalRequired, string? ApprovedBy, DateTimeOffset? ApprovedAt, string? ApprovalComment, DateTimeOffset? ApprovalExpiresAt)
 {
     public static RunSummaryDto From(Run r) => new(
         r.Id, r.Kind, r.Status, r.Trigger, r.Mode, r.Scope, IncludeList(r.IncludeMsa, r.IncludeGmsa, r.IncludeDmsa, r.IncludeWinLaps),
-        r.PreferredDc, r.RequestedBy, r.ScheduleId, r.CreatedAt, r.StartedAt, r.FinishedAt, r.ExitCode, r.DriftCount, r.ErrorCount, r.Message);
+        r.PreferredDc, r.RequestedBy, r.ScheduleId, r.CreatedAt, r.StartedAt, r.FinishedAt, r.ExitCode, r.DriftCount, r.ErrorCount, r.Message,
+        r.ApprovalRequired, r.ApprovedBy, r.ApprovedAt, r.ApprovalComment,
+        r.Status == RunStatus.AwaitingApproval ? r.ApprovalExpiresAt : null);
 
     public static string[] IncludeList(bool msa, bool gmsa, bool dmsa, bool winLaps) =>
         new[] { (msa, "Msa"), (gmsa, "Gmsa"), (dmsa, "Dmsa"), (winLaps, "WinLaps") }.Where(x => x.Item1).Select(x => x.Item2).ToArray();

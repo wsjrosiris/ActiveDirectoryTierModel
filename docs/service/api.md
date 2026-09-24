@@ -27,12 +27,18 @@ RFC 7807 ProblemDetails (`{ title, detail, status, errors? }`).
 | GET  | `/api/auth/me` | – | `{ user: User \| null }` |
 | POST | `/api/auth/login` | `{ username, password }` | `User` (401 bei Fehler, 423 wenn gesperrt) |
 | POST | `/api/auth/logout` | – | 204 |
-| POST | `/api/auth/change-password` | `{ currentPassword, newPassword }` | 204 |
+| POST | `/api/auth/change-password` | `{ currentPassword, newPassword }` | 204 (nur lokale Konten) |
+| GET  | `/api/auth/options` | – | `{ windowsAuth: boolean }` – ob die Schaltfläche „Mit Windows-Konto anmelden“ angezeigt wird |
+| GET  | `/api/auth/windows?returnUrl=/pfad` | – | **Browser-Navigation**, kein fetch: Kerberos/NTLM-Anmeldung (Negotiate). Erfolg → 302 auf `returnUrl` (nur lokale Pfade). Fehler → 302 auf `/login?error=<code>` |
+
+Fehlercodes für `/login?error=`: `windows-disabled` (nicht aktiviert), `windows-failed` (Windows-Anmeldung fehlgeschlagen),
+`windows-norole` (Konto in keiner zugeordneten AD-Gruppe), `windows-inactive` (Konto in der Oberfläche deaktiviert).
 
 ```ts
 type Role = 'Viewer' | 'Editor' | 'Operator' | 'Admin'
 interface User {
   id: string; username: string; displayName: string; role: Role
+  authType: 'Local' | 'Windows'           // Windows: Name "DOMÄNE\\konto", kein Passwort, Rolle aus AD-Gruppen
   isActive: boolean; mustChangePassword: boolean
   lastLoginAt: string | null; lockedUntil: string | null; createdAt: string
 }
@@ -48,9 +54,12 @@ Solange `mustChangePassword` gesetzt ist, sind nur `/api/auth/*` erlaubt (403 so
 | GET    | `/api/users` | → `User[]` |
 | POST   | `/api/users` | `{ username, displayName, role, password }` → `User` |
 | PUT    | `/api/users/{id}` | `{ displayName, role, isActive }` → `User` |
-| POST   | `/api/users/{id}/reset-password` | `{ newPassword }` → 204 (setzt `mustChangePassword`) |
+| POST   | `/api/users/{id}/reset-password` | `{ newPassword }` → 204 (setzt `mustChangePassword`; 400 bei Windows-Konten) |
 | POST   | `/api/users/{id}/unlock` | → 204 |
 | DELETE | `/api/users/{id}` | → 204 (eigenes Konto nicht löschbar) |
+
+Windows-Konten legt der Dienst bei der ersten Windows-Anmeldung selbst an. Ihre Rolle wird bei jeder Anmeldung aus den
+AD-Gruppen neu bestimmt (die Rolle im PUT wird für sie ignoriert); `isActive: false` sperrt sie trotzdem.
 
 ## Konfiguration (Soll-Zustand, versioniert)
 
@@ -113,7 +122,7 @@ interface RunRequest {
 interface DeployRequest extends RunRequest { confirmApply: boolean }   // true erfordert Operator
 
 type RunKind = 'Deploy' | 'Audit'
-type RunStatus = 'Queued' | 'Running' | 'Succeeded' | 'Failed' | 'Cancelled'
+type RunStatus = 'AwaitingApproval' | 'Queued' | 'Running' | 'Succeeded' | 'Failed' | 'Cancelled' | 'Rejected'
 interface RunSummary {
   id: number; kind: RunKind; status: RunStatus; trigger: 'Manual' | 'Schedule'
   mode: 'Plan' | 'Apply' | null            // nur bei Deploy
@@ -123,6 +132,11 @@ interface RunSummary {
   exitCode: number | null
   driftCount: number | null; errorCount: number | null   // aus dem Audit-Report
   message: string | null
+  // Vier-Augen-Prinzip (nur Deploy/Anwenden, wenn in den Einstellungen aktiviert)
+  approvalRequired: boolean
+  approvedBy: string | null; approvedAt: string | null     // bei Ablehnung: wer/wann abgelehnt hat
+  approvalComment: string | null
+  approvalExpiresAt: string | null                          // nur solange 'AwaitingApproval'
 }
 interface Finding { type: string; resourceType: string; identifier: string; details: string; [k: string]: any }
 interface RunDetail extends RunSummary {
@@ -140,7 +154,14 @@ interface LogLine { seq: number; at: string; stream: 'stdout' | 'stderr' | 'syst
 | POST | `/api/runs/audit` | `RunRequest` → `RunSummary` (202) |
 | GET  | `/api/runs/{id}` | → `RunDetail` |
 | GET  | `/api/runs/{id}/log?after=0` | → `{ status: RunStatus, lines: LogLine[] }` (Zeilen mit `seq > after`, max. 2000) |
-| POST | `/api/runs/{id}/cancel` | → 204 (Operator); 404 unbekannt, 409 bereits beendet |
+| POST | `/api/runs/{id}/cancel` | → 204 (Operator; bei `AwaitingApproval` darf auch der Antragsteller zurückziehen); 404 unbekannt, 409 bereits beendet |
+| POST | `/api/runs/{id}/approve` | `{ comment?: string }` → `RunSummary` (Operator, **nicht** der Antragsteller → 403); 409 wenn nicht `AwaitingApproval` |
+| POST | `/api/runs/{id}/reject` | `{ comment: string }` (Pflicht) → `RunSummary` (Operator, nicht der Antragsteller); 409 wenn nicht `AwaitingApproval` |
+
+**Freigabe:** Ist `requireApproval` aktiv, erhält ein Deploy mit `confirmApply: true` den Status `AwaitingApproval`.
+Die Konfigurationsversionen werden dabei **festgeschrieben** (`configVersions` ist sofort gefüllt) – ausgeführt wird genau
+der Stand, den die freigebende Person sieht, auch wenn die Konfiguration inzwischen weiter bearbeitet wurde. Nach der
+Freigabe → `Queued`. Ablehnung oder Ablauf (`approvalTimeoutHours`) → `Rejected`.
 
 ## Zeitpläne (geplante Audits)
 
@@ -190,14 +211,77 @@ interface ChangeEntry {
   recentRuns: RunSummary[]       // 8
   recentChanges: ChangeEntry[]   // 8, ohne Anmeldeereignisse (entityType 'auth')
   queue: { running: number; queued: number }
+  pendingApprovals: RunSummary[]  // alle Läufe mit Status 'AwaitingApproval', älteste zuerst
   validation: { errors: number; warnings: number }
 }
 ```
 
 ## Einstellungen (Lesen: alle, Schreiben: Admin)
 
-`GET /api/settings`, `PUT /api/settings` (Body: `defaultPreferredDc`, `admlLanguage` – Pflicht, Format `xx-XX` –, `runRetentionDays` 0–3650) →
-`{ defaultPreferredDc: string, admlLanguage: string, runRetentionDays: number, frameworkPath: string (nur lesen), pwshPath: string (nur lesen) }`
+`GET /api/settings`, `PUT /api/settings` →
+
+```ts
+interface Settings {
+  defaultPreferredDc: string
+  admlLanguage: string            // Pflicht, Format xx-XX
+  runRetentionDays: number        // 0–3650, 0 = unbegrenzt
+  requireApproval: boolean        // Vier-Augen-Prinzip für Deploy/Anwenden
+  approvalTimeoutHours: number    // 1–720, danach verfällt ein Antrag
+  publicBaseUrl: string           // z. B. https://tiermodel01.contoso.com:8443 – für Links in Benachrichtigungen; leer erlaubt
+  frameworkPath: string           // nur lesen
+  pwshPath: string                // nur lesen
+}
+```
+
+PUT sendet alle Felder außer den beiden nur lesbaren.
+
+### Windows-Anmeldung (Admin)
+
+`GET /api/settings/windows-auth`, `PUT /api/settings/windows-auth` →
+
+```ts
+interface GroupRef { name: string; sid: string }
+interface WindowsAuthSettings {
+  enabled: boolean
+  roleGroups: { Viewer: GroupRef[]; Editor: GroupRef[]; Operator: GroupRef[]; Admin: GroupRef[] }
+  available: boolean              // false, wenn der Server Windows-Anmeldung nicht unterstützt (nur lesen)
+}
+// PUT-Body: { enabled, roleGroups: { Viewer: string[], … } } – je Eintrag "DOMÄNE\\Gruppe" oder eine SID (S-1-5-…).
+// Der Dienst löst Namen in SIDs auf; nicht auflösbare Einträge → 400 mit errors["roleGroups.<Rolle>"].
+```
+
+Bei Mitgliedschaft in mehreren zugeordneten Gruppen gilt die höchste Rolle.
+
+## Benachrichtigungen (Admin)
+
+```ts
+type ChannelType = 'Email' | 'Teams' | 'Webhook'
+interface NotificationChannel {
+  id: number; name: string; type: ChannelType; enabled: boolean
+  target: string       // Email: Empfänger, durch Komma getrennt · Teams/Webhook: URL (in Antworten gekürzt: nur Schema+Host+"…")
+  events: { drift: boolean; failure: boolean; apply: boolean; approval: boolean }
+  lastSentAt: string | null; lastError: string | null; createdAt: string
+}
+interface SmtpSettings {
+  host: string; port: number; security: 'None' | 'StartTls' | 'SslOnConnect'
+  username: string; from: string
+  hasPassword: boolean  // nur lesen
+  password?: string     // nur schreiben; weglassen = unverändert, "" = löschen
+}
+```
+
+| Methode | Pfad | Body / Antwort |
+|---|---|---|
+| GET    | `/api/notifications/channels` | → `NotificationChannel[]` |
+| POST   | `/api/notifications/channels` | `{ name, type, enabled, target, events }` → `NotificationChannel` |
+| PUT    | `/api/notifications/channels/{id}` | wie POST; `target` weglassen oder `null` = unverändert (die URL wird nie vollständig zurückgegeben) |
+| DELETE | `/api/notifications/channels/{id}` | → 204 |
+| POST   | `/api/notifications/channels/{id}/test` | → 204 wenn zugestellt, sonst 502 mit Fehlertext in `detail` |
+| GET    | `/api/notifications/smtp` | → `SmtpSettings` |
+| PUT    | `/api/notifications/smtp` | `SmtpSettings` → `SmtpSettings` |
+
+Ereignisse: **drift** (Audit mit Abweichungen), **failure** (Lauf fehlgeschlagen), **apply** (Deploy/Anwenden erfolgreich
+abgeschlossen), **approval** (Freigabe angefordert). Geheimnisse (SMTP-Passwort, Webhook-URLs) werden verschlüsselt gespeichert.
 
 ## Sonstiges
 

@@ -12,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Schedule> Schedules => Set<Schedule>();
     public DbSet<ChangeEntry> ChangeLog => Set<ChangeEntry>();
     public DbSet<Setting> Settings => Set<Setting>();
+    public DbSet<NotificationChannel> NotificationChannels => Set<NotificationChannel>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -19,10 +20,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.ToTable("users");
             e.HasIndex(x => x.NormalizedUsername).IsUnique();
-            e.Property(x => x.Username).HasMaxLength(64);
-            e.Property(x => x.NormalizedUsername).HasMaxLength(64);
+            e.Property(x => x.Username).HasMaxLength(256);
+            e.Property(x => x.NormalizedUsername).HasMaxLength(256);
             e.Property(x => x.DisplayName).HasMaxLength(128);
             e.Property(x => x.Role).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.AuthType).HasConversion<string>().HasMaxLength(16);
+            e.HasIndex(x => x.Sid).IsUnique();
         });
 
         b.Entity<ConfigSection>(e =>
@@ -70,6 +73,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => x.At);
             e.HasIndex(x => new { x.EntityType, x.At });
             e.Property(x => x.Details).HasColumnType("jsonb");
+        });
+
+        b.Entity<NotificationChannel>(e =>
+        {
+            e.ToTable("notification_channels");
+            e.Property(x => x.Type).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Name).HasMaxLength(100);
         });
 
         b.Entity<Setting>(e =>
