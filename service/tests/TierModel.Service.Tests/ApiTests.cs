@@ -47,6 +47,7 @@ public sealed class ApiFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("TierModel__WorkPath", Path.Combine(Path.GetTempPath(), _database));
         Environment.SetEnvironmentVariable("TierModel__PwshPath", Path.Combine(TestPaths.RepoRoot, "service", "dev", "fake-pwsh.sh"));
         Environment.SetEnvironmentVariable("TierModel__RequireHttps", "false");
+        Environment.SetEnvironmentVariable("TierModel__FakeDirectory", "true");
 
         Factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.UseEnvironment("Testing")
             .ConfigureServices(services => services.AddSingleton<Microsoft.AspNetCore.Hosting.IStartupFilter, TestClientAddressFilter>()));

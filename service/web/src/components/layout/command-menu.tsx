@@ -20,6 +20,8 @@ import {
   CheckCircle2,
   ScrollText,
   ShieldUser,
+  Server,
+  UserPlus,
 } from 'lucide-react'
 import { Dialog as D } from 'radix-ui'
 import { api } from '@/api/client'
@@ -270,6 +272,19 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               <LogOut /> Abmelden
             </Command.Item>
           </Command.Group>
+          {canEdit && (
+            <Command.Group heading="Assistenten" className={groupCls}>
+              <Command.Item className={itemCls} onSelect={() => run(() => navigate('/konfiguration/ous?assistent=server'))} value="assistent neuen server-bereich aufnehmen ou gruppe gpo">
+                <Server /> Assistent: Neuen Server-Bereich aufnehmen …
+              </Command.Item>
+              <Command.Item className={itemCls} onSelect={() => run(() => navigate('/konfiguration/users?assistent=konto'))} value="assistent neues admin-konto benutzer protected users">
+                <UserPlus /> Assistent: Neues Admin-Konto …
+              </Command.Item>
+              <Command.Item className={itemCls} onSelect={() => run(() => navigate('/konfiguration/acls?assistent=delegation'))} value="assistent neue delegation acl rechte">
+                <KeyRound /> Assistent: Neue Delegation …
+              </Command.Item>
+            </Command.Group>
+          )}
           <Command.Group heading="Gehe zu" className={groupCls}>
             {pages.map((p) => (
               <Command.Item key={p.to} className={itemCls} value={`gehe zu ${p.label} ${p.keywords ?? ''}`} onSelect={() => run(() => navigate(p.to))}>

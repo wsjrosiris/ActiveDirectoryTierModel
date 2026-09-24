@@ -8,6 +8,7 @@ export const scopeLabels: Record<Scope, string> = {
   GposOnly: 'Nur GPOs',
   OuAclsOnly: 'Nur OU-ACLs',
   AdmxOnly: 'Nur ADMX',
+  AuthSilosOnly: 'Nur Authentication Silos',
 }
 
 export const scopes = Object.keys(scopeLabels) as Scope[]
@@ -75,6 +76,7 @@ export const actionLabels: Record<string, string> = {
   'notification.test': 'Testnachricht gesendet',
   'notification.failed': 'Benachrichtigung fehlgeschlagen',
   'smtp.update': 'SMTP-Einstellungen geändert',
+  'setup.complete': 'Einrichtung abgeschlossen',
 }
 
 export const findingTypeLabels: Record<string, string> = {
@@ -89,7 +91,7 @@ export const findingTypeLabels: Record<string, string> = {
 export const sectionGroups: { title: string; keys: string[] }[] = [
   { title: 'Struktur', keys: ['ous', 'groups', 'users'] },
   { title: 'Delegationen', keys: ['acls', 'msa', 'gmsa', 'dmsa', 'winlaps'] },
-  { title: 'Richtlinien', keys: ['gpos', 'admx', 'adml-en-US'] },
+  { title: 'Richtlinien', keys: ['gpos', 'authsilos', 'admx', 'adml-en-US'] },
   { title: 'System', keys: ['metadata', 'guid-mappings', 'dependencies'] },
 ]
 
@@ -103,6 +105,7 @@ export const sectionFallbackTitles: Record<string, string> = {
   dmsa: 'dMSA-Delegationen',
   winlaps: 'Windows LAPS',
   gpos: 'Gruppenrichtlinien',
+  authsilos: 'Authentication Silos',
   admx: 'ADMX-Vorlagen',
   'adml-en-US': 'ADML (en-US)',
   metadata: 'Metadaten',
@@ -128,12 +131,14 @@ export const areaLabels: Record<string, string> = {
   gmsa: 'gMSA',
   dmsa: 'dMSA',
   winlaps: 'Windows LAPS',
+  authsilos: 'Authentication Silos',
 }
 
 /** Area of an audit finding: the report's `area`, or derived from the resource type of older framework versions. */
 export function findingArea(f: { area?: string; resourceType?: string }): string | null {
   if (f.area && areaLabels[f.area]) return f.area
   const r = (f.resourceType ?? '').toLowerCase()
+  if (r.includes('authenticationpolicy') || r.includes('devicegroupmember')) return 'authsilos'
   if (r === 'ou' || r.includes('organizationalunit')) return 'ous'
   if (r.includes('group') && !r.includes('policy')) return 'groups'
   if (r === 'user' || r.includes('useraccount')) return 'users'
@@ -159,6 +164,7 @@ export const areaPlanLabels: Record<string, string> = {
   gmsa: 'Add-on gMSA',
   dmsa: 'Add-on dMSA',
   winlaps: 'Add-on Windows LAPS',
+  authsilos: 'Nur Authentication Silos',
 }
 
 export const objectClassLabels: Record<string, string> = {

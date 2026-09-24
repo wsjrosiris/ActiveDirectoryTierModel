@@ -13,6 +13,7 @@ public static class ConfigCatalog
         new("users", "tiermodel-users.json", "Benutzer", "Dienstkonten", "users"),
         new("acls", "tiermodel-acls.json", "ACL-Delegationen", "Berechtigungen auf OUs", "aclDelegations"),
         new("gpos", "tiermodel-gpos.json", "GPOs", "Gruppenrichtlinien und ihre Verknüpfungen", "gpos"),
+        new("authsilos", "tiermodel-authsilos.json", "Authentication Silos", "Kerberos-Authentifizierungsrichtlinien, Silos und Gerätegruppen (optional)", "authenticationPolicySilos"),
         new("admx", "tiermodel-admx.json", "ADMX", "Administrative Vorlagen", null),
         new("adml-en-US", "tiermodel-adml-en-US.json", "ADML (en-US)", "Sprachdateien der administrativen Vorlagen", null),
         new("msa", "tiermodel-msa.json", "MSA", "ACL-Delegationen für Managed Service Accounts", "aclDelegations"),

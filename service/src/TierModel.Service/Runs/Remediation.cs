@@ -5,7 +5,7 @@ namespace TierModel.Service.Runs;
 /// <summary>Remediation by click (roadmap 5): the planning run that corrects one area of audit findings.</summary>
 public static class Remediation
 {
-    public static readonly IReadOnlyList<string> Areas = ["ous", "groups", "users", "acls", "gpos", "admx", "msa", "gmsa", "dmsa", "winlaps"];
+    public static readonly IReadOnlyList<string> Areas = ["ous", "groups", "users", "acls", "gpos", "admx", "msa", "gmsa", "dmsa", "winlaps", "authsilos"];
 
     /// <summary>
     /// Deploy parameters for an audit area. Areas of the core framework map to a scope switch; the extensions
@@ -22,6 +22,7 @@ public static class Remediation
             "gpos" => Scoped(DeployScope.GposOnly),
             "acls" => Scoped(DeployScope.OuAclsOnly),
             "admx" => Scoped(DeployScope.AdmxOnly),
+            "authsilos" => Scoped(DeployScope.AuthSilosOnly),
             "msa" => new RunRequest(preferredDc, null, true, false, false, false, admlLanguage),
             "gmsa" => new RunRequest(preferredDc, null, false, true, false, false, admlLanguage),
             "dmsa" => new RunRequest(preferredDc, null, false, false, true, false, admlLanguage),
@@ -42,6 +43,7 @@ public static class Remediation
         "gmsa" => "gMSA",
         "dmsa" => "dMSA",
         "winlaps" => "Windows LAPS",
+        "authsilos" => "Authentication Silos",
         _ => area,
     };
 }

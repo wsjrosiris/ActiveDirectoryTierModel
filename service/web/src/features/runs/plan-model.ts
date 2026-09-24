@@ -14,6 +14,7 @@ export const planAreaLabels: Record<string, string> = {
   gmsa: 'gMSA-Delegationen',
   dmsa: 'dMSA-Delegationen',
   winlaps: 'Windows LAPS',
+  authsilos: 'Authentication Silos',
 }
 
 export type ActionKind = 'create' | 'update' | 'link' | 'configure' | 'remove' | 'other'
@@ -28,6 +29,13 @@ const knownActions: Record<string, { label: string; kind: ActionKind }> = {
   ImportGPO: { label: 'GPO importieren', kind: 'create' },
   LinkGPO: { label: 'GPO verknüpfen', kind: 'link' },
   ConfigureLapsDecryptor: { label: 'LAPS-Entschlüsselung konfigurieren', kind: 'configure' },
+  AddDeviceGroupMember: { label: 'Gerät zur Gerätegruppe hinzufügen', kind: 'update' },
+  CreateAuthPolicy: { label: 'Authentifizierungsrichtlinie anlegen', kind: 'create' },
+  UpdateAuthPolicy: { label: 'Authentifizierungsrichtlinie ändern', kind: 'update' },
+  CreateAuthSilo: { label: 'Silo anlegen', kind: 'create' },
+  UpdateAuthSilo: { label: 'Silo ändern', kind: 'update' },
+  GrantSiloAccess: { label: 'Konto im Silo zulassen', kind: 'configure' },
+  AssignSilo: { label: 'Konto dem Silo zuweisen', kind: 'configure' },
 }
 
 const verbs: [RegExp, string, ActionKind][] = [
@@ -142,6 +150,26 @@ export function describeAction(a: PlanAction): SentencePart[] {
       return ['GPO ', q(a.name), ' aus Sicherung importieren']
     case 'LinkGPO':
       return ['GPO ', q(a.name), ' verknüpfen mit ', ...(a.path ? [{ path: a.path } as SentencePart] : ['–'])]
+    case 'AddDeviceGroupMember': {
+      const group = text(detail(a, 'group'))
+      return ['Gerät ', q(a.name), ' zur Gerätegruppe ', q(group ?? '?'), ' hinzufügen']
+    }
+    case 'CreateAuthPolicy':
+    case 'UpdateAuthPolicy': {
+      const parts: SentencePart[] = ['Authentifizierungsrichtlinie ', q(a.name), a.action === 'CreateAuthPolicy' ? ' anlegen' : ' ändern']
+      const rule = signInRule(a)
+      if (rule) parts.push(` – ${rule}`)
+      return parts
+    }
+    case 'CreateAuthSilo':
+    case 'UpdateAuthSilo': {
+      const policy = text(detail(a, 'userAuthenticationPolicy'))
+      return ['Silo ', q(a.name), a.action === 'CreateAuthSilo' ? ' anlegen' : ' ändern', ...(policy ? [' mit Benutzerrichtlinie ', q(policy)] : [])]
+    }
+    case 'GrantSiloAccess':
+      return ['Konto ', q(a.name), ' im Silo ', q(text(detail(a, 'silo')) ?? '?'), ' zulassen']
+    case 'AssignSilo':
+      return ['Konto ', q(a.name), ' dem Silo ', q(text(detail(a, 'silo')) ?? '?'), ' zuweisen']
     case 'ConfigureLapsDecryptor':
       return ['LAPS-Entschlüsselung ', q(a.name), ' konfigurieren', ...(a.path ? [' für ', { path: a.path } as SentencePart] : [])]
   }
@@ -151,6 +179,24 @@ export function describeAction(a: PlanAction): SentencePart[] {
   const noun = object ? objectLabel(object) : a.resourceType || 'Objekt'
   if (v) return [`${noun} `, q(a.name), ` ${v[1]}`, ...at(a.path)]
   return [`${actionLabel(a.action)}: `, q(a.name), ...at(a.path)]
+}
+
+/** „Anmeldung nur von Domänencontrollern oder Geräten in A, B“ from a policy action's details. */
+function signInRule(a: PlanAction): string | null {
+  const dcs = detail(a, 'includeDomainControllers')
+  const groups = list(detail(a, 'deviceGroups'))
+  if (dcs === undefined && !groups.length) return null
+  return describeSignInRule(dcs === true || dcs === 'true' || dcs === 'True', groups)
+}
+
+/** Readable sentence for the device condition of an authentication policy (no SDDL). */
+export function describeSignInRule(includeDomainControllers: boolean, deviceGroups: string[]): string {
+  const groups = deviceGroups.filter(Boolean)
+  if (!includeDomainControllers && !groups.length) return 'Keine Gerätebedingung – Anmeldung von jedem Gerät'
+  const g = groups.length === 1 ? `Geräten in ${groups[0]}` : `Geräten in ${groups.slice(0, -1).join(', ')} oder ${groups[groups.length - 1]}`
+  if (includeDomainControllers && groups.length) return `Anmeldung nur von Domänencontrollern oder ${g}`
+  if (includeDomainControllers) return 'Anmeldung nur von Domänencontrollern'
+  return `Anmeldung nur von ${g}`
 }
 
 export function sentenceText(parts: SentencePart[]): string {
@@ -209,6 +255,9 @@ export function remainingDetails(a: PlanAction): Record<string, PlanDetailValue>
   const used = new Set<string>()
   if (a.action === 'CreateAcl') ['principal', 'identityreference', 'rights', 'activedirectoryrights'].forEach((k) => used.add(k))
   if (a.action === 'UpdateUserMembership') ['addgroups', 'groups', 'group'].forEach((k) => used.add(k))
+  // Authentication silos: the sign-in rule is said in words; SIDs and the generated SDDL are technical detail.
+  if (/AuthPolicy|AuthSilo|SiloAccess|AssignSilo|DeviceGroupMember/.test(a.action))
+    ['sddl', 'currentsddl', 'devicegroupsids', 'includedomaincontrollers', 'devicegroups', 'silo', 'group'].forEach((k) => used.add(k))
   const out: Record<string, PlanDetailValue> = {}
   for (const [k, v] of Object.entries(a.details ?? {})) if (!used.has(k.toLowerCase())) out[k] = v
   return out

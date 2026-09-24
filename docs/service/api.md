@@ -112,7 +112,7 @@ ist ein Platzhalter, den das Framework zur Laufzeit ersetzt.
 Läufe werden in eine Warteschlange gestellt und nacheinander ausgeführt.
 
 ```ts
-type Scope = 'FullDeployment' | 'OuOnly' | 'GroupOnly' | 'UserOnly' | 'GposOnly' | 'OuAclsOnly' | 'AdmxOnly'
+type Scope = 'FullDeployment' | 'OuOnly' | 'GroupOnly' | 'UserOnly' | 'GposOnly' | 'OuAclsOnly' | 'AdmxOnly' | 'AuthSilosOnly'
 interface RunRequest {
   preferredDc: string; scope: Scope | null      // null nur erlaubt, wenn mind. ein include* gesetzt ist;
                                                  // include* nur mit scope 'FullDeployment' oder null (wie in den Skripten)
@@ -196,6 +196,25 @@ sonst 400 mit Meldung zu `planRunId`. Der Anwenden-Lauf übernimmt die Versionen
 | GET | `/api/privileged` | letzte Überwachung: Gruppen mit Mitgliedern und Bewertung, nicht erwartete Mitglieder, Hygiene-Befunde, Angriffspfade, Zähler |
 | GET | `/api/privileged/changes?limit=` | hinzugefügte/entfernte Mitglieder je Überwachungslauf |
 | GET | `/api/compliance` | Wert je Tier mit Abzügen, Tagesverlauf (30 Tage, UTC) und die verwendeten Gewichte |
+
+## Active Directory (Ist-Zustand, alle angemeldeten Benutzer)
+
+Nur auf einem Windows-Server in der Domäne; sonst `available: false`. Ergebnisse 60 s zwischengespeichert,
+`refresh=true` umgeht den Cache.
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| GET | `/api/ad/tree` | OU-Baum: DN, Name, Anzahl Unter-OUs, Löschschutz, GPO-Vererbung blockiert, verknüpfte GPOs |
+| GET | `/api/ad/object?dn=` | OU: Unter-OUs, Anzahl Benutzer/Gruppen/Computer, GPO-Verknüpfungen, explizite ACEs; Gruppe: Mitglieder |
+| GET | `/api/ad/compare` | Soll/Ist je OU: `missing` / `extra` / `different` / `same` mit Unterschieden bei ACEs und GPO-Verknüpfungen |
+
+## Einrichtung (Admin)
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| GET | `/api/setup/state` | ob die Einrichtung angeboten wird, erkannte Domäne, DCs |
+| POST | `/api/setup/gpo-prefix/preview` | `{ prefix }` → Liste der GPO-Umbenennungen |
+| POST | `/api/setup/complete` | Einrichtung abgeschlossen bzw. übersprungen |
 
 ## Zeitpläne (geplante Audits)
 

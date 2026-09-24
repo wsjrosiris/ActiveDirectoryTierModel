@@ -22,7 +22,7 @@ public enum RunTrigger { Manual, Schedule }
 
 public enum RunMode { Plan, Apply }
 
-public enum DeployScope { FullDeployment, OuOnly, GroupOnly, UserOnly, GposOnly, OuAclsOnly, AdmxOnly }
+public enum DeployScope { FullDeployment, OuOnly, GroupOnly, UserOnly, GposOnly, OuAclsOnly, AdmxOnly, AuthSilosOnly }
 
 public class AppUser
 {

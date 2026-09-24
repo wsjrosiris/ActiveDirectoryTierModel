@@ -31,17 +31,20 @@ import { sectionFallbackTitles, sectionGroups } from '@/lib/labels'
 import { cn, downloadUrl, formatDateTime, formatNumber, formatRelative, modKey } from '@/lib/utils'
 import { draftStore, useDirtyKeys, useHistoryAvailability, useSectionContent } from './draft-store'
 import { sectionQuery, sectionsQuery } from './queries'
-import { AclsEditor, GroupsEditor, OusEditor, UsersEditor, WinLapsEditor, type EditorProps } from './editors'
+import { AclsEditor, GroupsEditor, UsersEditor, WinLapsEditor, type EditorProps } from './editors'
 import { AdmxEditor } from './admx-editor'
+import { OusSection } from './ad-view'
+import { AuthSilosEditor } from './authsilo-editor'
 import { DependenciesEditor } from './dependencies-editor'
 import { GuidMappingsEditor } from './guid-editor'
 import { GposEditor } from './gpo-editor'
 import { ObjectFormEditor } from './object-form'
 import { SaveDialog } from './save-dialog'
 import { VersionsSheet } from './versions-sheet'
+import { WizardMenu } from './wizards'
 
 const FORM_EDITORS: Record<string, React.ComponentType<EditorProps>> = {
-  ous: OusEditor,
+  ous: OusSection,
   groups: GroupsEditor,
   users: UsersEditor,
   acls: AclsEditor,
@@ -54,6 +57,7 @@ const FORM_EDITORS: Record<string, React.ComponentType<EditorProps>> = {
   dependencies: DependenciesEditor,
   metadata: ObjectFormEditor,
   gpos: GposEditor,
+  authsilos: AuthSilosEditor,
 }
 
 /** Editor for a section: a dedicated form, the ADML form for every language, else the generic structured form. */
@@ -153,6 +157,7 @@ export function Component() {
               </Tooltip>
             </div>
           )}
+          <WizardMenu />
           <Button variant="outline" size="sm" asChild>
             <Link to="/konfiguration/validierung"><CheckCircle2 /> Validierung</Link>
           </Button>

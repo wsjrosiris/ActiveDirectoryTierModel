@@ -91,6 +91,12 @@ export function collectionsFor(sectionKey: string): Collection[] {
       return [{ path: ['winLapsDelegations'], kind: 'array', entity: 'LAPS-Delegation', id: (w) => String(w?.ouDn ?? '').toLowerCase(), title: (w) => shortDn(w?.ouDn), summary: ['readGroup', 'resetGroup'] }]
     case 'admx':
       return [{ path: ['admx', 'files'], kind: 'map', entity: 'Datei', id: (_f, k) => k.toLowerCase(), title: (_f, k) => k, summary: ['comment', 'hash'] }]
+    case 'authsilos':
+      return [
+        { path: ['authenticationPolicies'], kind: 'array', entity: 'Richtlinie', id: (p) => String(p?.name ?? '').toLowerCase(), title: (p) => p?.name ?? '?', summary: ['enforce', 'userTgtLifetimeMins'] },
+        { path: ['authenticationPolicySilos'], kind: 'array', entity: 'Silo', id: (p) => String(p?.name ?? '').toLowerCase(), title: (p) => p?.name ?? '?', summary: ['enforce', 'userAuthenticationPolicy'] },
+        { path: ['deviceGroupSync'], kind: 'array', entity: 'Gerätegruppe', id: (p) => String(p?.group ?? '').toLowerCase(), title: (p) => p?.group ?? '?', summary: ['sourceOUs'] },
+      ]
     case 'gpos':
       return [{ path: ['gpos'], kind: 'map', entity: 'GPO-Ziel', id: (_g, k) => k.toLowerCase(), title: (g, k) => (isObj(g) && g.displayName) || shortDn(k) }]
     default:

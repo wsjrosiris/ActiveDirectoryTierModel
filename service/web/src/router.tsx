@@ -45,6 +45,7 @@ const routes: RouteObject[] = [
         { path: 'laeufe', ...page(() => import('@/features/runs/runs-page')) },
         { path: 'laeufe/:id', ...page(() => import('@/features/runs/run-detail-page')) },
         { path: 'aenderungen', ...page(() => import('@/features/changelog/changelog-page')) },
+        { path: 'einrichtung', ...page(() => import('@/features/setup/setup-page')) },
         {
           path: 'admin',
           element: <RequireAuth role="Admin"><Navigate to="/admin/benutzer" replace /></RequireAuth>,

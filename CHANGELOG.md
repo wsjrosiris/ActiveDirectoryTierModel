@@ -41,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `UserAllowedToAuthenticateFrom` SDDL (domain controllers OR any listed device group), silos, silo membership by OU
   and device-group sync; new scope `-AuthSilosOnly` in Deploy and Audit, last phase of `-FullDeployment`
   (`docs/authentication-silos.md`). The optional scripts are superseded; their Tier 0 SDDL used AND instead of OR.
+- Service: **authentication silos** section with form editor (policies, silos, device-group sync, rule shown as a
+  sentence), scope *Nur Authentication Silos*.
+- Service: **desired / actual / compare** view for OUs (`/api/ad/*`, Windows; fake directory in development).
+- Service: **wizards** for a new server area, a new admin account and a new delegation (one undo step, tier checks).
+- Service: **setup wizard** on first start (domain and DC, GPO prefix preview, adopt existing OUs, first plan).
 - Service: **compliance score** per tier on the dashboard with 30-day history and breakdown.
 - Roadmap for the next features (`docs/service/roadmap.md`).
 

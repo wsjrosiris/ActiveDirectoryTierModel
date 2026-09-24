@@ -1,4 +1,9 @@
 import type {
+  AdCompare,
+  AdObject,
+  AdTree,
+  PrefixPreview,
+  SetupState,
   AdGroups,
   DomainControllers,
   GpoBackup,
@@ -272,6 +277,16 @@ export const api = {
     changes: (limit = 50) => get<PrivilegedChanges>(`/api/privileged/changes?limit=${limit}`),
   },
   compliance: () => get<Compliance>('/api/compliance'),
+  ad: {
+    tree: (refresh = false) => get<AdTree>(`/api/ad/tree${refresh ? '?refresh=true' : ''}`),
+    object: (dn: string) => get<AdObject>(`/api/ad/object?dn=${enc(dn)}`),
+    compare: (refresh = false) => get<AdCompare>(`/api/ad/compare${refresh ? '?refresh=true' : ''}`),
+  },
+  setup: {
+    state: () => get<SetupState>('/api/setup/state'),
+    prefixPreview: (prefix: string) => post<PrefixPreview>('/api/setup/gpo-prefix/preview', { prefix }),
+    complete: (skipped: boolean) => post<void>('/api/setup/complete', { skipped }),
+  },
   settings: {
     get: () => get<Settings>('/api/settings'),
     update: (body: SettingsUpdate) => put<Settings>('/api/settings', body),

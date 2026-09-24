@@ -1,4 +1,4 @@
-import { Activity, Bell, ShieldUser, HeartPulse, FileClock, KeyRound, LayoutDashboard, Rocket, ScanSearch, Settings2, SlidersHorizontal, Users, type LucideIcon } from 'lucide-react'
+import { Activity, Bell, Sparkles, ShieldUser, HeartPulse, FileClock, KeyRound, LayoutDashboard, Rocket, ScanSearch, Settings2, SlidersHorizontal, Users, type LucideIcon } from 'lucide-react'
 import type { Role } from '@/api/types'
 
 export interface NavItem {
@@ -25,5 +25,6 @@ export const adminNav: NavItem[] = [
   { to: '/admin/windows-anmeldung', label: 'Windows-Anmeldung', icon: KeyRound, role: 'Admin', keywords: 'kerberos ntlm sso ad gruppen rollen domäne negotiate' },
   { to: '/admin/benachrichtigungen', label: 'Benachrichtigungen', icon: Bell, role: 'Admin', keywords: 'e-mail smtp teams webhook alarm notification' },
   { to: '/admin/einstellungen', label: 'Einstellungen', icon: Settings2, role: 'Admin', keywords: 'settings dc sprache freigabe vier-augen approval planung plan gültigkeit' },
+  { to: '/einrichtung', label: 'Einrichtung', icon: Sparkles, role: 'Admin', keywords: 'assistent setup erste schritte domäne präfix vorlage' },
   { to: '/admin/systemzustand', label: 'Systemzustand', icon: HeartPulse, role: 'Admin', keywords: 'health status zertifikat datenbank speicherplatz powershell version worker dienst ampel' },
 ]

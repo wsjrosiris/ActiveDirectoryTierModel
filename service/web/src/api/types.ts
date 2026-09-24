@@ -123,6 +123,7 @@ export type Scope =
   | 'GposOnly'
   | 'OuAclsOnly'
   | 'AdmxOnly'
+  | 'AuthSilosOnly'
 
 export interface RunRequest {
   preferredDc: string
@@ -627,4 +628,150 @@ export interface Compliance {
   monitor: { runId: number; at: string } | null
   current: TierCompliance[] | null
   history: { date: string; tier0: number | null; tier1: number | null; tier2: number | null }[]
+}
+
+// ---------- Live AD view (Ist-Ansicht) ----------
+
+export interface AdDomainController {
+  name: string
+  site: string | null
+  isGlobalCatalog: boolean
+}
+
+export interface AdDomainInfo {
+  dnsName: string
+  distinguishedName: string
+  netBiosName: string
+  domainFunctionalLevel: string
+  forestFunctionalLevel: string
+  forestName: string
+  domainControllers: AdDomainController[]
+}
+
+export interface AdTreeNode {
+  dn: string
+  name: string
+  parentDn: string
+  childCount: number
+  protected: boolean
+  blockInheritance: boolean
+  description: string | null
+  gpos: string[]
+}
+
+export interface AdTree {
+  available: boolean
+  source: string
+  message: string | null
+  readAt: string | null
+  domain: AdDomainInfo | null
+  truncated: boolean
+  nodes: AdTreeNode[]
+}
+
+export interface AdAce {
+  principal: string
+  principalSid: string | null
+  rights: string[]
+  type: 'Allow' | 'Deny' | string
+  objectTypeGuid: string | null
+  inheritedObjectTypeGuid: string | null
+  inheritance: string
+  isDefault: boolean
+  objectType: string | null
+  inheritedObjectType: string | null
+}
+
+export interface AdGpoLink {
+  name: string
+  gpoGuid: string | null
+  order: number
+  enabled: boolean
+  enforced: boolean
+}
+
+export interface AdMember {
+  name: string
+  samAccountName: string
+  objectClass: string
+  distinguishedName: string
+  enabled: boolean | null
+}
+
+export interface AdObject {
+  available: boolean
+  source: string
+  message: string | null
+  dn: string
+  kind: string
+  name: string
+  ou: {
+    childOus: AdTreeNode[]
+    counts: { users: number; groups: number; computers: number; other: number } | null
+    gpoLinks: AdGpoLink[]
+    protected: boolean
+    blockInheritance: boolean
+  } | null
+  members: AdMember[] | null
+  aces: AdAce[]
+}
+
+export type CompareStatus = 'same' | 'missing' | 'extra' | 'different'
+
+export interface OuComparison {
+  dn: string
+  configDn: string
+  name: string
+  parentDn: string | null
+  status: CompareStatus
+  inConfig: boolean
+  inAd: boolean
+  builtin: boolean
+  isRoot: boolean
+  configIndex: number | null
+  suggestedPath: string | null
+  protected: boolean | null
+  blockInheritance: boolean | null
+  desiredAces: number
+  actualAces: number
+  desiredLinks: number
+  actualLinks: number
+  differences: { kind: string; text: string }[]
+}
+
+export interface AdCompare {
+  available: boolean
+  source: string
+  message: string | null
+  readAt: string | null
+  domain: AdDomainInfo | null
+  result: { domainDn: string; items: OuComparison[]; summary: { same: number; missing: number; extra: number; different: number } } | null
+}
+
+// ---------- Setup wizard ----------
+
+export interface SetupState {
+  needed: boolean
+  completed: boolean
+  sampleConfiguration: boolean
+  userVersions: number
+  directoryAvailable: boolean
+  directorySource: string
+  completedBy: string | null
+  completedAt: string | null
+}
+
+export interface GpoRename {
+  section: 'gpos' | 'winlaps'
+  target: string
+  field: string
+  from: string
+  to: string
+}
+
+export interface PrefixPreview {
+  current: string
+  prefix: string
+  renames: GpoRename[]
+  gpoCount: number
 }

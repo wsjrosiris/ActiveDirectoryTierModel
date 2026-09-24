@@ -147,8 +147,69 @@ public static partial class TierRules
                                 $"GPO '{Str(gpo, "name")}' (Tier {gpoTier}) ist mit einer Tier-{targetTier}-OU verknüpft", target));
             }
 
+        CheckAuthSilos(sections, issues, PrincipalTier);
         return issues;
     }
+
+    private static int? ExplicitTier(JsonObject o) =>
+        o["tier"] is JsonValue v && v.TryGetValue<int>(out var t) && t is >= 0 and <= 2 ? t : null;
+
+    /// <summary>
+    /// Authentication silos: the devices a tier's accounts may sign in from must belong to the same tier.
+    /// A Tier 0 policy that allows sign-in from Tier 1/2 devices exposes Tier 0 credentials there.
+    /// </summary>
+    private static void CheckAuthSilos(IReadOnlyDictionary<string, JsonNode?> sections, List<ValidationIssue> issues, Func<string?, int?> principalTier)
+    {
+        const string key = "authsilos";
+        var policyGroups = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in Items(sections, key, "authenticationPolicies"))
+        {
+            var name = Str(p, "name");
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            var groups = StrList(p["allowedToAuthenticateFrom"] as JsonObject, "deviceGroups");
+            policyGroups[name] = groups;
+            if ((ExplicitTier(p) ?? TierOf(name)) is not { } tier) continue;
+            foreach (var g in groups)
+                if (principalTier(g) is { } groupTier && groupTier != Broad && groupTier != tier)
+                    issues.Add(groupTier > tier
+                        ? new("Error", key, $"Tier-Verstoß: Tier-{tier}-Richtlinie erlaubt die Anmeldung von Tier-{groupTier}-Geräten ('{g}')", name)
+                        : new("Warning", key, $"Tier-{tier}-Richtlinie erlaubt die Anmeldung von Tier-{groupTier}-Geräten ('{g}') – Geräte sollten zum eigenen Tier gehören", name));
+                else if (principalTier(g) == Broad)
+                    issues.Add(new("Error", key, $"Tier-Verstoß: Richtlinie erlaubt die Anmeldung von allen Geräten der breiten Gruppe '{g}'", name));
+        }
+
+        foreach (var s in Items(sections, key, "authenticationPolicySilos"))
+        {
+            var name = Str(s, "name");
+            if (string.IsNullOrWhiteSpace(name) || (ExplicitTier(s) ?? TierOf(name)) is not { } tier) continue;
+            foreach (var field in new[] { "userAuthenticationPolicy", "computerAuthenticationPolicy", "serviceAuthenticationPolicy" })
+            {
+                if (Str(s, field) is not { Length: > 0 } policy || !policyGroups.TryGetValue(policy, out var groups)) continue;
+                foreach (var g in groups)
+                    if (principalTier(g) is { } groupTier && groupTier > tier)
+                        issues.Add(new("Error", key, $"Tier-Verstoß: Tier-{tier}-Silo erlaubt über '{policy}' die Anmeldung von Tier-{groupTier}-Geräten ('{g}')", name));
+            }
+            var members = s["members"] as JsonObject;
+            foreach (var g in StrList(members, "computerGroups"))
+                if (principalTier(g) is { } groupTier && groupTier > tier)
+                    issues.Add(new("Error", key, $"Tier-Verstoß: Computer der Tier-{groupTier}-Gruppe '{g}' werden in ein Tier-{tier}-Silo aufgenommen", name));
+            foreach (var ou in StrList(members, "userOUs").Concat(StrList(members, "computerOUs")))
+                if (TargetTier(ou) is { } ouTier && ouTier > tier)
+                    issues.Add(new("Error", key, $"Tier-Verstoß: Konten aus einer Tier-{ouTier}-OU werden in ein Tier-{tier}-Silo aufgenommen", name));
+        }
+
+        foreach (var d in Items(sections, key, "deviceGroupSync"))
+        {
+            var group = Str(d, "group");
+            if (string.IsNullOrWhiteSpace(group) || (ExplicitTier(d) ?? principalTier(group)) is not { } groupTier || groupTier == Broad) continue;
+            foreach (var ou in StrList(d, "sourceOUs"))
+                if (TargetTier(ou) is { } ouTier && ouTier > groupTier)
+                    issues.Add(new("Error", key, $"Tier-Verstoß: Computer aus einer Tier-{ouTier}-OU werden in die Tier-{groupTier}-Gerätegruppe '{group}' aufgenommen", group));
+        }
+    }
+
+    private static List<string> StrList(JsonObject? o, string prop) =>
+        o?[prop] is JsonArray a ? a.OfType<JsonValue>().Select(v => v.TryGetValue<string>(out var s) ? s : null).OfType<string>().Where(s => s.Length > 0).ToList() : [];
 
     private static string FieldLabel(string field) => field switch
     {

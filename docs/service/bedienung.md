@@ -78,6 +78,49 @@ Auch alle übrigen Bereiche haben eigene Formulare – nirgends muss JSON getipp
 Wo es sinnvoll ist, schlagen Suchfelder Werte vor: OUs und Gruppen aus der Konfiguration, auf einem
 Windows-Server zusätzlich Domain Controller und AD-Gruppen direkt aus dem Active Directory.
 
+### Authentication Silos
+
+Der Bereich **Authentication Silos** (unter *Richtlinien*, Datei `tiermodel-authsilos.json`) hat drei Reiter:
+
+- **Richtlinien**: Name, Beschreibung, *Erzwingen* (aus = Überwachungsmodus), TGT-Lebensdauer (45–600 Minuten) und
+  von welchen Geräten aus Anmeldungen erlaubt sind: Domänencontroller und/oder Gerätegruppen. Die Regel wird als Satz
+  angezeigt („Anmeldung nur von Domänencontrollern oder Geräten in Tier0PAWDevices …“); die technische Form erzeugt
+  das Framework.
+- **Silos**: Richtlinien für Benutzer, Computer und Dienste, Mitglieder über Benutzer-OUs, Computer-OUs und
+  Computergruppen, Ausnahmen.
+- **Gerätegruppen-Synchronisierung**: Computer aus Quell-OUs werden in eine Gerätegruppe aufgenommen.
+
+![Authentication Silos](img/authsilos-light.png)
+
+Eine Tier-0-Richtlinie, die Geräte aus Tier 1/2 zulässt, ist ein Tier-Verstoß. Ausgerollt wird mit dem Bereich
+*Nur Authentication Silos* oder als letzte Phase von *Vollständig*. Zuerst im Überwachungsmodus einführen, siehe
+[Authentication Silos](../authentication-silos.md).
+
+### Soll, Ist und Vergleich
+
+Bei den **Organisationseinheiten** schaltet **Soll | Ist | Vergleich** zwischen Konfiguration, dem tatsächlichen
+OU-Baum im AD und dem Abgleich beider um. Der Vergleich markiert jede OU als *fehlt im AD*, *nur im AD*, *abweichend*
+oder *gleich*; die Details nennen die Unterschiede bei ACEs und GPO-Verknüpfungen als Sätze. OUs, die nur im AD
+existieren, lassen sich **in die Konfiguration übernehmen**. Die Daten werden 60 Sekunden zwischengespeichert
+(**Neu laden**). Die Ist-Ansicht braucht den Dienst auf einem Windows-Server in der Domäne.
+
+![Vergleich Soll/Ist](img/ad-compare-light.png)
+
+### Assistenten
+
+**Assistent** im Kopf der Konfiguration (Bearbeiter) führt durch häufige Aufgaben, die mehrere Bereiche betreffen:
+
+| Assistent | Ergebnis |
+|---|---|
+| Neuen Server-Bereich aufnehmen | OU (optional mit Staging-OU), Admin-Gruppe, ACL-Delegation (Vollzugriff oder nur Domänenbeitritt) und die GPO-Verknüpfungen der Nachbar-OUs desselben Tiers |
+| Neues Admin-Konto | Konto in der Accounts-OU des Tiers, Gruppen desselben Tiers, auf Wunsch *Protected Users* |
+| Neue Delegation | Wer, was, wo – mit Live-Prüfung der Tier-Regeln |
+
+Die Zusammenfassung zeigt jede Änderung als Satz und prüft die Tier-Regeln; Fehler verhindern das Übernehmen. Das
+Ergebnis landet als **ein** Schritt im Entwurf (Strg+Z nimmt alles zurück) und wird wie gewohnt gespeichert.
+
+![Assistent](img/wizard-light.png)
+
 ### OU umbenennen oder verschieben
 
 Name und übergeordnete OU einer bestehenden OU werden über **Umbenennen / Verschieben …** geändert. Eine Vorschau
@@ -330,6 +373,11 @@ wählen, bei welchen Ereignissen er benachrichtigt wird:
 | Maximales Passwortalter (Tage) | Hygiene: Passwort zu alt (Standard 365) |
 | Öffentliche Adresse | z. B. `https://tiermodel01.contoso.com:8443` – für Links in Benachrichtigungen |
 | Aufbewahrung von Läufen (Tage) | Protokollzeilen und Arbeitsverzeichnisse älterer Läufe werden gelöscht; Status, Ergebnis und Befunde bleiben. `0` = unbegrenzt |
+
+**Einrichtung** (Admin): Solange die mitgelieferte Beispielkonfiguration noch unverändert ist, bietet das Dashboard
+*Einrichtung abschließen* an: 1. Domäne und Domain Controller, 2. Struktur und GPO-Präfix (Vorschau der
+Umbenennungen), 3. vorhandene OUs aus dem AD übernehmen, 4. erste Planung starten. *Überspringen* blendet den
+Hinweis dauerhaft aus.
 
 **Systemzustand**: Ampel über alle Prüfpunkte – Anwendung (Version, Laufzeit), HTTPS-Zertifikat (Ablauf),
 Datenbank (Größe, Migrationen), Warteschlange, letzte erfolgreiche Läufe, freier Platz im Arbeitsverzeichnis,

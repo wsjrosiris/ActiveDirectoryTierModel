@@ -35,6 +35,7 @@ import { actionLabels, includeLabels, scopeLabels } from '@/lib/labels'
 import { cn, formatDuration, formatNumber, formatRelative } from '@/lib/utils'
 
 import { ComplianceTiles } from './compliance-tiles'
+import { SetupCard } from '@/features/setup/setup-card'
 
 const DriftChart = React.lazy(() => import('./drift-chart'))
 
@@ -63,6 +64,8 @@ export function Component() {
           )
         }
       />
+
+      <SetupCard />
 
       {!!data?.pendingApprovals?.length && <PendingApprovalsCard runs={data.pendingApprovals} />}
 

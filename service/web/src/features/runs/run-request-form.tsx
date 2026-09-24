@@ -14,13 +14,14 @@ import { languageError, useDomainControllerOptions, useLanguageOptions } from '@
 export const settingsQuery = { queryKey: ['settings'], queryFn: api.settings.get, staleTime: 5 * 60_000 }
 
 const scopeDescriptions: Record<Scope, string> = {
-  FullDeployment: 'OUs, Gruppen, Benutzer, ACLs, GPOs und ADMX',
+  FullDeployment: 'OUs, Gruppen, Benutzer, ACLs, GPOs, ADMX und Authentication Silos',
   OuOnly: 'Nur die OU-Struktur',
   GroupOnly: 'Nur Sicherheitsgruppen',
   UserOnly: 'Nur Dienstkonten',
   GposOnly: 'Nur Gruppenrichtlinien',
   OuAclsOnly: 'Nur OU-Berechtigungen',
   AdmxOnly: 'Nur ADMX/ADML-Vorlagen',
+  AuthSilosOnly: 'Authentifizierungsrichtlinien, Silos und Gerätegruppen',
 }
 
 export function emptyRunRequest(): RunRequest {

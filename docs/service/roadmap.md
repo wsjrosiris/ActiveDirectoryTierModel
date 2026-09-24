@@ -260,5 +260,8 @@ Geführte Dialoge, die mehrere Bereiche in **einem** Entwurf ändern (bestehende
 | 9 Angriffspfade (direkte Rechte + Mitglieder der berechtigten Gruppe) | umgesetzt |
 | 5 Behebung per Klick | umgesetzt |
 | 24 Compliance-Wert | umgesetzt |
-| 10 Authentication Silos | in Arbeit |
-| Phase 3–5 (übrige) | geplant |
+| 10 Authentication Silos | umgesetzt (Framework + Formular) |
+| 11 Assistenten | umgesetzt |
+| 12 Einrichtungsassistent | umgesetzt |
+| 14 Ist-Ansicht des AD | umgesetzt für OUs (ACL-/GPO-Bereiche ohne Vergleichsmarken) |
+| Phase 4–5 | geplant |

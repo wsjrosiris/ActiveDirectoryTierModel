@@ -125,3 +125,66 @@ export function gpoLinkTierIssues(gpoName: unknown, target: string): TierIssue[]
   if (t === null || g === null || t === g) return []
   return [{ severity: 'Warning', message: `GPO „${gpoName}“ gehört zu Tier ${g}, ist aber mit einer Tier-${t}-OU verknüpft.` }]
 }
+
+// ---------------------------------------------------------------- authentication silos
+
+const explicitTier = (o: Record<string, unknown>): number | null => (o.tier === 0 || o.tier === 1 || o.tier === 2 ? (o.tier as number) : null)
+const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && !!x) : [])
+
+/** Tier an authentication policy or silo stands for: the explicit "tier" field, else the name. */
+export function authTier(o: Record<string, unknown>): number | null {
+  return explicitTier(o) ?? numericTier(o.name)
+}
+
+/** A policy may only allow sign-in from devices of its own tier. */
+export function authPolicyTierIssues(p: Record<string, unknown>, groups: GroupTierMap): TierIssue[] {
+  const t = authTier(p)
+  if (t === null) return []
+  const from = (p.allowedToAuthenticateFrom ?? {}) as Record<string, unknown>
+  const out: TierIssue[] = []
+  for (const g of strings(from.deviceGroups)) {
+    const gt = principalTier(g, groups)
+    if (gt === null || gt === t) continue
+    if (gt === BROAD) out.push({ severity: 'Error', message: `Tier-Verstoß: Die Richtlinie erlaubt die Anmeldung von allen Geräten der breiten Gruppe „${g}“.` })
+    else if (gt > t) out.push({ severity: 'Error', message: `Tier-Verstoß: Tier-${t}-Richtlinie erlaubt die Anmeldung von Tier-${gt}-Geräten („${g}“). Tier-${t}-Anmeldedaten würden dort offengelegt.` })
+    else out.push({ severity: 'Warning', message: `Tier-${t}-Richtlinie erlaubt die Anmeldung von Tier-${gt}-Geräten („${g}“) – Geräte sollten zum eigenen Tier gehören.` })
+  }
+  return out
+}
+
+/** A silo of a tier must not reach devices or accounts of a less privileged tier. */
+export function authSiloTierIssues(s: Record<string, unknown>, policies: Record<string, unknown>[], groups: GroupTierMap): TierIssue[] {
+  const t = authTier(s)
+  if (t === null) return []
+  const out: TierIssue[] = []
+  for (const field of ['userAuthenticationPolicy', 'computerAuthenticationPolicy', 'serviceAuthenticationPolicy']) {
+    const name = s[field]
+    if (typeof name !== 'string' || !name) continue
+    const p = policies.find((x) => String(x.name ?? '').toLowerCase() === name.toLowerCase())
+    const from = (p?.allowedToAuthenticateFrom ?? {}) as Record<string, unknown>
+    for (const g of strings(from.deviceGroups)) {
+      const gt = principalTier(g, groups)
+      if (gt !== null && gt > t) out.push({ severity: 'Error', message: `Tier-Verstoß: Das Tier-${t}-Silo erlaubt über „${name}“ die Anmeldung von Tier-${gt}-Geräten („${g}“).` })
+    }
+  }
+  const members = (s.members ?? {}) as Record<string, unknown>
+  for (const g of strings(members.computerGroups)) {
+    const gt = principalTier(g, groups)
+    if (gt !== null && gt > t) out.push({ severity: 'Error', message: `Tier-Verstoß: Computer der Tier-${gt}-Gruppe „${g}“ werden in ein Tier-${t}-Silo aufgenommen.` })
+  }
+  for (const ou of [...strings(members.userOUs), ...strings(members.computerOUs)]) {
+    const ot = targetTier(ou)
+    if (ot !== null && ot > t) out.push({ severity: 'Error', message: `Tier-Verstoß: Konten aus einer Tier-${ot}-OU werden in ein Tier-${t}-Silo aufgenommen.` })
+  }
+  return out
+}
+
+/** Device group synchronisation: computers of a less privileged tier never fill a group of a more privileged tier. */
+export function deviceSyncTierIssues(d: Record<string, unknown>, groups: GroupTierMap): TierIssue[] {
+  const gt = explicitTier(d) ?? principalTier(d.group, groups)
+  if (gt === null || gt === BROAD) return []
+  return strings(d.sourceOUs)
+    .map((ou) => ({ ou, t: targetTier(ou) }))
+    .filter((x) => x.t !== null && x.t > gt)
+    .map((x) => ({ severity: 'Error' as const, message: `Tier-Verstoß: Computer aus einer Tier-${x.t}-OU werden in die Tier-${gt}-Gerätegruppe „${d.group}“ aufgenommen.` }))
+}

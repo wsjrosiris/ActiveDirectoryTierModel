@@ -105,7 +105,17 @@ echo "Umlaute: Domänen-Admins ✓"
 for i in 1 2 3 4 5; do echo "[$i/5] Processing step $i ..."; sleep 0.4; done
 echo "WARNING: OU 'Tier 1 Accounts' has unexpected ACE"
 echo "Failed to resolve principal 'Foo'" >&2
-if [ "$name" = "Audit-TierModel.ps1" ]; then
+if [ "$name" = "Audit-TierModel.ps1" ] && echo "$call" | grep -q -- "-AuthSilosOnly"; then
+  mkdir -p "$logpath"
+  cat > "$logpath/$base-$(date +%m%d%y-%H%M).json" <<J
+{ "auditSummary": { "TotalChecked": 24, "DriftCount": 3, "MissingCount": 2, "UnexpectedCount": 0, "MismatchCount": 1, "OrphanedGpoLinkCount": 0, "SecurityDeltaCount": 0 },
+  "driftFindings": [
+    { "Type": "Mismatch", "ResourceType": "AuthenticationPolicy", "Identifier": "Tier 0 Authentication Policy", "Property": "enforce, allowedToAuthenticateFrom", "ExpectedValue": "Member_of_any Tier0PAWDevices, Tier0MemberServers", "ActualValue": "Member_of Tier0PAWDevices && Tier0MemberServers", "Details": "Device condition uses && instead of ||", "Area": "authsilos", "Tier": 0, "Severity": "High" },
+    { "Type": "Missing", "ResourceType": "AuthenticationPolicySiloMember", "Identifier": "t0-carol -> Tier 0 Authentication Silo", "Details": "Account is not permitted in the silo", "Area": "authsilos", "Tier": 0, "Severity": "High" },
+    { "Type": "Missing", "ResourceType": "DeviceGroupMember", "Identifier": "T1-SRV07 -> Tier1MemberServers", "Details": "Computer from source OU is not in the device group", "Area": "authsilos", "Tier": 1, "Severity": "Medium" } ],
+  "metadata": { "scope": "AuthSilosOnly" } }
+J
+elif [ "$name" = "Audit-TierModel.ps1" ]; then
   mkdir -p "$logpath"
   cat > "$logpath/$base-$(date +%m%d%y-%H%M).json" <<J
 { "auditSummary": { "TotalChecked": 158, "DriftCount": 2, "MissingCount": 1, "UnexpectedCount": 0, "MismatchCount": 1, "OrphanedGpoLinkCount": 0, "SecurityDeltaCount": 0 },
@@ -120,7 +130,7 @@ fi
 if [ "$name" = "Deploy-TierModel.ps1" ] && ! echo "$call" | grep -q -- "-ConfirmApply"; then
   mkdir -p "$logpath"
   dc=$(echo "$call" | sed -nE "s/.*-PreferredDc '([^']*)'.*/\1/p")
-  scope=$(echo "$call" | grep -oE -- "-(FullDeployment|OuOnly|GroupOnly|UserOnly|GposOnly|OuAclsOnly|AdmxOnly)" | head -1 | tr -d -)
+  scope=$(echo "$call" | grep -oE -- "-(FullDeployment|OuOnly|GroupOnly|UserOnly|GposOnly|OuAclsOnly|AdmxOnly|AuthSilosOnly)" | head -1 | tr -d -)
   includes=""; for i in Msa Gmsa Dmsa WinLaps; do echo "$call" | grep -q -- "-Include$i" && includes="$includes${includes:+,}\"$i\""; done
   [ -z "$scope" ] && scope="IncludeOnly"
   want() { [ "$scope" = "FullDeployment" ] || [ "$scope" = "$1" ]; }
@@ -166,9 +176,18 @@ if [ "$name" = "Deploy-TierModel.ps1" ] && ! echo "$call" | grep -q -- "-Confirm
     add '{"phase":8,"area":"gmsa","action":"CreateAcl","resourceType":"AccessRule","name":"Tier1ServiceAccounts","path":"OU=Service Accounts,OU=Tier 1 Member Servers,'"$base"'","details":{"principal":"CONTOSO\\Tier1ServerOperators","rights":["CreateChild"],"objectType":"msDS-GroupManagedServiceAccount"}}'
     phases+=('{"phase":8,"name":"gMSA Delegations","area":"gmsa","actionCount":1,"existingCount":2}') ;;
   esac
+  if want AuthSilosOnly; then
+    add '{"phase":11,"area":"authsilos","action":"AddDeviceGroupMember","resourceType":"DeviceGroupMember","name":"T0-PAW03","path":"CN=T0-PAW03,OU=Tier 0 PAW Devices,OU=Tier 0,OU=Tier Model Administration,'"$base"'","details":{"group":"Tier0PAWDevices","computer":"CN=T0-PAW03,OU=Tier 0 PAW Devices,OU=Tier 0,OU=Tier Model Administration,'"$base"'","sourceOU":"OU=Tier 0 PAW Devices,OU=Tier 0,OU=Tier Model Administration,'"$base"'","tier":0}}'
+    add '{"phase":11,"area":"authsilos","action":"CreateAuthPolicy","resourceType":"AuthenticationPolicy","name":"Tier 0 Authentication Policy","path":null,"details":{"description":"Tier 0 accounts may only sign in from domain controllers, Tier 0 PAW devices and Tier 0 member servers","enforce":false,"userTgtLifetimeMins":240,"includeDomainControllers":true,"deviceGroups":["Tier0PAWDevices","Tier0MemberServers"],"deviceGroupSids":["S-1-5-21-1004336348-1177238915-682003330-1105","S-1-5-21-1004336348-1177238915-682003330-1106"],"sddl":"O:SYG:SYD:(XA;OICI;CR;;;WD;((Member_of {SID(ED)}) || (Member_of_any {SID(S-1-5-21-1004336348-1177238915-682003330-1105), SID(S-1-5-21-1004336348-1177238915-682003330-1106)})))","tier":0}}'
+    add '{"phase":11,"area":"authsilos","action":"UpdateAuthPolicy","resourceType":"AuthenticationPolicy","name":"Tier 1 Authentication Policy","path":"CN=Tier 1 Authentication Policy,CN=AuthN Policies,CN=AuthN Policy Configuration,CN=Services,CN=Configuration,'"$base"'","details":{"enforce":false,"userTgtLifetimeMins":240,"includeDomainControllers":false,"deviceGroups":["Tier1PAWDevices","Tier1MemberServers"],"changes":["allowedToAuthenticateFrom"],"currentEnforce":false,"currentUserTgtLifetimeMins":240,"tier":1}}'
+    add '{"phase":11,"area":"authsilos","action":"CreateAuthSilo","resourceType":"AuthenticationPolicySilo","name":"Tier 0 Authentication Silo","path":null,"details":{"description":"Tier 0 administrative accounts","enforce":false,"userAuthenticationPolicy":"Tier 0 Authentication Policy","computerAuthenticationPolicy":"","serviceAuthenticationPolicy":"","tier":0}}'
+    add '{"phase":11,"area":"authsilos","action":"GrantSiloAccess","resourceType":"AuthenticationPolicySiloMember","name":"t0-alice","path":"CN=Alice Admin (T0),OU=Tier 0 Accounts,OU=Tier 0,OU=Tier Model Administration,'"$base"'","details":{"silo":"Tier 0 Authentication Silo","samAccountName":"t0-alice","accountType":"User","tier":0}}'
+    add '{"phase":11,"area":"authsilos","action":"AssignSilo","resourceType":"AuthenticationPolicySiloAssignment","name":"t0-alice","path":"CN=Alice Admin (T0),OU=Tier 0 Accounts,OU=Tier 0,OU=Tier Model Administration,'"$base"'","details":{"silo":"Tier 0 Authentication Silo","samAccountName":"t0-alice","accountType":"User","currentSilo":"","tier":0}}'
+    phases+=('{"phase":11,"name":"Authentication Policies and Silos","area":"authsilos","actionCount":6,"existingCount":4}')
+  fi
   n=${#actions[@]}
   count() { local c=0; for a in "${actions[@]}"; do echo "$a" | grep -qE "\"action\":\"$1" && c=$((c+1)); done; echo $c; }
-  create=$(( $(count Create) + $(count Import) + $(count Copy) )); update=$(count Update); link=$(count Link); configure=$(count Configure)
+  create=$(( $(count Create) + $(count Import) + $(count Copy) )); update=$(( $(count Update) + $(count AddDeviceGroupMember) )); link=$(count Link); configure=$(( $(count Configure) + $(count GrantSiloAccess) + $(count AssignSilo) ))
   join() { local IFS=,; echo "$*"; }
   file="$logpath/deploy-plan.json"
   if echo "$dc" | grep -q noplan; then
