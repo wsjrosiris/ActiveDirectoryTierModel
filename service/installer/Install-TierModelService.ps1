@@ -548,6 +548,30 @@ function Read-Database {
     }
 }
 
+# The framework's prerequisite check aborts every run unless the account is (recursively) in Domain Admins.
+function Confirm-DomainAdminMembership([string]$SamAccountName) {
+    if (-not (Get-Command Get-ADGroupMember -ErrorAction SilentlyContinue)) {
+        Write-Info 'Mitgliedschaft in "Domain Admins" kann ohne ActiveDirectory-Modul nicht geprüft werden.'
+        return
+    }
+    try {
+        $sid = "$((Get-ADDomain).DomainSID.Value)-512"
+        $member = @(Get-ADGroupMember -Identity $sid -Recursive | Where-Object { $_.SamAccountName -eq $SamAccountName })
+        if ($member.Count -gt 0) {
+            Write-Ok "$SamAccountName ist Mitglied von Domain Admins."
+            return
+        }
+        Write-Warn "$SamAccountName ist NICHT Mitglied von Domain Admins. Das Framework verlangt diese Mitgliedschaft –"
+        Write-Warn 'ohne sie schlagen Deploy und Audit bei der Voraussetzungsprüfung fehl.'
+        Write-Info "Nachholen mit: Add-ADGroupMember -Identity '$sid' -Members '$SamAccountName'  (danach Dienst neu starten)"
+        if (-not (Read-YesNo 'Trotzdem fortfahren?' $true)) { throw 'Abgebrochen: Dienstkonto ohne Domain-Admins-Mitgliedschaft.' }
+    }
+    catch {
+        if ($_.Exception.Message -like 'Abgebrochen:*') { throw }
+        Write-Warn "Mitgliedschaft in Domain Admins konnte nicht geprüft werden: $($_.Exception.Message)"
+    }
+}
+
 function Read-ServiceAccount {
     param($Domain)
     Write-Step 'Dienstkonto'
@@ -573,6 +597,7 @@ function Read-ServiceAccount {
                 }
                 Write-Ok "gMSA $account ist einsatzbereit."
             }
+            Confirm-DomainAdminMembership "$($name.TrimEnd('$'))$"
             return [pscustomobject]@{ Kind = 'gMSA'; Account = $account; Password = '' }
         }
         2 {
@@ -587,10 +612,12 @@ function Read-ServiceAccount {
                 }
                 catch { Write-Warn "Anmeldedaten konnten nicht geprüft werden: $($_.Exception.Message)" }
             }
+            Confirm-DomainAdminMembership $account.Split('\')[1]
             return [pscustomobject]@{ Kind = 'User'; Account = $account; Password = $pw }
         }
         default {
             Write-Warn 'LocalSystem nutzt das Computerkonto dieses Servers für AD-Änderungen.'
+            Confirm-DomainAdminMembership "$env:COMPUTERNAME$"
             return [pscustomobject]@{ Kind = 'LocalSystem'; Account = 'LocalSystem'; Password = '' }
         }
     }
