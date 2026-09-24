@@ -16,6 +16,8 @@ export interface User {
   lastLoginAt: string | null
   lockedUntil: string | null
   createdAt: string
+  /** UI language chosen by the user; null = browser default (roadmap 25). */
+  language?: 'de' | 'en' | null
 }
 
 export interface MeResponse {
@@ -378,6 +380,8 @@ export interface Settings {
   staleDays: number
   /** Hygiene: maximum password age of privileged user accounts. */
   passwordMaxAgeDays: number
+  /** Language of persisted texts (change log, run messages, notifications, e-mailed reports). */
+  defaultLanguage: 'de' | 'en'
 }
 
 export type SettingsUpdate = Omit<Settings, 'frameworkPath' | 'pwshPath'>

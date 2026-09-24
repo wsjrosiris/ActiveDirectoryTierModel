@@ -13,6 +13,7 @@ import { draftStore, useSectionContent } from '../draft-store'
 import { sectionQuery } from '../queries'
 import { TierRuleAlerts } from '../tier-rule-alerts'
 import { hasErrors, type Contents, type Plan, type SectionKey } from './wizard-model'
+import { t } from '@/i18n'
 
 /* Stepper dialog shared by the configuration assistants. */
 
@@ -38,7 +39,7 @@ export function useApplyPlan() {
   return React.useCallback(
     (plan: Plan, title: string, section: SectionKey) => {
       draftStore.apply(plan.updated)
-      toast.success(title, { description: 'Im Entwurf – zum Übernehmen speichern.' })
+      toast.success(title, { description: t('config.wizards.wizardShell.inTheDraftSaveTo') })
       navigate(`/konfiguration/${section}`)
     },
     [navigate],
@@ -66,7 +67,7 @@ export function WizardDialog({
   onAttempt,
   dirty,
   loading,
-  finishLabel = 'In Entwurf übernehmen',
+  finishLabel = t('config.wizards.wizardShell.applyToDraft'),
   finishBlocked,
   onFinish,
 }: {
@@ -99,10 +100,10 @@ export function WizardDialog({
     if (!dirty) return onClose()
     confirming.current = true
     const ok = await confirm({
-      title: 'Assistent abbrechen?',
-      description: 'Ihre Eingaben in diesem Assistenten gehen verloren. Der Entwurf der Konfiguration bleibt unverändert.',
-      confirmText: 'Abbrechen und verwerfen',
-      cancelText: 'Weiter bearbeiten',
+      title: t('config.wizards.wizardShell.cancelAssistant'),
+      description: t('config.wizards.wizardShell.yourInputInThisAssistant'),
+      confirmText: t('config.wizards.wizardShell.cancelAndDiscard'),
+      cancelText: t('config.wizards.wizardShell.continueEditing'),
       destructive: true,
     })
     confirming.current = false
@@ -155,7 +156,7 @@ export function WizardDialog({
           </div>
           <D.Close
             className="absolute top-4 right-4 rounded-md p-1 text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label="Schließen"
+            aria-label={t('common.close')}
             onClick={(e) => {
               e.preventDefault()
               requestClose()
@@ -165,11 +166,11 @@ export function WizardDialog({
           </D.Close>
 
           {/* Body */}
-          <div ref={bodyRef} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-5 sm:px-6" role="group" aria-label={`Schritt ${step + 1}: ${current.label}`}>
+          <div ref={bodyRef} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-5 sm:px-6" role="group" aria-label={t('config.wizards.wizardShell.stepValueLabel', { value: step + 1, label: current.label })}>
             {loading ? (
               <div className="grid h-full place-content-center gap-2 text-center text-sm text-muted-foreground">
                 <Loader2 className="mx-auto size-5 animate-spin" />
-                Konfiguration wird geladen …
+                {t('config.wizards.wizardShell.loadingConfiguration')}
               </div>
             ) : (
               <div className="grid grid-cols-[minmax(0,1fr)] gap-6 [&_section]:grid-cols-[minmax(0,1fr)]">{current.content}</div>
@@ -180,28 +181,28 @@ export function WizardDialog({
           <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-4 py-3 sm:px-6">
             <p className="hidden text-xs text-muted-foreground sm:block">
               {attempted && Object.keys(current.errors).length > 0 ? (
-                <span className="text-destructive">Bitte die markierten Angaben ergänzen.</span>
+                <span className="text-destructive">{t('config.wizards.wizardShell.pleaseCompleteTheMarkedFields')}</span>
               ) : last && finishBlocked ? (
                 <span className="text-destructive">{finishBlocked}</span>
               ) : (
-                <>Schritt {step + 1} von {steps.length}</>
+                <>{t('config.wizards.wizardShell.step')} {step + 1} {t('config.wizards.wizardShell.of')} {steps.length}</>
               )}
             </p>
             <div className="ml-auto flex items-center gap-2">
               <Button type="button" variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={requestClose}>
-                Abbrechen
+                {t('common.cancel')}
               </Button>
               <Button type="button" variant="outline" size="sm" disabled={step === 0} onClick={() => onStepChange(step - 1)}>
-                <ArrowLeft /> Zurück
+                <ArrowLeft /> {t('common.back')}
               </Button>
               {last ? (
                 <Button type="button" size="sm" disabled={loading || !!finishBlocked} onClick={next}>
-                  <Check /> <span className="sm:hidden">Übernehmen</span>
+                  <Check /> <span className="sm:hidden">{t('config.wizards.wizardShell.apply')}</span>
                   <span className="hidden sm:inline">{finishLabel}</span>
                 </Button>
               ) : (
                 <Button type="button" size="sm" disabled={loading} onClick={next}>
-                  Weiter <ArrowRight />
+                  {t('config.wizards.wizardShell.next')} <ArrowRight />
                 </Button>
               )}
             </div>
@@ -217,7 +218,7 @@ function Stepper({ steps, step, firstInvalid, onStepChange }: { steps: WizardSte
   const reachable = (i: number) => i <= step || firstInvalid === -1 || i <= firstInvalid
   return (
     <>
-      <ol className="mt-4 hidden items-center gap-2 sm:flex" aria-label="Schritte">
+      <ol className="mt-4 hidden items-center gap-2 sm:flex" aria-label={t('config.wizards.wizardShell.steps')}>
         {steps.map((s, i) => {
           const done = i < step
           const active = i === step
@@ -250,7 +251,7 @@ function Stepper({ steps, step, firstInvalid, onStepChange }: { steps: WizardSte
       <div className="mt-3 sm:hidden">
         <div className="flex items-center justify-between text-xs">
           <span className="font-medium">{steps[step].label}</span>
-          <span className="text-muted-foreground tabular-nums">Schritt {step + 1} von {steps.length}</span>
+          <span className="text-muted-foreground tabular-nums">{t('config.wizards.wizardShell.step')} {step + 1} {t('config.wizards.wizardShell.of')} {steps.length}</span>
         </div>
         <div className="mt-1.5 flex gap-1" aria-hidden>
           {steps.map((s, i) => (
@@ -301,9 +302,9 @@ export function PlanSummary({ plan }: { plan: Plan }) {
     <>
       <section className="grid gap-3" aria-labelledby="wiz-changes">
         <div>
-          <h3 id="wiz-changes" className="text-[13px] font-semibold">Änderungen im Entwurf</h3>
+          <h3 id="wiz-changes" className="text-[13px] font-semibold">{t('config.wizards.wizardShell.changesInTheDraft')}</h3>
           <p className="text-xs text-muted-foreground">
-            Werden als ein Schritt in den Entwurf übernommen (mit {modKey}+Z rückgängig zu machen) und erst mit „Speichern“ wirksam.
+            {t('config.wizards.wizardShell.appliedToTheDraftAs')} {modKey}{t('config.wizards.wizardShell.zAndOnlyEffectiveWith')}
           </p>
         </div>
         <div className="grid gap-2">
@@ -333,7 +334,7 @@ export function PlanSummary({ plan }: { plan: Plan }) {
   )
 }
 
-export function TierCheck({ issues, errors, warnings, title = 'Prüfung der Tier-Regeln' }: { issues: Plan['issues']; errors?: number; warnings?: number; title?: string }) {
+export function TierCheck({ issues, errors, warnings, title = t('config.wizards.wizardShell.tierRuleCheck') }: { issues: Plan['issues']; errors?: number; warnings?: number; title?: string }) {
   const e = errors ?? issues.filter((i) => i.severity === 'Error').length
   const w = warnings ?? issues.length - e
   return (
@@ -342,24 +343,24 @@ export function TierCheck({ issues, errors, warnings, title = 'Prüfung der Tier
         <h3 id="wiz-check" className="text-[13px] font-semibold">{title}</h3>
         {issues.length > 0 && (
           <span className="text-xs text-muted-foreground">
-            {e > 0 && `${e} Fehler`}
+            {e > 0 && t('config.wizards.wizardShell.errors', { count: e })}
             {e > 0 && w > 0 && ' · '}
-            {w > 0 && `${w} Hinweis${w === 1 ? '' : 'e'}`}
+            {w > 0 && t('config.wizards.wizardShell.warnings', { count: w })}
           </span>
         )}
       </div>
       {issues.length === 0 ? (
         <div className="flex gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[13px] text-emerald-800 dark:text-emerald-200" role="status">
           <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-          <p>Keine Verstöße gefunden – Kontrolle fließt nur innerhalb des Tiers oder von oben nach unten.</p>
+          <p>{t('config.wizards.wizardShell.noViolationsFoundControlOnly')}</p>
         </div>
       ) : (
         <TierRuleAlerts issues={issues} />
       )}
-      {hasErrors(issues) && <p className="text-xs text-destructive">Fehler müssen behoben werden, bevor die Änderungen übernommen werden können.</p>}
+      {hasErrors(issues) && <p className="text-xs text-destructive">{t('config.wizards.wizardShell.errorsMustBeFixedBefore')}</p>}
     </section>
   )
 }
 
-export const blockedReason = (plan: Plan | null) => (plan && hasErrors(plan.issues) ? 'Tier-Regel- oder Konsistenzfehler verhindern die Übernahme.' : null)
+export const blockedReason = (plan: Plan | null) => (plan && hasErrors(plan.issues) ? t('config.wizards.wizardShell.tierRuleOrConsistencyErrors') : null)
 

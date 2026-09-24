@@ -9,7 +9,7 @@ const SRC = new URL('../src/', import.meta.url).pathname
 /** Words that only occur in German UI text (checked as whole words, case-sensitive where capitalised). */
 const GERMAN_WORDS = [
   'und', 'oder', 'der', 'die', 'das', 'nicht', 'mit', 'für', 'wird', 'werden', 'ist', 'sind', 'kein', 'keine', 'eine', 'einen',
-  'auf', 'aus', 'bei', 'nach', 'noch', 'nur', 'vom', 'zum', 'zur', 'Sie', 'Ihre', 'Ihr', 'bitte', 'Bitte', 'wurde', 'wurden',
+  'auf', 'aus', 'bei', 'nach', 'noch', 'nur', 'von', 'vom', 'zum', 'zur', 'Sie', 'Ihre', 'Ihr', 'bitte', 'Bitte', 'wurde', 'wurden',
   'Speichern', 'Abbrechen', 'Löschen', 'Schließen', 'Bearbeiten', 'Hinzufügen', 'Entfernen', 'Zurück', 'Weiter', 'Anlegen',
   'Suchen', 'Gruppe', 'Gruppen', 'Benutzer', 'Einstellungen', 'Konfiguration', 'Freigabe', 'Planung', 'Lauf', 'Läufe',
   'Fehler', 'Warnung', 'Hinweis', 'Ja', 'Nein', 'Neu', 'Neue', 'Neuer', 'Alle', 'Anwenden', 'Wartungsfenster', 'Zeitplan',
@@ -90,6 +90,8 @@ export function scan(): Finding[] {
     const lines = stripComments(readFileSync(file, 'utf8')).split('\n')
     lines.forEach((line, i) => {
       for (const chunk of visibleChunks(line)) {
+        // Code values rather than text: single lowercase tokens ('ist', 'soll-ist', entity articles) and URL paths.
+        if (/^[a-z]+(-[a-z]+)*$/.test(chunk.trim()) || /^\/[\w/?=&-]*$/.test(chunk.trim())) continue
         let text = chunk.replace(/\$\{[^}]*\}/g, ' ')
         for (const a of ALLOW) text = text.replace(new RegExp(a.source, 'g'), ' ')
         if (GERMAN_CHARS.test(text) || WORD_RE.test(text)) {

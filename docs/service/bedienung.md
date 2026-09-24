@@ -30,6 +30,17 @@ Wer in mehreren zugeordneten AD-Gruppen ist, erhält die höchste Rolle.
 Aktionen, die die eigene Rolle nicht erlaubt, sind ausgeblendet oder deaktiviert. Der Dienst prüft die Rolle
 zusätzlich bei jedem Aufruf.
 
+## Sprache
+
+Die Oberfläche gibt es auf **Deutsch** und **Englisch**. Im Benutzermenü › *Sprache*: Deutsch, English oder
+*Browser-Standard* (Standard). Die Wahl wird am Benutzerkonto gespeichert; die Anmeldeseite folgt vorher der
+Browsersprache. Englische Datums- und Zeitangaben verwenden das britische Format (Tag vor Monat, 24 Stunden).
+
+Meldungen des Dienstes erscheinen in der gewählten Sprache. Texte, die der Dienst **speichert oder versendet**
+(Änderungsprotokoll, Laufmeldungen, Befunde, Benachrichtigungen, per E-Mail versandte Berichte), werden in der
+**Standardsprache der Instanz** geschrieben (*Einstellungen › Sprache*, Standard Deutsch) und später nicht übersetzt.
+Protokolle der PowerShell-Skripte bleiben englisch/deutsch wie vom Framework ausgegeben.
+
 ## Tastenkürzel
 
 | Kürzel | Funktion |

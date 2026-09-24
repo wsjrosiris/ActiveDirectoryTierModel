@@ -3,6 +3,7 @@ using System.Text.Json;
 using TierModel.Service.Auth;
 using TierModel.Service.Data;
 using TierModel.Service.GitSync;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Transfer;
 
@@ -39,7 +40,7 @@ public static class TransferEndpoints
         imp.MapPost("/file", async (HttpContext ctx, string? fileName, ImportService import) =>
         {
             if (ctx.Request.ContentLength > ConfigArchive.MaxArchiveBytes)
-                return Results.Problem(title: $"Die Datei ist zu groß (höchstens {ConfigArchive.MaxArchiveBytes >> 20} MB).", statusCode: 413);
+                return Results.Problem(title: L.F("Die Datei ist zu groß (höchstens {0} MB).", ConfigArchive.MaxArchiveBytes >> 20), statusCode: 413);
             var buffer = new MemoryStream();
             var chunk = new byte[81920];
             int read;
@@ -47,11 +48,11 @@ public static class TransferEndpoints
             {
                 buffer.Write(chunk, 0, read);
                 if (buffer.Length > ConfigArchive.MaxArchiveBytes)
-                    return Results.Problem(title: $"Die Datei ist zu groß (höchstens {ConfigArchive.MaxArchiveBytes >> 20} MB).", statusCode: 413);
+                    return Results.Problem(title: L.F("Die Datei ist zu groß (höchstens {0} MB).", ConfigArchive.MaxArchiveBytes >> 20), statusCode: 413);
             }
-            if (buffer.Length == 0) return Results.Problem(title: "Keine Datei übertragen.", statusCode: 400);
+            if (buffer.Length == 0) return Results.Problem(title: L.T("Keine Datei übertragen."), statusCode: 400);
             buffer.Position = 0;
-            var label = string.IsNullOrWhiteSpace(fileName) ? "Datei" : $"Datei {Path.GetFileName(fileName.Trim())}";
+            var label = string.IsNullOrWhiteSpace(fileName) ? L.P("Datei") : L.PF("Datei {0}", Path.GetFileName(fileName.Trim()));
             if (label.Length > 150) label = label[..150];
             try
             {
@@ -77,17 +78,17 @@ public static class TransferEndpoints
             }
             catch (System.Security.Cryptography.CryptographicException)
             {
-                return Results.Problem(title: "Das gespeicherte Token ist nicht mehr lesbar. Bitte die Instanz neu anlegen.", statusCode: 400);
+                return Results.Problem(title: L.T("Das gespeicherte Token ist nicht mehr lesbar. Bitte die Instanz neu anlegen."), statusCode: 400);
             }
             try
             {
-                var label = string.IsNullOrWhiteSpace(r.RemoteDomain) ? $"Instanz {instance.Name}" : $"Instanz {instance.Name} (Domäne {r.RemoteDomain.Trim()})";
+                var label = string.IsNullOrWhiteSpace(r.RemoteDomain) ? L.PF("Instanz {0}", instance.Name) : L.PF("Instanz {0} (Domäne {1})", instance.Name, r.RemoteDomain.Trim());
                 var source = await client.FetchAsync(label, instance.Url, token, ctx.RequestAborted, r.RemoteDomain);
                 return Results.Ok(await import.CreatePreviewAsync(source, "remote", rules, ctx.User.UserName(), ctx.RequestAborted));
             }
             catch (RemoteImportException ex)
             {
-                return Results.Problem(title: "Abruf von der Instanz fehlgeschlagen", detail: ex.Message, statusCode: 502);
+                return Results.Problem(title: L.T("Abruf von der Instanz fehlgeschlagen"), detail: ex.Message, statusCode: 502);
             }
         });
 
@@ -123,7 +124,7 @@ public static class TransferEndpoints
             }
             catch (ImportConflictException ex)
             {
-                return Results.Problem(title: "Konflikt: Die Konfiguration wurde inzwischen geändert", detail: ex.Message, statusCode: 409,
+                return Results.Problem(title: L.T("Konflikt: Die Konfiguration wurde inzwischen geändert"), detail: ex.Message, statusCode: 409,
                     extensions: new Dictionary<string, object?> { ["sections"] = ex.Keys });
             }
             catch (ArgumentException ex)
@@ -143,13 +144,13 @@ public static class TransferEndpoints
             var errors = ValidateInstance(r, env.IsDevelopment(), requireToken: true);
             if (errors.Count > 0) return Results.ValidationProblem(errors);
             var list = await LoadInstancesAsync(settings, ctx.RequestAborted);
-            if (list.Count >= 20) return Results.Problem(title: "Höchstens 20 Instanzen.", statusCode: 400);
+            if (list.Count >= 20) return Results.Problem(title: L.T("Höchstens 20 Instanzen."), statusCode: 400);
             var token = r.Token!.Trim();
             var item = new RemoteInstance(Guid.NewGuid(), r.Name!.Trim(), RemoteConfigClient.NormalizeUrl(r.Url!), settings.Secrets.Protect(token),
                 RemoteConfigClient.TokenHint(token), DateTimeOffset.UtcNow, ctx.User.UserName());
             list.Add(item);
             await SaveInstancesAsync(settings, list, ctx.RequestAborted);
-            log.Add(ctx.User.UserName(), "settings.remote-instance", "settings", item.Id.ToString(), $"Instanz für Import angelegt: {item.Name} ({item.Url})");
+            log.Add(ctx.User.UserName(), "settings.remote-instance", "settings", item.Id.ToString(), L.PF("Instanz für Import angelegt: {0} ({1})", item.Name, item.Url));
             await db.SaveChangesAsync();
             return Results.Ok(RemoteInstanceDto.From(item));
         }).RequireAuthorization(nameof(Role.Admin));
@@ -172,7 +173,7 @@ public static class TransferEndpoints
             list[idx] = item;
             await SaveInstancesAsync(settings, list, ctx.RequestAborted);
             log.Add(ctx.User.UserName(), "settings.remote-instance", "settings", id.ToString(),
-                $"Instanz für Import geändert: {item.Name} ({item.Url}){(string.IsNullOrEmpty(token) ? "" : ", neues Token")}");
+                L.PF("Instanz für Import geändert: {0} ({1}){2}", item.Name, item.Url, (string.IsNullOrEmpty(token) ? "" : L.P(", neues Token"))));
             await db.SaveChangesAsync();
             return Results.Ok(RemoteInstanceDto.From(item));
         }).RequireAuthorization(nameof(Role.Admin));
@@ -184,7 +185,7 @@ public static class TransferEndpoints
             if (item is null) return Results.NotFound();
             list.Remove(item);
             await SaveInstancesAsync(settings, list, ctx.RequestAborted);
-            log.Add(ctx.User.UserName(), "settings.remote-instance", "settings", id.ToString(), $"Instanz für Import entfernt: {item.Name}");
+            log.Add(ctx.User.UserName(), "settings.remote-instance", "settings", id.ToString(), L.PF("Instanz für Import entfernt: {0}", item.Name));
             await db.SaveChangesAsync();
             return Results.NoContent();
         }).RequireAuthorization(nameof(Role.Admin));
@@ -201,9 +202,9 @@ public static class TransferEndpoints
             if (token is null && saved is not null)
             {
                 try { token = settings.Secrets.Unprotect(saved.TokenProtected); }
-                catch (System.Security.Cryptography.CryptographicException) { return Results.Ok(new RemoteCheckResult(false, "Das gespeicherte Token ist nicht mehr lesbar.", null)); }
+                catch (System.Security.Cryptography.CryptographicException) { return Results.Ok(new RemoteCheckResult(false, L.T("Das gespeicherte Token ist nicht mehr lesbar."), null)); }
             }
-            if (token is null) return Results.Ok(new RemoteCheckResult(false, "Bitte ein API-Token angeben.", null));
+            if (token is null) return Results.Ok(new RemoteCheckResult(false, L.T("Bitte ein API-Token angeben."), null));
             var result = await client.CheckAsync(url!, token, ctx.RequestAborted);
             if (saved is not null && string.IsNullOrWhiteSpace(r.Url) && string.IsNullOrWhiteSpace(r.Token))
             {
@@ -235,8 +236,8 @@ public static class TransferEndpoints
                 await g.SaveStateAsync(new GitSyncState(), ctx.RequestAborted); // new target: start over with an initial full sync
             if (next.Enabled && (remoteChanged || !before.Enabled || target)) queue.Enqueue(new GitSyncRequest(GitSyncKind.Full, RequestedBy: ctx.User.UserName()));
             log.Add(ctx.User.UserName(), "settings.git", "settings", null,
-                $"Git-Anbindung {(next.Enabled ? "EIN" : "AUS")}: {(string.IsNullOrEmpty(next.RepositoryUrl) ? "–" : next.RepositoryUrl)} ({next.Branch}, Ordner {next.PathInRepo})"
-                + (r.ClearPassword == true ? ", Token entfernt" : !string.IsNullOrEmpty(r.Password) ? ", Token geändert" : ""));
+                L.PF("Git-Anbindung {0}: {1} ({2}, Ordner {3})", next.Enabled ? L.P("EIN") : L.P("AUS"), string.IsNullOrEmpty(next.RepositoryUrl) ? "–" : next.RepositoryUrl, next.Branch, next.PathInRepo)
+                + (r.ClearPassword == true ? L.P(", Token entfernt") : !string.IsNullOrEmpty(r.Password) ? L.P(", Token geändert") : ""));
             await db.SaveChangesAsync();
             return Results.Ok(await g.GetDtoAsync(ctx.RequestAborted));
         });
@@ -244,11 +245,11 @@ public static class TransferEndpoints
         git.MapPost("/sync", async (HttpContext ctx, GitSyncService g, GitSyncQueue queue, ChangeLogService log, AppDbContext db) =>
         {
             var s = await g.GetSettingsAsync(ctx.RequestAborted);
-            if (!s.Enabled) return Results.Problem(title: "Die Git-Anbindung ist ausgeschaltet.", statusCode: 400);
+            if (!s.Enabled) return Results.Problem(title: L.T("Die Git-Anbindung ist ausgeschaltet."), statusCode: 400);
             if ((await g.GetStateAsync(ctx.RequestAborted)).Conflict)
-                return Results.Problem(title: "Konflikt ungelöst", detail: "Zuerst „Remote übernehmen“ ausführen.", statusCode: 409);
+                return Results.Problem(title: L.T("Konflikt ungelöst"), detail: L.T("Zuerst „Remote übernehmen“ ausführen."), statusCode: 409);
             queue.Enqueue(new GitSyncRequest(GitSyncKind.Full, RequestedBy: ctx.User.UserName()));
-            log.Add(ctx.User.UserName(), "settings.git-sync", "settings", null, "Git: Synchronisierung angestoßen");
+            log.Add(ctx.User.UserName(), "settings.git-sync", "settings", null, L.P("Git: Synchronisierung angestoßen"));
             await db.SaveChangesAsync();
             return Results.Accepted();
         });
@@ -256,9 +257,9 @@ public static class TransferEndpoints
         git.MapPost("/resolve", async (HttpContext ctx, GitSyncService g, GitSyncQueue queue, ChangeLogService log, AppDbContext db) =>
         {
             var s = await g.GetSettingsAsync(ctx.RequestAborted);
-            if (!s.Enabled) return Results.Problem(title: "Die Git-Anbindung ist ausgeschaltet.", statusCode: 400);
+            if (!s.Enabled) return Results.Problem(title: L.T("Die Git-Anbindung ist ausgeschaltet."), statusCode: 400);
             queue.Enqueue(new GitSyncRequest(GitSyncKind.TakeRemote, RequestedBy: ctx.User.UserName()));
-            log.Add(ctx.User.UserName(), "settings.git-resolve", "settings", null, "Git: Remote übernommen, lokaler Stand verworfen und neu exportiert");
+            log.Add(ctx.User.UserName(), "settings.git-resolve", "settings", null, L.P("Git: Remote übernommen, lokaler Stand verworfen und neu exportiert"));
             await db.SaveChangesAsync();
             return Results.Accepted();
         });
@@ -269,11 +270,11 @@ public static class TransferEndpoints
     private static Dictionary<string, string[]> ValidateInstance(RemoteInstanceInput r, bool allowHttp, bool requireToken)
     {
         var errors = new Dictionary<string, string[]>();
-        if (string.IsNullOrWhiteSpace(r.Name) || r.Name.Trim().Length > 100) errors["name"] = ["Namen angeben (höchstens 100 Zeichen)."];
+        if (string.IsNullOrWhiteSpace(r.Name) || r.Name.Trim().Length > 100) errors["name"] = [L.T("Namen angeben (höchstens 100 Zeichen).")];
         if (RemoteConfigClient.UrlError(r.Url, allowHttp) is { } e) errors["url"] = [e];
         var token = r.Token?.Trim();
-        if (requireToken && string.IsNullOrEmpty(token)) errors["token"] = ["API-Token der anderen Instanz angeben."];
-        else if (!string.IsNullOrEmpty(token) && ApiTokens.ParsePrefix(token) is null) errors["token"] = ["Kein gültiges API-Token (Format tmk_…)."];
+        if (requireToken && string.IsNullOrEmpty(token)) errors["token"] = [L.T("API-Token der anderen Instanz angeben.")];
+        else if (!string.IsNullOrEmpty(token) && ApiTokens.ParsePrefix(token) is null) errors["token"] = [L.T("Kein gültiges API-Token (Format tmk_…).")];
         return errors;
     }
 

@@ -23,12 +23,13 @@ import {
 } from './wizard-model'
 import { AclTemplateLine, RIGHT_LABELS } from './wizard-fields'
 import { blockedReason, PlanSummary, TierCheck, useApplyPlan, useWizardContents, useWizardState, WizardDialog, type WizardStep } from './wizard-shell'
+import { t } from '@/i18n'
 
 const COMMON_OBJECT_TYPES = ['Computer', 'User', 'Group', 'OrganizationalUnit', 'Contact', 'AllObjectClasses', 'PasswordReset', 'LockoutTime', 'UserAccountOption', 'LogonScript', 'DnsHostname', 'WriteSPN']
 
 function TierOf({ tier }: { tier: number | null }) {
-  if (tier === null) return <span className="text-xs text-muted-foreground">kein Tier erkannt</span>
-  if (tier === BROAD) return <span className="text-xs text-muted-foreground">breite Gruppe (unterhalb aller Tiers)</span>
+  if (tier === null) return <span className="text-xs text-muted-foreground">{t('config.wizards.delegationWizard.noTierDetected')}</span>
+  if (tier === BROAD) return <span className="text-xs text-muted-foreground">{t('config.wizards.delegationWizard.broadGroupBelowAllTiers')}</span>
   return <TierBadge tier={tier as 0 | 1 | 2} />
 }
 
@@ -83,59 +84,59 @@ export function DelegationWizard({ open, onClose }: { open: boolean; onClose: ()
   const explanation = delegationTierExplanation(contents, principal, target)
 
   const errWho: Record<string, string> = {}
-  if (!principal.trim()) errWho.principal = 'Bitte einen Prinzipal wählen.'
+  if (!principal.trim()) errWho.principal = t('config.wizards.delegationWizard.pleaseSelectAPrincipal')
   const errWhat: Record<string, string> = {}
-  if (!rights.length) errWhat.rights = 'Mindestens ein Recht auswählen.'
+  if (!rights.length) errWhat.rights = t('config.wizards.delegationWizard.selectAtLeastOneRight')
   const errWhere: Record<string, string> = {}
-  if (!target.trim()) errWhere.target = 'Bitte eine Ziel-OU wählen.'
+  if (!target.trim()) errWhere.target = t('config.wizards.delegationWizard.pleaseSelectATargetOu')
   const show = w.attempted
 
   const steps: WizardStep[] = [
     {
       id: 'who',
-      label: 'Wer',
+      label: t('config.wizards.delegationWizard.who'),
       errors: errWho,
       content: (
-        <FormSection title="Wer erhält die Rechte?" description="Gruppe aus der Konfiguration, ein integriertes Konto oder – beim Tippen – eine Gruppe aus dem Active Directory.">
-          <Field label="Prinzipal" htmlFor="dw-principal" required error={show ? errWho.principal : undefined}>
-            <PrincipalCombobox id="dw-principal" value={principal} onChange={setPrincipal} placeholder="Gruppe wählen" invalid={show && !!errWho.principal} />
+        <FormSection title={t('config.wizards.delegationWizard.whoGetsTheRights')} description={t('config.wizards.delegationWizard.groupFromTheConfigurationA')}>
+          <Field label={t('config.wizards.delegationWizard.principal')} htmlFor="dw-principal" required error={show ? errWho.principal : undefined}>
+            <PrincipalCombobox id="dw-principal" value={principal} onChange={setPrincipal} placeholder={t('config.wizards.delegationWizard.selectGroup')} invalid={show && !!errWho.principal} />
           </Field>
           {principal && (
             <p className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
-              Erkanntes Tier: <TierOf tier={principalTier(principal, groupMap)} />
+              {t('config.wizards.delegationWizard.detectedTier')} <TierOf tier={principalTier(principal, groupMap)} />
             </p>
           )}
-          <p className="text-xs text-muted-foreground">Tipp: Rechte an Gruppen statt an einzelne Konten vergeben – so bleibt die Delegation nachvollziehbar.</p>
+          <p className="text-xs text-muted-foreground">{t('config.wizards.delegationWizard.tipGrantRightsToGroups')}</p>
         </FormSection>
       ),
     },
     {
       id: 'what',
-      label: 'Was',
+      label: t('config.wizards.delegationWizard.what'),
       errors: errWhat,
       content: (
         <>
-          <FormSection title="Welche Rechte?">
-            <Field label="Vorlage" htmlFor="dw-preset">
+          <FormSection title={t('config.wizards.delegationWizard.whichRights')}>
+            <Field label={t('config.wizards.delegationWizard.template')} htmlFor="dw-preset">
               <Select
                 id="dw-preset"
                 value={preset}
                 onValueChange={choosePreset}
                 options={[
                   ...DELEGATION_PRESETS.map((p) => ({ value: p.id, label: p.label, description: p.description })),
-                  { value: CUSTOM_PRESET, label: 'Benutzerdefiniert', description: 'Rechte, Objekttyp und Vererbung selbst festlegen.' },
+                  { value: CUSTOM_PRESET, label: t('config.wizards.delegationWizard.custom'), description: t('config.wizards.delegationWizard.defineRightsObjectTypeAnd') },
                 ]}
               />
             </Field>
-            <Field label="Zugriffstyp" htmlFor="dw-allow">
+            <Field label={t('config.wizards.delegationWizard.accessType')} htmlFor="dw-allow">
               <div id="dw-allow">
                 <Segmented
-                  aria-label="Zugriffstyp"
+                  aria-label={t('config.wizards.delegationWizard.accessType')}
                   value={allow ? 'allow' : 'deny'}
                   onValueChange={(v) => setAllow(v === 'allow')}
                   options={[
-                    { value: 'allow', label: 'Zulassen' },
-                    { value: 'deny', label: 'Verweigern' },
+                    { value: 'allow', label: t('config.wizards.delegationWizard.allow') },
+                    { value: 'deny', label: t('config.wizards.delegationWizard.deny') },
                   ]}
                 />
               </div>
@@ -154,19 +155,19 @@ export function DelegationWizard({ open, onClose }: { open: boolean; onClose: ()
               className="flex items-center gap-2 self-start rounded-md text-[13px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <ChevronDown className={cn('size-4 transition-transform', !advanced && '-rotate-90')} />
-              Erweitert: Rechte und Objekttyp anpassen
+              {t('config.wizards.delegationWizard.advancedAdjustRightsAndObject')}
             </button>
             {advanced && (
               <div id="dw-advanced" className="grid gap-4">
-                <Field label="Rechte" required error={show ? errWhat.rights : undefined}>
+                <Field label={t('config.wizards.delegationWizard.rights')} required error={show ? errWhat.rights : undefined}>
                   <CheckboxGrid options={AD_RIGHTS} value={rights} onChange={setRights} describe={RIGHT_LABELS} />
                 </Field>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Objekttyp" htmlFor="dw-type" hint="Namen aus den GUID-Zuordnungen">
-                    <Combobox id="dw-type" mono value={objecttype} onChange={setObjecttype} options={typeOptions} placeholder={ALL_OBJECTS_LABEL} searchPlaceholder="Objekttyp suchen …" />
+                  <Field label={t('config.wizards.delegationWizard.objectType')} htmlFor="dw-type" hint={t('config.wizards.delegationWizard.namesFromTheGuidMappings')}>
+                    <Combobox id="dw-type" mono value={objecttype} onChange={setObjecttype} options={typeOptions} placeholder={ALL_OBJECTS_LABEL} searchPlaceholder={t('config.wizards.delegationWizard.searchObjectType')} />
                   </Field>
-                  <Field label="Geerbter Objekttyp" htmlFor="dw-itype" hint="Optional – nur Nachfolger dieses Typs">
-                    <Combobox id="dw-itype" mono value={inheritedObjectType} onChange={setInheritedObjectType} options={typeOptions} placeholder={ALL_OBJECTS_LABEL} searchPlaceholder="Objekttyp suchen …" />
+                  <Field label={t('config.wizards.delegationWizard.inheritedObjectType')} htmlFor="dw-itype" hint={t('config.wizards.delegationWizard.optionalOnlyDescendantsOfThis')}>
+                    <Combobox id="dw-itype" mono value={inheritedObjectType} onChange={setInheritedObjectType} options={typeOptions} placeholder={ALL_OBJECTS_LABEL} searchPlaceholder={t('config.wizards.delegationWizard.searchObjectType')} />
                   </Field>
                 </div>
               </div>
@@ -177,29 +178,29 @@ export function DelegationWizard({ open, onClose }: { open: boolean; onClose: ()
     },
     {
       id: 'where',
-      label: 'Wo',
+      label: t('config.wizards.delegationWizard.where'),
       errors: errWhere,
       content: (
         <>
-          <FormSection title="Auf welche OU?">
-            <Field label="Ziel-OU" htmlFor="dw-target" required error={show ? errWhere.target : undefined}>
-              <Combobox id="dw-target" mono value={target} onChange={setTarget} options={ouOptions} allowCustom={false} placeholder="OU wählen" searchPlaceholder="OU suchen …" invalid={show && !!errWhere.target} />
+          <FormSection title={t('config.wizards.delegationWizard.onWhichOu')}>
+            <Field label={t('config.wizards.delegationWizard.targetOu')} htmlFor="dw-target" required error={show ? errWhere.target : undefined}>
+              <Combobox id="dw-target" mono value={target} onChange={setTarget} options={ouOptions} allowCustom={false} placeholder={t('config.wizards.delegationWizard.selectOu')} searchPlaceholder={t('config.wizards.delegationWizard.searchOu')} invalid={show && !!errWhere.target} />
             </Field>
             {target && (
               <p className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
-                Tier der OU: <TierOf tier={targetTier(target)} />
+                {t('config.wizards.delegationWizard.tierOfTheOu')} <TierOf tier={targetTier(target)} />
               </p>
             )}
-            <Field label="Vererbung" htmlFor="dw-inh">
+            <Field label={t('config.wizards.delegationWizard.inheritance')} htmlFor="dw-inh">
               <Select id="dw-inh" value={inheritance} onValueChange={setInheritance} options={Object.entries(INHERITANCE_LABELS).map(([value, label]) => ({ value, label, description: value }))} />
             </Field>
-            <Field label="Kommentar" htmlFor="dw-comment" hint="Optional – warum gibt es diese Delegation?">
+            <Field label={t('config.wizards.delegationWizard.comment')} htmlFor="dw-comment" hint={t('config.wizards.delegationWizard.optionalWhyDoesThisDelegation')}>
               <Textarea id="dw-comment" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
             </Field>
           </FormSection>
           {principal && target && (
             <section className="grid gap-3">
-              <TierCheck issues={liveIssues} title="Live-Prüfung der Tier-Regeln" />
+              <TierCheck issues={liveIssues} title={t('config.wizards.delegationWizard.liveCheckOfTheTier')} />
               {explanation && <p className="text-xs text-muted-foreground">{explanation}</p>}
             </section>
           )}
@@ -208,7 +209,7 @@ export function DelegationWizard({ open, onClose }: { open: boolean; onClose: ()
     },
     {
       id: 'summary',
-      label: 'Zusammenfassung',
+      label: t('config.wizards.delegationWizard.summary'),
       errors: {},
       content: plan ? (
         <>
@@ -223,8 +224,8 @@ export function DelegationWizard({ open, onClose }: { open: boolean; onClose: ()
     <WizardDialog
       open={open}
       onClose={close}
-      title="Neue Delegation"
-      description="Wer darf was auf welcher OU – geprüft gegen die Tier-Regeln."
+      title={t('config.wizards.delegationWizard.newDelegation')}
+      description={t('config.wizards.delegationWizard.whoMayDoWhatOn')}
       icon={<KeyRound />}
       steps={steps}
       step={w.step}
@@ -236,7 +237,7 @@ export function DelegationWizard({ open, onClose }: { open: boolean; onClose: ()
       finishBlocked={blockedReason(plan)}
       onFinish={() => {
         if (!plan) return
-        apply(plan, `Delegation für „${principal}“ angelegt`, 'acls')
+        apply(plan, t('config.wizards.delegationWizard.delegationForPrincipalCreated', { principal }), 'acls')
         close()
       }}
     />

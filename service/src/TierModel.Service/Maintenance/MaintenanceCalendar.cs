@@ -1,4 +1,5 @@
 using System.Globalization;
+using TierModel.Service.Localization;
 using TierModel.Service.Data;
 
 namespace TierModel.Service.Maintenance;
@@ -157,9 +158,22 @@ public class MaintenanceCalendar
         return new DateTimeOffset(local - tz.GetUtcOffset(local), TimeSpan.Zero);
     }
 
-    /// <summary>"Mo 24.09.2026, 22:00 Uhr" in the service's local time zone (or the given one).</summary>
-    public static string Format(DateTimeOffset at, TimeZoneInfo? tz = null) =>
-        TimeZoneInfo.ConvertTime(at, tz ?? TimeZoneInfo.Local).ToString("ddd dd.MM.yyyy, HH:mm", De) + " Uhr";
+    /// <summary>
+    /// "Mo 24.09.2026, 22:00 Uhr" / "Thu 24/09/2026, 22:00" in the service's local time zone (or the given one) – in the
+    /// request language, or with <paramref name="persisted"/> in the instance default language (see <see cref="L"/>).
+    /// </summary>
+    public static string Format(DateTimeOffset at, TimeZoneInfo? tz = null, bool persisted = false)
+    {
+        var local = TimeZoneInfo.ConvertTime(at, tz ?? TimeZoneInfo.Local);
+        return (persisted ? L.InstanceDefault : L.Language) == L.EnglishCode
+            ? local.ToString("ddd dd/MM/yyyy, HH:mm", L.EnglishCulture)
+            : local.ToString("ddd dd.MM.yyyy, HH:mm", De) + " Uhr";
+    }
 
     public static readonly string[] DayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+    public static readonly string[] EnglishDayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+    /// <summary>Short weekday name; <paramref name="persisted"/> selects the instance default language.</summary>
+    public static string DayName(int day, bool persisted = false) =>
+        ((persisted ? L.InstanceDefault : L.Language) == L.EnglishCode ? EnglishDayNames : DayNames)[day];
 }

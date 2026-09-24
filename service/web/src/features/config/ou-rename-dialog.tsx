@@ -14,6 +14,7 @@ import { errorMessage } from '@/lib/query'
 import { ApiError } from '@/api/client'
 import { draftStore } from './draft-store'
 import { sectionQuery } from './queries'
+import { t } from '@/i18n'
 
 const AFFECTED = ['ous', 'groups', 'users', 'acls', 'msa', 'gmsa', 'dmsa', 'winlaps', 'gpos']
 
@@ -48,7 +49,7 @@ export function OuRenameDialog({
         } catch (e) {
           // A section that does not exist has nothing to update; any other failure must stop the rename.
           if (e instanceof ApiError && e.status === 404) return [k, undefined] as const
-          throw new Error(`„${sectionFallbackTitles[k] ?? k}“ konnte nicht geladen werden: ${errorMessage(e)}`)
+          throw new Error(t('config.ouRenameDialog.valueCouldNotBeLoaded', { value: sectionFallbackTitles[k] ?? k, value2: errorMessage(e) }))
         }
       }),
     )
@@ -75,7 +76,7 @@ export function OuRenameDialog({
   const ous = ((contents?.ous as { organizationUnits?: OuItem[] } | undefined)?.organizationUnits ?? []) as OuItem[]
   const ou = ous[index]
   const trimmed = deferred.trim()
-  const invalid = !trimmed ? 'Name ist erforderlich.' : /[,=+<>#;\\"]/.test(trimmed) ? 'Unzulässige Zeichen.' : null
+  const invalid = !trimmed ? t('config.ouRenameDialog.nameIsRequired') : /[,=+<>#;\\"]/.test(trimmed) ? t('config.ouRenameDialog.invalidCharacters') : null
   const parentOptions = React.useMemo(() => (ou ? ouParentOptions(ous, ouFullDn(ou)) : []), [ous, ou])
   const duplicate =
     ou && trimmed && ous.some((o, i) => i !== index && ouFullDn(o).toLowerCase() === ouFullDn({ ...ou, name: trimmed, path: parent }).toLowerCase())
@@ -101,20 +102,20 @@ export function OuRenameDialog({
     )
     const currentOu = (current.ous as { organizationUnits?: OuItem[] } | undefined)?.organizationUnits?.[index]
     if (!currentOu || currentOu.name !== ou.name || currentOu.path !== ou.path) {
-      toast.error('Die OU wurde zwischenzeitlich geändert', { description: 'Bitte den Dialog erneut öffnen.' })
+      toast.error(t('config.ouRenameDialog.theOuWasChangedIn'), { description: t('config.ouRenameDialog.pleaseOpenTheDialogAgain') })
       onOpenChange(false)
       return
     }
     const finalPlan = planOuRename(current, index, newName, parent)
     if (finalPlan.conflicts.length) {
-      toast.error('Umbenennen nicht möglich', { description: finalPlan.conflicts.join(' ') })
+      toast.error(t('config.ouRenameDialog.renamingNotPossible'), { description: finalPlan.conflicts.join(' ') })
       return
     }
     draftStore.apply(finalPlan.updated)
     const refs = finalPlan.changes.length - 1
     const sections = new Set(finalPlan.changes.map((c) => c.section)).size
-    toast.success(newName !== ou.name ? `OU umbenannt: „${ou.name}“ → „${newName}“` : `OU verschoben: „${ou.name}“`, {
-      description: `${refs} Referenz${refs === 1 ? '' : 'en'} in ${sections} Sektion${sections === 1 ? '' : 'en'} aktualisiert – noch nicht gespeichert.`,
+    toast.success(newName !== ou.name ? t('config.ouRenameDialog.ouRenamedNameNewname', { name: ou.name, newName }) : t('config.ouRenameDialog.ouMovedName', { name: ou.name }), {
+      description: t('config.ouRenameDialog.refsUpdated', { refs: t('config.ouRenameDialog.refs', { count: refs }), sections: t('config.ouRenameDialog.sections', { count: sections }) }),
     })
     onApplied?.(newName, parent)
     onOpenChange(false)
@@ -124,15 +125,15 @@ export function OuRenameDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>OU umbenennen oder verschieben</DialogTitle>
+          <DialogTitle>{t('config.ouRenameDialog.renameOrMoveOu')}</DialogTitle>
           <DialogDescription>
-            Alle Referenzen (untergeordnete OUs, Gruppen, Benutzer, ACL-/MSA-/LAPS-Delegationen, GPO-Verknüpfungen) werden automatisch angepasst.
+            {t('config.ouRenameDialog.allReferencesChildOusGroups')}
           </DialogDescription>
         </DialogHeader>
         {loadError ? (
           <p className="text-sm text-destructive">{loadError}</p>
         ) : !contents ? (
-          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Referenzen werden ermittelt …</div>
+          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> {t('config.ouRenameDialog.determiningReferences')}</div>
         ) : (
           <form
             className="grid gap-4"
@@ -142,16 +143,16 @@ export function OuRenameDialog({
             }}
           >
             <div className="grid items-end gap-3 sm:grid-cols-[1fr_auto_1fr]">
-              <Field label="Aktueller Name">
+              <Field label={t('config.ouRenameDialog.currentName')}>
                 <Input value={ou?.name ?? ''} readOnly />
               </Field>
               <ArrowRight className="mb-2.5 hidden size-4 text-muted-foreground sm:block" />
-              <Field label="Neuer Name" htmlFor="rename-new" error={name.trim() !== ou?.name ? (invalid ?? (duplicate ? 'Eine OU mit diesem Namen existiert bereits.' : undefined)) : undefined}>
+              <Field label={t('config.ouRenameDialog.newName')} htmlFor="rename-new" error={name.trim() !== ou?.name ? (invalid ?? (duplicate ? t('config.ouRenameDialog.anOuWithThisName') : undefined)) : undefined}>
                 <Input id="rename-new" autoFocus value={name} onChange={(e) => setName(e.target.value)} onFocus={(e) => e.target.select()} />
               </Field>
             </div>
-            <Field label="Übergeordnete OU" htmlFor="rename-parent" hint="Zum Verschieben eine andere übergeordnete OU wählen.">
-              <Combobox id="rename-parent" mono value={parent} onChange={setParent} options={parentOptions} placeholder="Übergeordnete OU wählen" />
+            <Field label={t('config.ouRenameDialog.parentOu')} htmlFor="rename-parent" hint={t('config.ouRenameDialog.selectAnotherParentOuTo')}>
+              <Combobox id="rename-parent" mono value={parent} onChange={setParent} options={parentOptions} placeholder={t('config.ouRenameDialog.selectParentOu')} />
             </Field>
             {plan && plan.conflicts.length > 0 && (
               <p className="text-sm text-destructive" role="alert">{plan.conflicts.join(' ')}</p>
@@ -159,8 +160,8 @@ export function OuRenameDialog({
             {plan && !duplicate && !plan.conflicts.length && (
               <div className="rounded-lg border">
                 <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-2 text-[13px]">
-                  <span className="font-medium">Vorschau:</span>
-                  <span className="text-muted-foreground">{refCount} Referenz{refCount === 1 ? '' : 'en'} ändern sich</span>
+                  <span className="font-medium">{t('config.ouRenameDialog.preview')}</span>
+                  <span className="text-muted-foreground">{t('config.ouRenameDialog.refsChange', { count: refCount })}</span>
                   <span className="ml-auto flex flex-wrap gap-1">
                     {bySection.map(([s, n]) => (
                       <Badge key={s} variant="secondary">{sectionFallbackTitles[s] ?? s}: {n}</Badge>
@@ -181,9 +182,9 @@ export function OuRenameDialog({
               </div>
             )}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Abbrechen</Button>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
               <Button type="submit" disabled={!plan || !!duplicate || plan.conflicts.length > 0 || name.trim() !== trimmed}>
-                Übernehmen{plan ? ` (${refCount} Referenzen)` : ''}
+                {t('config.ouRenameDialog.apply')}{plan ? t('config.ouRenameDialog.refcountReferences', { refCount, count: refCount }) : ''}
               </Button>
             </DialogFooter>
           </form>

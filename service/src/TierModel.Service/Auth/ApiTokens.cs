@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Auth;
 
@@ -62,7 +63,7 @@ public class ApiTokenHandler(IOptionsMonitor<AuthenticationSchemeOptions> option
         var header = Request.Headers.Authorization.ToString();
         if (!header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return AuthenticateResult.NoResult();
         var token = header["Bearer ".Length..].Trim();
-        if (ApiTokens.ParsePrefix(token) is not { } prefix) return AuthenticateResult.Fail("Ungültiges API-Token.");
+        if (ApiTokens.ParsePrefix(token) is not { } prefix) return AuthenticateResult.Fail(L.T("Ungültiges API-Token."));
 
         var db = Context.RequestServices.GetRequiredService<AppDbContext>();
         var found = await db.ApiTokens.AsNoTracking()
@@ -73,13 +74,13 @@ public class ApiTokenHandler(IOptionsMonitor<AuthenticationSchemeOptions> option
         // Constant-time comparison of the stored hash; compare against a dummy when the prefix is unknown.
         var expected = found?.Token.SecretHash ?? new string('0', 64);
         var match = CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(hash), Encoding.ASCII.GetBytes(expected));
-        if (found is null || !match) return AuthenticateResult.Fail("Ungültiges API-Token.");
+        if (found is null || !match) return AuthenticateResult.Fail(L.T("Ungültiges API-Token."));
 
         var now = DateTimeOffset.UtcNow;
         var (t, u) = (found.Token, found.User);
-        if (t.RevokedAt is not null) return AuthenticateResult.Fail("Das API-Token wurde widerrufen.");
-        if (t.ExpiresAt <= now) return AuthenticateResult.Fail("Das API-Token ist abgelaufen.");
-        if (!u.IsActive) return AuthenticateResult.Fail("Das Benutzerkonto des API-Tokens ist deaktiviert.");
+        if (t.RevokedAt is not null) return AuthenticateResult.Fail(L.T("Das API-Token wurde widerrufen."));
+        if (t.ExpiresAt <= now) return AuthenticateResult.Fail(L.T("Das API-Token ist abgelaufen."));
+        if (!u.IsActive) return AuthenticateResult.Fail(L.T("Das Benutzerkonto des API-Tokens ist deaktiviert."));
 
         // At most one write per minute and token.
         if (t.LastUsedAt is null || now - t.LastUsedAt > TimeSpan.FromMinutes(1))
@@ -105,11 +106,11 @@ public class ApiTokenHandler(IOptionsMonitor<AuthenticationSchemeOptions> option
     {
         var result = await HandleAuthenticateOnceSafeAsync();
         Response.Headers.WWWAuthenticate = "Bearer";
-        await Results.Problem(title: "Nicht angemeldet", detail: result.Failure?.Message ?? "API-Token fehlt.", statusCode: 401).ExecuteAsync(Context);
+        await Results.Problem(title: L.T("Nicht angemeldet"), detail: result.Failure?.Message ?? L.T("API-Token fehlt."), statusCode: 401).ExecuteAsync(Context);
     }
 
     protected override Task HandleForbiddenAsync(AuthenticationProperties properties) =>
-        Results.Problem(title: "Keine Berechtigung", detail: "Die Rolle des API-Tokens reicht dafür nicht aus.", statusCode: 403).ExecuteAsync(Context);
+        Results.Problem(title: L.T("Keine Berechtigung"), detail: L.T("Die Rolle des API-Tokens reicht dafür nicht aus."), statusCode: 403).ExecuteAsync(Context);
 }
 
 public static class ApiTokenEndpoints
@@ -131,7 +132,7 @@ public static class ApiTokenEndpoints
 
         // Tokens are managed in the browser session only: a token must not mint or revoke tokens.
         api.AddEndpointFilter(async (ctx, next) => ctx.HttpContext.User.IsTokenAuthenticated()
-            ? Results.Problem(title: "API-Tokens können nur in der Oberfläche verwaltet werden", statusCode: 403)
+            ? Results.Problem(title: L.T("API-Tokens können nur in der Oberfläche verwaltet werden"), statusCode: 403)
             : await next(ctx));
 
         api.MapGet("/", async (HttpContext ctx, AppDbContext db, bool? all, CancellationToken ct) =>
@@ -151,10 +152,10 @@ public static class ApiTokenEndpoints
             if (user is null) return Results.Unauthorized();
             var errors = new Dictionary<string, string[]>();
             var name = r.Name?.Trim() ?? "";
-            if (name.Length is 0 or > 100) errors["name"] = ["Bitte einen Namen (max. 100 Zeichen) angeben, z. B. den Zweck oder das Skript."];
-            if (!Enum.IsDefined(r.Role)) errors["role"] = ["Unbekannte Rolle."];
-            else if (r.Role > user.Role) errors["role"] = ["Die Rolle eines Tokens darf nicht höher sein als die eigene Rolle."];
-            if (!ApiTokens.AllowedDays.Contains(r.ExpiresInDays)) errors["expiresInDays"] = ["Gültigkeit: 30, 90, 180 oder 365 Tage."];
+            if (name.Length is 0 or > 100) errors["name"] = [L.T("Bitte einen Namen (max. 100 Zeichen) angeben, z. B. den Zweck oder das Skript.")];
+            if (!Enum.IsDefined(r.Role)) errors["role"] = [L.T("Unbekannte Rolle.")];
+            else if (r.Role > user.Role) errors["role"] = [L.T("Die Rolle eines Tokens darf nicht höher sein als die eigene Rolle.")];
+            if (!ApiTokens.AllowedDays.Contains(r.ExpiresInDays)) errors["expiresInDays"] = [L.T("Gültigkeit: 30, 90, 180 oder 365 Tage.")];
             if (errors.Count > 0) return Results.ValidationProblem(errors);
 
             var (token, prefix, hash) = ApiTokens.Generate();
@@ -165,7 +166,7 @@ public static class ApiTokenEndpoints
             };
             db.ApiTokens.Add(entity);
             log.Add(user.Username, "token.create", "token", entity.Id.ToString(),
-                $"API-Token '{name}' (tmk_{prefix}…, Rolle {r.Role}, gültig bis {entity.ExpiresAt:dd.MM.yyyy}) angelegt");
+                L.PF("API-Token '{0}' (tmk_{1}…, Rolle {2}, gültig bis {3:dd.MM.yyyy}) angelegt", name, prefix, r.Role, entity.ExpiresAt));
             await db.SaveChangesAsync(ct);
             return Results.Json(new CreatedTokenDto(ToDto(entity, user, now), token), Endpoints.JsonDefaults.Options);
         });
@@ -174,12 +175,12 @@ public static class ApiTokenEndpoints
         {
             var token = await db.ApiTokens.FirstOrDefaultAsync(t => t.Id == id, ct);
             if (token is null || (token.UserId != ctx.User.UserId() && !ctx.User.HasRole(Role.Admin))) return Results.NotFound();
-            if (token.RevokedAt is not null) return Results.Problem(title: "Das Token ist bereits widerrufen", statusCode: 409);
+            if (token.RevokedAt is not null) return Results.Problem(title: L.T("Das Token ist bereits widerrufen"), statusCode: 409);
             token.RevokedAt = DateTimeOffset.UtcNow;
             token.RevokedBy = ctx.User.UserName();
             var owner = await db.Users.AsNoTracking().FirstAsync(u => u.Id == token.UserId, ct);
             log.Add(ctx.User.UserName(), "token.revoke", "token", id.ToString(),
-                $"API-Token '{token.Name}' (tmk_{token.Prefix}…) von {owner.Username} widerrufen");
+                L.PF("API-Token '{0}' (tmk_{1}…) von {2} widerrufen", token.Name, token.Prefix, owner.Username));
             await db.SaveChangesAsync(ct);
             return Results.Json(ToDto(token, owner, DateTimeOffset.UtcNow), Endpoints.JsonDefaults.Options);
         });

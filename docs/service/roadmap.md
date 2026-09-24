@@ -1,5 +1,9 @@
 # Roadmap
 
+!!! success "Stand"
+    Alle 25 Punkte sind umgesetzt. Was nur mit simuliertem AD getestet werden konnte, listet der
+    [Testplan für eine echte Domäne](testplan-windows.md).
+
 Umsetzungsplan für die Funktionen aus dem zweiten Brainstorming. Die Nummern (1–25) entsprechen dem Brainstorming;
 die Reihenfolge ergibt sich aus den Abhängigkeiten, nicht aus der Nummer.
 
@@ -270,7 +274,7 @@ Geführte Dialoge, die mehrere Bereiche in **einem** Entwurf ändern (bestehende
 | 20 Entra-ID-Anmeldung | umgesetzt (ohne echten Mandanten getestet) |
 | 22 Berichte (PDF/HTML, E-Mail-Versand) | umgesetzt |
 | 23 Manipulationssicheres Änderungsprotokoll | umgesetzt |
-| 25 Oberfläche auf Englisch | geplant |
+| 25 Oberfläche auf Englisch | umgesetzt |
 | 15 Import (Test → Produktion) | umgesetzt |
 | 16 Git-Anbindung | umgesetzt (https gegen echten Server ungetestet) |
 | 6 Befristeter Zugriff (JIT) | umgesetzt (ohne echtes PAM getestet) |

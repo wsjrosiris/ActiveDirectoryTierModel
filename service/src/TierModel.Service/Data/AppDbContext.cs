@@ -60,6 +60,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, TierModel.Serv
             e.Property(x => x.Role).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.AuthType).HasConversion<string>().HasMaxLength(16);
             e.HasIndex(x => x.Sid).IsUnique();
+            e.Property(x => x.Language).HasMaxLength(8);
         });
 
         b.Entity<Domain>(e =>

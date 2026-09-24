@@ -26,6 +26,7 @@ import {
 } from './wizard-model'
 import { Contained, shortDn, TierPicker } from './wizard-fields'
 import { blockedReason, PlanSummary, useApplyPlan, useWizardContents, useWizardState, WizardDialog, type WizardStep } from './wizard-shell'
+import { t } from '@/i18n'
 
 export function AdminAccountWizard({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { contents, ready } = useWizardContents(open)
@@ -91,67 +92,67 @@ export function AdminAccountWizard({ open, onClose }: { open: boolean; onClose: 
   const plan = React.useMemo(() => (ready && w.step === 2 ? buildAdminAccountPlan(contents, input) : null), [ready, w.step, contents, JSON.stringify(input)]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const errAccount: Record<string, string> = {}
-  if (!displayName.trim()) errAccount.displayName = 'Anzeigename ist erforderlich.'
+  if (!displayName.trim()) errAccount.displayName = t('config.wizards.adminAccountWizard.displayNameIsRequired')
   const samErr = userSamError(effSam, users)
   if (samErr) errAccount.sam = samErr
   const errPlace: Record<string, string> = {}
-  if (!effOu) errPlace.ou = `Keine OU aus Tier ${tier} vorhanden.`
+  if (!effOu) errPlace.ou = t('config.wizards.adminAccountWizard.noOuFromTierTier', { tier })
   const show = w.attempted
   const prefixOk = !effSam || effSam.toLowerCase().startsWith(tierPrefix(tier))
 
   const steps: WizardStep[] = [
     {
       id: 'account',
-      label: 'Konto',
+      label: t('config.wizards.adminAccountWizard.account'),
       errors: errAccount,
       content: (
-        <FormSection title="Admin-Konto" description="Separates, privilegiertes Konto – nie für E-Mail oder Internet verwenden.">
-          <Field label="Tier" htmlFor="aa-tier">
+        <FormSection title={t('config.wizards.adminAccountWizard.adminAccount')} description={t('config.wizards.adminAccountWizard.separatePrivilegedAccountNeverUse')}>
+          <Field label={t('config.wizards.adminAccountWizard.tier')} htmlFor="aa-tier">
             <TierPicker id="aa-tier" value={tier} onChange={setTier} />
           </Field>
-          <Field label="Anzeigename" htmlFor="aa-dn" required error={show ? errAccount.displayName : undefined}>
-            <Input id="aa-dn" value={displayName} onChange={(e) => setDisplayName(e.target.value)} aria-invalid={show && !!errAccount.displayName} placeholder="z. B. Max Mustermann (Tier 1)" autoComplete="off" />
+          <Field label={t('config.wizards.adminAccountWizard.displayName')} htmlFor="aa-dn" required error={show ? errAccount.displayName : undefined}>
+            <Input id="aa-dn" value={displayName} onChange={(e) => setDisplayName(e.target.value)} aria-invalid={show && !!errAccount.displayName} placeholder={t('config.wizards.adminAccountWizard.eGJohnDoeTier')} autoComplete="off" />
           </Field>
           <Field
-            label="sAMAccountName"
+            label={t('config.wizards.adminAccountWizard.samaccountname')}
             htmlFor="aa-sam"
             required
             error={errAccount.sam && (show || sam !== null) ? errAccount.sam : undefined}
             hint={
               !prefixOk ? (
-                <span className="text-amber-700 dark:text-amber-300">Admin-Konten für Tier {tier} beginnen üblicherweise mit „{tierPrefix(tier)}“.</span>
+                <span className="text-amber-700 dark:text-amber-300">{t('config.wizards.adminAccountWizard.prefixHint', { tier, prefix: tierPrefix(tier) })}</span>
               ) : (
-                `Muster: ${tierPrefix(tier)}Initiale + Nachname, max. ${USER_SAM_MAX} Zeichen, eindeutig.`
+                t('config.wizards.adminAccountWizard.pattern', { prefix: tierPrefix(tier), max: USER_SAM_MAX })
               )
             }
           >
             <div className="flex gap-2">
               <Input id="aa-sam" className="font-mono" value={effSam} maxLength={USER_SAM_MAX + 5} onChange={(e) => setSam(e.target.value)} aria-invalid={!!errAccount.sam && (show || sam !== null)} placeholder={`${tierPrefix(tier)}mmustermann`} autoComplete="off" />
               {sam !== null && sam !== suggestedSam && suggestedSam && (
-                <Tooltip content={`Vorschlag „${suggestedSam}“ verwenden`}>
-                  <Button type="button" variant="outline" size="icon" aria-label={`Vorschlag „${suggestedSam}“ verwenden`} onClick={() => setSam(null)}>
+                <Tooltip content={t('config.wizards.adminAccountWizard.useSuggestionSuggestedsam', { suggestedSam })}>
+                  <Button type="button" variant="outline" size="icon" aria-label={t('config.wizards.adminAccountWizard.useSuggestionSuggestedsam', { suggestedSam })} onClick={() => setSam(null)}>
                     <RotateCcw />
                   </Button>
                 </Tooltip>
               )}
             </div>
           </Field>
-          <Field label="Beschreibung" htmlFor="aa-desc">
-            <Textarea id="aa-desc" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={`Tier-${tier}-Administratorkonto von …`} />
+          <Field label={t('config.wizards.adminAccountWizard.description')} htmlFor="aa-desc">
+            <Textarea id="aa-desc" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t('config.wizards.adminAccountWizard.tierTierAdministratorAccountOf', { tier })} />
           </Field>
-          <SwitchRow id="aa-enabled" label="Konto aktiviert" description="Deaktivierte Konten werden angelegt, können sich aber nicht anmelden." checked={enabled} onCheckedChange={setEnabled} />
+          <SwitchRow id="aa-enabled" label={t('config.wizards.adminAccountWizard.accountEnabled')} description={t('config.wizards.adminAccountWizard.disabledAccountsAreCreatedBut')} checked={enabled} onCheckedChange={setEnabled} />
         </FormSection>
       ),
     },
     {
       id: 'place',
-      label: 'Ablage & Gruppen',
+      label: t('config.wizards.adminAccountWizard.locationGroups'),
       errors: errPlace,
       content: (
         <>
-          <FormSection title="Ablage">
-            <Field label="Ziel-OU" htmlFor="aa-ou" required error={show ? errPlace.ou : undefined} hint={`OUs aus Tier ${tier}. Vorgeschlagen: die Konten-OU des Tiers.`}>
-              <Combobox id="aa-ou" mono value={effOu} onChange={(v) => setOuPath(v)} options={ouOptions} allowCustom={false} placeholder="OU wählen" searchPlaceholder="OU suchen …" invalid={show && !!errPlace.ou} />
+          <FormSection title={t('config.wizards.adminAccountWizard.location')}>
+            <Field label={t('config.wizards.adminAccountWizard.targetOu')} htmlFor="aa-ou" required error={show ? errPlace.ou : undefined} hint={t('config.wizards.adminAccountWizard.ousFromTierTierSuggested', { tier })}>
+              <Combobox id="aa-ou" mono value={effOu} onChange={(v) => setOuPath(v)} options={ouOptions} allowCustom={false} placeholder={t('config.wizards.adminAccountWizard.selectOu')} searchPlaceholder={t('config.wizards.adminAccountWizard.searchOu')} invalid={show && !!errPlace.ou} />
             </Field>
             {effOu && (
               <p className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -159,22 +160,22 @@ export function AdminAccountWizard({ open, onClose }: { open: boolean; onClose: 
               </p>
             )}
           </FormSection>
-          <FormSection title="Gruppenmitgliedschaften" description={`Vorschläge: Gruppen aus Tier ${tier}. Andere Gruppen lassen sich eintippen, werden aber geprüft.`}>
+          <FormSection title={t('config.wizards.adminAccountWizard.groupMemberships')} description={t('config.wizards.adminAccountWizard.suggestionsGroupsFromTierTier', { tier })}>
             <Contained>
             <MultiCombobox
               id="aa-groups"
               values={memberOf.filter((g) => g.toLowerCase() !== PROTECTED_USERS.toLowerCase())}
               onChange={setMemberOf}
               options={groupOptions}
-              placeholder="Gruppe suchen und hinzufügen …"
-              emptyText={`Keine Tier-${tier}-Gruppe gefunden`}
+              placeholder={t('config.wizards.adminAccountWizard.searchAndAddGroup')}
+              emptyText={t('config.wizards.adminAccountWizard.noTierTierGroupFound', { tier })}
             />
             </Contained>
             <TierRuleAlerts issues={membershipIssues} />
             <SwitchRow
               id="aa-protected"
-              label="Hinweis: Tier-0/1-Konten in Protected Users aufnehmen"
-              description="Fügt „Protected Users“ zu den Mitgliedschaften hinzu: kein NTLM, keine Kerberos-Delegierung, keine zwischengespeicherten Anmeldedaten."
+              label={t('config.wizards.adminAccountWizard.recommendedAddTier01')}
+              description={t('config.wizards.adminAccountWizard.addsProtectedUsersToThe')}
               checked={effProtected}
               onCheckedChange={setProtectedUsers}
             />
@@ -184,7 +185,7 @@ export function AdminAccountWizard({ open, onClose }: { open: boolean; onClose: 
     },
     {
       id: 'summary',
-      label: 'Zusammenfassung',
+      label: t('config.wizards.adminAccountWizard.summary'),
       errors: {},
       content: plan ? <PlanSummary plan={plan} /> : null,
     },
@@ -194,8 +195,8 @@ export function AdminAccountWizard({ open, onClose }: { open: boolean; onClose: 
     <WizardDialog
       open={open}
       onClose={close}
-      title="Neues Admin-Konto"
-      description="Konto im richtigen Tier mit passenden Gruppenmitgliedschaften."
+      title={t('config.wizards.adminAccountWizard.newAdminAccount')}
+      description={t('config.wizards.adminAccountWizard.accountInTheRightTier')}
       icon={<UserPlus />}
       steps={steps}
       step={w.step}
@@ -207,7 +208,7 @@ export function AdminAccountWizard({ open, onClose }: { open: boolean; onClose: 
       finishBlocked={blockedReason(plan)}
       onFinish={() => {
         if (!plan) return
-        apply(plan, `Admin-Konto „${effSam}“ angelegt`, 'users')
+        apply(plan, t('config.wizards.adminAccountWizard.adminAccountEffsamCreated', { effSam }), 'users')
         close()
       }}
     />

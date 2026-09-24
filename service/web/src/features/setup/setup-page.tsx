@@ -299,7 +299,7 @@ function StructureStep() {
           {counts.map((c) => (
             <div key={c.tier} className="rounded-lg border bg-card px-3 py-2.5">
               <p className="flex items-center gap-1.5 text-[13px] font-medium"><TierDot tier={c.tier} /> {t('setup.setup.tier')} {c.tier}</p>
-              <p className="mt-1 text-[13px] text-muted-foreground">{c.ous} {t('setup.setup.ous')} {c.groups} {t('setup.setup.groups')} {c.gpos} {t('setup.setup.gpos')}</p>
+              <p className="mt-1 text-[13px] text-muted-foreground">{c.ous} {t('setup.setup.ous', { count: c.ous })} {c.groups} {t('setup.setup.groups', { count: c.groups })} {c.gpos} {t('setup.setup.gpos', { count: c.gpos })}</p>
             </div>
           ))}
         </div>
@@ -494,7 +494,7 @@ function PlanStep({ onFinish, finishing, onSave }: { onFinish: () => void; finis
       <div className="grid gap-4">
         <div className="grid gap-2 sm:grid-cols-2">
           <Fact label={t('setup.setup.domainController')} value={dc || t('setup.setup.notSet')} />
-          <Fact label={t('setup.setup.scope')} value="Vollständig (ohne Add-ons)" />
+          <Fact label={t('setup.setup.scope')} value={t('setup.setup.fullWithoutAddOns')} />
         </div>
         {dirty.length > 0 && (
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[13px] text-amber-900 dark:text-amber-200">

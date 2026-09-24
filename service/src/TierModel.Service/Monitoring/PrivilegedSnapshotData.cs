@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using TierModel.Service.Runs;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Monitoring;
 
@@ -57,7 +58,7 @@ public static class PrivilegedSnapshotReader
     /// <summary>Parses and validates the file content. Throws <see cref="FormatException"/> with a German message when unusable.</summary>
     public static PrivilegedSnapshotData Parse(string json)
     {
-        if (string.IsNullOrWhiteSpace(json)) throw new FormatException("Die Ergebnisdatei ist leer.");
+        if (string.IsNullOrWhiteSpace(json)) throw new FormatException(L.T("Die Ergebnisdatei ist leer."));
         JsonNode? root;
         try
         {
@@ -66,10 +67,10 @@ public static class PrivilegedSnapshotReader
         }
         catch (JsonException ex)
         {
-            throw new FormatException($"Die Ergebnisdatei ist kein gültiges JSON ({ex.Message}).", ex);
+            throw new FormatException(L.F("Die Ergebnisdatei ist kein gültiges JSON ({0}).", ex.Message), ex);
         }
-        if (JsonCase.CamelCaseKeys(root) is not JsonObject obj) throw new FormatException("Die Ergebnisdatei enthält kein JSON-Objekt.");
-        if (obj["groups"] is null) throw new FormatException("Die Ergebnisdatei enthält keinen Abschnitt „groups“.");
+        if (JsonCase.CamelCaseKeys(root) is not JsonObject obj) throw new FormatException(L.T("Die Ergebnisdatei enthält kein JSON-Objekt."));
+        if (obj["groups"] is null) throw new FormatException(L.T("Die Ergebnisdatei enthält keinen Abschnitt „groups“."));
         NormalizeArrays(obj);
 
         PrivilegedSnapshotData? data;
@@ -80,16 +81,16 @@ public static class PrivilegedSnapshotReader
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException or InvalidOperationException)
         {
-            throw new FormatException($"Die Ergebnisdatei entspricht nicht dem erwarteten Format ({ex.Message}).", ex);
+            throw new FormatException(L.F("Die Ergebnisdatei entspricht nicht dem erwarteten Format ({0}).", ex.Message), ex);
         }
-        if (data is null) throw new FormatException("Die Ergebnisdatei ist leer.");
+        if (data is null) throw new FormatException(L.T("Die Ergebnisdatei ist leer."));
 
         // Required identities; everything else may be missing.
         var groups = new List<PrivilegedGroup>();
         foreach (var g in data.Groups ?? [])
         {
             if (g is null) continue;
-            if (string.IsNullOrWhiteSpace(g.Sid)) throw new FormatException($"Gruppe „{g.Name}“ ohne SID in der Ergebnisdatei.");
+            if (string.IsNullOrWhiteSpace(g.Sid)) throw new FormatException(L.F("Gruppe „{0}“ ohne SID in der Ergebnisdatei.", g.Name));
             var members = (g.Members ?? []).Where(m => m is not null && !string.IsNullOrWhiteSpace(m.Sid))
                 .Select(m => m with { ObjectClass = string.IsNullOrWhiteSpace(m.ObjectClass) ? "other" : m.ObjectClass, Via = m.Via ?? [] })
                 .GroupBy(m => m.Sid, StringComparer.OrdinalIgnoreCase).Select(x => x.First()).ToList();

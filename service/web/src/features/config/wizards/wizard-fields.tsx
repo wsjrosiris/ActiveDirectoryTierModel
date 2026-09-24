@@ -5,33 +5,34 @@ import { Segmented } from '@/components/ui/segmented'
 import { TierDot } from '@/components/shared/badges'
 import { cn } from '@/lib/utils'
 import { INHERITANCE_LABELS, objectTypeText, type AclTemplate, type TierNum } from './wizard-model'
+import { t } from '@/i18n'
 
 /** German labels of Active Directory rights (technical name stays visible in the chip). */
 export const RIGHT_LABELS: Record<string, string> = {
-  GenericAll: 'Vollzugriff',
-  GenericRead: 'Lesen',
-  GenericWrite: 'Schreiben',
-  CreateChild: 'Objekte erstellen',
-  DeleteChild: 'Objekte löschen',
-  ReadProperty: 'Eigenschaften lesen',
-  WriteProperty: 'Eigenschaften schreiben',
-  ExtendedRight: 'Erweitertes Recht',
-  ListChildren: 'Inhalt auflisten',
-  Delete: 'Löschen',
-  DeleteTree: 'Unterstruktur löschen',
-  WriteDacl: 'Berechtigungen ändern',
-  WriteOwner: 'Besitzer ändern',
-  Self: 'Validierte Schreibvorgänge',
+  GenericAll: t('config.wizards.wizardFields.fullControl'),
+  GenericRead: t('config.wizards.wizardFields.read'),
+  GenericWrite: t('config.wizards.wizardFields.write'),
+  CreateChild: t('config.wizards.wizardFields.createObjects'),
+  DeleteChild: t('config.wizards.wizardFields.deleteObjects'),
+  ReadProperty: t('config.wizards.wizardFields.readProperties'),
+  WriteProperty: t('config.wizards.wizardFields.writeProperties'),
+  ExtendedRight: t('config.wizards.wizardFields.extendedRight'),
+  ListChildren: t('config.wizards.wizardFields.listContents'),
+  Delete: t('config.wizards.wizardFields.delete'),
+  DeleteTree: t('config.wizards.wizardFields.deleteSubtree'),
+  WriteDacl: t('config.wizards.wizardFields.changePermissions'),
+  WriteOwner: t('config.wizards.wizardFields.changeOwner'),
+  Self: t('config.wizards.wizardFields.validatedWrites'),
 }
 
 export function TierPicker({ id, value, onChange, allowed = [0, 1, 2] }: { id?: string; value: TierNum; onChange: (tt: TierNum) => void; allowed?: TierNum[] }) {
   return (
     <div id={id}>
       <Segmented
-        aria-label="Tier"
+        aria-label={t('config.wizards.wizardFields.tier')}
         value={String(value) as '0' | '1' | '2'}
         onValueChange={(v) => onChange(Number(v) as TierNum)}
-        options={allowed.map((tt) => ({ value: String(tt) as '0' | '1' | '2', label: `Tier ${tt}`, icon: <TierDot tier={tt} /> }))}
+        options={allowed.map((tt) => ({ value: String(tt) as '0' | '1' | '2', label: t('config.wizards.wizardFields.tierTt', { tt }), icon: <TierDot tier={tt} /> }))}
       />
     </div>
   )
@@ -55,9 +56,9 @@ export function AclTemplateLine({ t: tt, allow = true }: { t: AclTemplate; allow
   return (
     <div className="grid gap-1.5">
       <p className="text-[12px] text-muted-foreground">
-        <span className={cn('font-medium', allow ? 'text-foreground' : 'text-destructive')}>{allow ? 'Zulassen' : 'Verweigern'}</span> auf{' '}
+        <span className={cn('font-medium', allow ? 'text-foreground' : 'text-destructive')}>{allow ? t('config.wizards.wizardFields.allow') : t('config.wizards.wizardFields.deny')}</span> {t('config.wizards.wizardFields.on')}{' '}
         <span className="font-medium text-foreground">{objectTypeText(tt.objecttype)}</span>
-        {tt.inheritedObjectType && <> (nur {objectTypeText(tt.inheritedObjectType)})</>} · {INHERITANCE_LABELS[tt.activeDirectorysecurityinheritance] ?? tt.activeDirectorysecurityinheritance}
+        {tt.inheritedObjectType && <> {t('config.wizards.wizardFields.only')} {objectTypeText(tt.inheritedObjectType)})</>} · {INHERITANCE_LABELS[tt.activeDirectorysecurityinheritance] ?? tt.activeDirectorysecurityinheritance}
       </p>
       <RightsChips rights={tt.activedirectoryrights} />
     </div>
@@ -127,7 +128,7 @@ export function Callout({ tone = 'warning', children }: { tone?: 'warning' | 'in
   )
 }
 
-export const shortDn = (dn: string) => (dn === '{{DOMAIN_DN}}' ? 'Domänenstamm' : dn.replace(/,\{\{DOMAIN_DN\}\}$/, ''))
+export const shortDn = (dn: string) => (dn === '{{DOMAIN_DN}}' ? t('config.wizards.wizardFields.domainRoot') : dn.replace(/,\{\{DOMAIN_DN\}\}$/, ''))
 
 /** Keeps wide children (chips of a MultiCombobox, long DNs) inside the column instead of widening the dialog. */
 export function Contained({ children }: { children: React.ReactNode }) {

@@ -43,6 +43,7 @@ import { ObjectFormEditor } from './object-form'
 import { SaveDialog } from './save-dialog'
 import { VersionsSheet } from './versions-sheet'
 import { WizardMenu } from './wizards'
+import { t } from '@/i18n'
 
 const FORM_EDITORS: Record<string, React.ComponentType<EditorProps>> = {
   ous: OusSection,
@@ -88,8 +89,8 @@ export function Component() {
 
   // ---- keyboard shortcuts (history is off while a sheet/dialog is open: it edits a snapshot of an item)
   const dialogOpen = () => !!document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')
-  useHotkey('mod+z', () => canEdit && !dialogOpen() && draftStore.undo() && toast('Rückgängig gemacht', { duration: 1200 }))
-  useHotkey(['mod+shift+z', 'mod+y'], () => canEdit && !dialogOpen() && draftStore.redo() && toast('Wiederhergestellt', { duration: 1200 }))
+  useHotkey('mod+z', () => canEdit && !dialogOpen() && draftStore.undo() && toast(t('config.config.undone'), { duration: 1200 }))
+  useHotkey(['mod+shift+z', 'mod+y'], () => canEdit && !dialogOpen() && draftStore.redo() && toast(t('config.config.restored'), { duration: 1200 }))
   useHotkey('mod+s', () => canEdit && dirtyKeys.length > 0 && setSaveOpen(true), { allowInInputs: true })
 
   // ---- leave-page guard
@@ -100,10 +101,10 @@ export function Component() {
   React.useEffect(() => {
     if (blocker.state !== 'blocked') return
     confirm({
-      title: 'Ungespeicherte Änderungen verwerfen?',
-      description: `Sie haben ungespeicherte Änderungen in ${dirtyKeys.length} Sektion${dirtyKeys.length === 1 ? '' : 'en'}. Wenn Sie die Seite verlassen, bleiben sie als Entwurf in diesem Browser-Tab erhalten, bis Sie ihn schließen.`,
-      confirmText: 'Seite verlassen',
-      cancelText: 'Hier bleiben',
+      title: t('config.config.discardUnsavedChanges'),
+      description: t('config.config.leaveDescription', { count: dirtyKeys.length }),
+      confirmText: t('config.config.leavePage'),
+      cancelText: t('config.config.stayHere'),
     }).then((ok) => (ok ? blocker.proceed() : blocker.reset()))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blocker.state])
@@ -120,9 +121,9 @@ export function Component() {
 
   const discard = async () => {
     const ok = await confirm({
-      title: `Änderungen an „${title}“ verwerfen?`,
-      description: 'Der Entwurf wird auf die gespeicherte Version zurückgesetzt. Mit Rückgängig (Strg+Z) lässt sich das wieder aufheben.',
-      confirmText: 'Verwerfen',
+      title: t('config.config.discardChangesToTitle', { title }),
+      description: t('config.config.theDraftIsResetTo'),
+      confirmText: t('config.config.discard'),
       destructive: true,
     })
     if (ok) draftStore.discard(key)
@@ -132,27 +133,27 @@ export function Component() {
   const known = new Set(sectionGroups.flatMap((g) => g.keys))
   const groups = [
     ...sectionGroups.map((g) => ({ title: g.title, items: g.keys.map((k) => allSections.find((s) => s.key === k)).filter(Boolean) as SectionSummary[] })),
-    { title: 'Weitere', items: allSections.filter((s) => !known.has(s.key)) },
+    { title: t('config.config.more'), items: allSections.filter((s) => !known.has(s.key)) },
   ].filter((g) => g.items.length)
 
   return (
     <Page wide className="pb-28">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Konfiguration</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">Soll-Zustand des Tier-Modells – versioniert und nachvollziehbar.</p>
+          <h1 className="text-xl font-semibold tracking-tight">{t('config.config.configuration')}</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">{t('config.config.desiredStateOfTheTier')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canEdit && (
             <div className="flex items-center rounded-md border bg-card shadow-xs">
-              <Tooltip content={`Rückgängig (${modKey}+Z)`}>
-                <Button variant="ghost" size="icon-sm" className="rounded-r-none" disabled={!canUndo} onClick={() => draftStore.undo()} aria-label="Rückgängig">
+              <Tooltip content={t('config.config.undoModkeyZ', { modKey })}>
+                <Button variant="ghost" size="icon-sm" className="rounded-r-none" disabled={!canUndo} onClick={() => draftStore.undo()} aria-label={t('config.config.undo')}>
                   <Undo2 />
                 </Button>
               </Tooltip>
               <div className="h-5 w-px bg-border" />
-              <Tooltip content={`Wiederholen (${modKey}+Umschalt+Z)`}>
-                <Button variant="ghost" size="icon-sm" className="rounded-l-none" disabled={!canRedo} onClick={() => draftStore.redo()} aria-label="Wiederholen">
+              <Tooltip content={t('config.config.redoModkeyShiftZ', { modKey })}>
+                <Button variant="ghost" size="icon-sm" className="rounded-l-none" disabled={!canRedo} onClick={() => draftStore.redo()} aria-label={t('config.config.redo')}>
                   <Redo2 />
                 </Button>
               </Tooltip>
@@ -160,19 +161,19 @@ export function Component() {
           )}
           <WizardMenu />
           <Button variant="outline" size="sm" asChild>
-            <Link to="/konfiguration/validierung"><CheckCircle2 /> Validierung</Link>
+            <Link to="/konfiguration/validierung"><CheckCircle2 /> {t('config.config.validation')}</Link>
           </Button>
           <Button variant="outline" size="sm" onClick={() => downloadUrl(api.config.exportUrl)}>
-            <Download /> Export
+            <Download /> {t('config.config.export')}
           </Button>
           {canEdit && (
             <Button variant="outline" size="sm" asChild>
-              <Link to="/konfiguration/import"><Import /> Import</Link>
+              <Link to="/konfiguration/import"><Import /> {t('config.config.import')}</Link>
             </Button>
           )}
           {canEdit && (
             <Button size="sm" disabled={!dirtyKeys.length} onClick={() => setSaveOpen(true)}>
-              <Save /> Speichern
+              <Save /> {t('common.save')}
               {dirtyKeys.length > 1 && <Badge className="ml-0.5 bg-white/20 text-current">{dirtyKeys.length}</Badge>}
             </Button>
           )}
@@ -181,10 +182,10 @@ export function Component() {
 
       <div className="grid gap-6 xl:grid-cols-[232px_minmax(0,1fr)]">
         {/* Sub navigation */}
-        <nav aria-label="Konfigurationssektionen" className="xl:sticky xl:top-20 xl:self-start">
+        <nav aria-label={t('config.config.configurationSections')} className="xl:sticky xl:top-20 xl:self-start">
           <div className="xl:hidden">
             <Select
-              aria-label="Sektion wählen"
+              aria-label={t('config.config.selectSection')}
               value={key}
               onValueChange={(k) => navigate(`/konfiguration/${k}`)}
               options={allSections.map((s) => ({ value: s.key, label: `${s.title || sectionFallbackTitles[s.key] || s.key}${dirtyKeys.includes(s.key) ? ' •' : ''}` }))}
@@ -228,7 +229,7 @@ export function Component() {
         <div className="min-w-0">
           {section.isError ? (
             <Card>
-              <EmptyState icon={<FileQuestion />} title="Sektion nicht gefunden" description={`Die Sektion „${key}“ existiert nicht.`} action={<Button size="sm" variant="outline" asChild><Link to="/konfiguration/ous">Zu den OUs</Link></Button>} />
+              <EmptyState icon={<FileQuestion />} title={t('config.config.sectionNotFound')} description={t('config.config.theSectionKeyDoesNot', { key })} action={<Button size="sm" variant="outline" asChild><Link to="/konfiguration/ous">{t('config.config.toTheOus')}</Link></Button>} />
             </Card>
           ) : (
             <>
@@ -237,16 +238,16 @@ export function Component() {
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
                     {section.data && <Badge variant="outline" className="font-mono">v{section.data.version}</Badge>}
-                    {isDirty && <Badge variant="warning">Ungespeichert</Badge>}
-                    {!canEdit && <Badge variant="muted"><Eye /> Nur lesen</Badge>}
+                    {isDirty && <Badge variant="warning">{t('config.config.unsaved')}</Badge>}
+                    {!canEdit && <Badge variant="muted"><Eye /> {t('config.config.readOnly')}</Badge>}
                   </div>
                   <p className="mt-1 text-[13px] text-muted-foreground">
                     {section.data ? (
                       <>
                         <span className="font-mono">{section.data.fileName}</span>
-                        {' · '}zuletzt geändert{' '}
+                        {' · '}{t('config.config.lastModified')}{' '}
                         <span title={formatDateTime(section.data.updatedAt)}>{formatRelative(section.data.updatedAt)}</span>
-                        {' von '}{section.data.updatedBy}
+                        {t('config.config.by')}{section.data.updatedBy}
                       </>
                     ) : (
                       <InlineSkeleton className="h-4 w-72" />
@@ -259,11 +260,11 @@ export function Component() {
                 <div className="flex items-center gap-2">
                   {isDirty && canEdit && (
                     <Button variant="ghost" size="sm" onClick={discard} className="text-muted-foreground">
-                      <RotateCcw /> Verwerfen
+                      <RotateCcw /> {t('config.config.discard')}
                     </Button>
                   )}
                   <Button variant="outline" size="sm" onClick={() => setVersionsOpen(true)}>
-                    <History /> Versionen
+                    <History /> {t('config.config.versions')}
                   </Button>
                 </div>
               </div>
@@ -290,11 +291,11 @@ export function Component() {
               <span className="relative inline-flex size-2 rounded-full bg-amber-500" />
             </span>
             <span className="text-[13px]">
-              Ungespeicherte Änderungen
-              <span className="text-muted-foreground"> in {dirtyKeys.map((k) => sectionFallbackTitles[k] ?? k).join(', ')}</span>
+              {t('common.unsavedChanges')}
+              <span className="text-muted-foreground"> {t('config.config.in')} {dirtyKeys.map((k) => sectionFallbackTitles[k] ?? k).join(', ')}</span>
             </span>
             <Button size="sm" onClick={() => setSaveOpen(true)}>
-              Speichern <Kbd className="border-white/20 bg-white/15 text-current">{modKey}S</Kbd>
+              {t('common.save')} <Kbd className="border-white/20 bg-white/15 text-current">{modKey}S</Kbd>
             </Button>
           </div>
         </div>

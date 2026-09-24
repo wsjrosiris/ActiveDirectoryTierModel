@@ -1,5 +1,6 @@
 using System.Text;
 using TierModel.Service.Config;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Runs;
 
@@ -26,7 +27,7 @@ public static class Workspace
     {
         var source = o.FrameworkPath;
         if (!File.Exists(Path.Combine(source, "Deploy-TierModel.ps1")))
-            throw new InvalidOperationException($"Framework nicht gefunden: '{source}' enthält kein Deploy-TierModel.ps1. Einstellung TierModel:FrameworkPath prüfen.");
+            throw new InvalidOperationException(L.PF("Framework nicht gefunden: '{0}' enthält kein Deploy-TierModel.ps1. Einstellung TierModel:FrameworkPath prüfen.", source));
 
         var root = PathFor(o, runId);
         if (Directory.Exists(root)) Directory.Delete(root, recursive: true);

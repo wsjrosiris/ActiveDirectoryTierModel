@@ -49,6 +49,7 @@ import {
 } from './plan-model'
 import { requestFromRun, useApplyPlan } from './plan-apply'
 import { MaintenanceNotice } from './maintenance-notice'
+import { t } from '@/i18n'
 
 const kindStyle: Record<ActionKind, { icon: React.ReactNode; tone: string; text: string }> = {
   create: { icon: <Plus />, tone: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300', text: 'text-emerald-600 dark:text-emerald-400' },
@@ -107,12 +108,12 @@ export function PlanView({ plan, header }: { plan: DeployPlan; header?: React.Re
   const filtering = area !== 'all' || action !== 'all' || kind !== 'all' || !!needle
 
   const tiles: { key: ActionKind | 'all' | 'existing'; label: string; value: number }[] = [
-    { key: 'all', label: 'Änderungen', value: total },
-    { key: 'create', label: 'Anlegen', value: plan.summary.create },
-    { key: 'update', label: 'Ändern', value: plan.summary.update },
-    { key: 'link', label: 'Verknüpfen', value: plan.summary.link },
-    { key: 'configure', label: 'Konfigurieren', value: plan.summary.configure },
-    { key: 'existing', label: 'Bereits vorhanden', value: plan.summary.existing },
+    { key: 'all', label: t('runs.planView.changes'), value: total },
+    { key: 'create', label: t('runs.planView.create'), value: plan.summary.create },
+    { key: 'update', label: t('runs.planView.change'), value: plan.summary.update },
+    { key: 'link', label: t('runs.planView.link'), value: plan.summary.link },
+    { key: 'configure', label: t('runs.planView.configure'), value: plan.summary.configure },
+    { key: 'existing', label: t('runs.planView.alreadyPresent'), value: plan.summary.existing },
   ]
 
   return (
@@ -149,12 +150,12 @@ export function PlanView({ plan, header }: { plan: DeployPlan; header?: React.Re
         })}
       </div>
 
-      {plan.errors.length > 0 && <Messages tone="error" title={`${plan.errors.length} Fehler bei der Planung`} items={plan.errors} />}
-      {plan.warnings.length > 0 && <Messages tone="warn" title={`${plan.warnings.length} ${plan.warnings.length === 1 ? 'Hinweis' : 'Hinweise'}`} items={plan.warnings} />}
+      {plan.errors.length > 0 && <Messages tone="error" title={t('runs.planView.lengthErrorsInThePlan', { length: plan.errors.length, count: plan.errors.length })} items={plan.errors} />}
+      {plan.warnings.length > 0 && <Messages tone="warn" title={t('runs.planView.warnings', { count: plan.warnings.length })} items={plan.warnings} />}
       {plan.truncated && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[13px] text-amber-900 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          Der Plan enthält {formatNumber(total)} Änderungen; gespeichert und angezeigt werden die ersten {formatNumber(plan.actions.length)}. Die Zähler umfassen alle Änderungen.
+          {t('runs.planView.truncated', { total: formatNumber(total), shown: formatNumber(plan.actions.length) })}
         </div>
       )}
 
@@ -162,8 +163,8 @@ export function PlanView({ plan, header }: { plan: DeployPlan; header?: React.Re
         <Card>
           <EmptyState
             icon={<CheckCircle2 />}
-            title="Keine Änderungen nötig"
-            description="Das Active Directory entspricht in diesem Bereich bereits der Soll-Konfiguration."
+            title={t('runs.planView.noChangesNeeded')}
+            description={t('runs.planView.activeDirectoryAlreadyMatchesThe')}
           />
         </Card>
       ) : (
@@ -172,36 +173,36 @@ export function PlanView({ plan, header }: { plan: DeployPlan; header?: React.Re
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative w-full sm:max-w-xs">
                 <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Änderungen durchsuchen …" className="h-8 pl-8 text-[13px]" aria-label="Änderungen durchsuchen" />
+                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('runs.planView.searchChanges')} className="h-8 pl-8 text-[13px]" aria-label={t('runs.planView.searchChanges2')} />
               </div>
               <div className="w-[calc(50%-4px)] sm:w-48">
                 <Select
                   size="sm"
-                  aria-label="Bereich"
+                  aria-label={t('runs.planView.scope')}
                   value={area}
                   onValueChange={setArea}
-                  options={[{ value: 'all', label: 'Alle Bereiche' }, ...areas.map((a) => ({ value: a, label: planAreaLabels[a] ?? a }))]}
+                  options={[{ value: 'all', label: t('runs.planView.allScopes') }, ...areas.map((a) => ({ value: a, label: planAreaLabels[a] ?? a }))]}
                 />
               </div>
               <div className="w-[calc(50%-4px)] sm:w-56">
                 <Select
                   size="sm"
-                  aria-label="Aktionsart"
+                  aria-label={t('runs.planView.actionType')}
                   value={action}
                   onValueChange={setAction}
-                  options={[{ value: 'all', label: 'Alle Aktionen' }, ...actionTypes.map((a) => ({ value: a, label: `${actionLabel(a)} (${plan.actionCounts[a]})` }))]}
+                  options={[{ value: 'all', label: t('runs.planView.allActions') }, ...actionTypes.map((a) => ({ value: a, label: `${actionLabel(a)} (${plan.actionCounts[a]})` }))]}
                 />
               </div>
               <div className="ml-auto flex items-center gap-2">
                 {filtering && (
                   <Button variant="ghost" size="xs" onClick={() => { setQ(''); setArea('all'); setAction('all'); setKind('all') }}>
-                    Filter zurücksetzen
+                    {t('runs.planView.resetFilters')}
                   </Button>
                 )}
-                <span className="text-xs text-muted-foreground tabular">{filtered.length} von {plan.actions.length}</span>
+                <span className="text-xs text-muted-foreground tabular">{filtered.length} {t('runs.planView.of')} {plan.actions.length}</span>
               </div>
             </div>
-            <div className="flex flex-wrap gap-1.5" aria-label="Zähler je Aktionsart">
+            <div className="flex flex-wrap gap-1.5" aria-label={t('runs.planView.countersPerActionType')}>
               {actionTypes.map((a) => (
                 <button
                   key={a}
@@ -221,7 +222,7 @@ export function PlanView({ plan, header }: { plan: DeployPlan; header?: React.Re
             </div>
           </div>
           {groups.length === 0 ? (
-            <EmptyState compact icon={<Search />} title="Keine Treffer" description="Keine geplante Änderung passt zu den Filtern." />
+            <EmptyState compact icon={<Search />} title={t('common.noMatches')} description={t('runs.planView.noPlannedChangeMatchesThe')} />
           ) : (
             <>
               <div className="flex justify-end border-b px-4 py-1.5">
@@ -231,7 +232,7 @@ export function PlanView({ plan, header }: { plan: DeployPlan; header?: React.Re
                   className="h-auto px-0"
                   onClick={() => setCollapsed(collapsed.size ? new Set() : new Set(groups.map((g) => g.key)))}
                 >
-                  {collapsed.size ? 'Alle aufklappen' : 'Alle zuklappen'}
+                  {collapsed.size ? t('runs.planView.expandAll') : t('runs.planView.collapseAll')}
                 </Button>
               </div>
               <div className="divide-y">
@@ -251,10 +252,10 @@ export function PlanView({ plan, header }: { plan: DeployPlan; header?: React.Re
                         }}
                       >
                         {open ? <ChevronDown className="size-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
-                        <span className="text-xs font-medium text-muted-foreground tabular">Phase {g.phase || '–'}</span>
+                        <span className="text-xs font-medium text-muted-foreground tabular">{t('runs.planView.phase')} {g.phase || '–'}</span>
                         <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{g.title}</span>
                         {g.existing !== null && g.existing > 0 && (
-                          <span className="hidden text-xs text-muted-foreground sm:inline">{formatNumber(g.existing)} bereits vorhanden</span>
+                          <span className="hidden text-xs text-muted-foreground sm:inline">{formatNumber(g.existing)} {t('runs.planView.alreadyPresent2')}</span>
                         )}
                         <Badge variant="secondary" className="tabular">{g.actions.length}</Badge>
                       </button>
@@ -290,14 +291,14 @@ function ActionRow({ action: a }: { action: PlanAction }) {
           <div className="mt-2 grid gap-2 rounded-lg border bg-muted/20 px-3 py-2.5">
             <KeyValueList
               value={{ aktion: actionLabel(a.action), ...(a.resourceType ? { objekttyp: a.resourceType } : {}), ...(a.path ? { pfad: a.path } : {}), ...rest }}
-              labels={{ aktion: 'Aktion', objekttyp: 'Objekttyp', pfad: 'Pfad (DN)' }}
+              labels={{ aktion: t('runs.planView.action'), objekttyp: t('runs.planView.objectType'), pfad: t('runs.planView.pathDn') }}
             />
           </div>
         )}
       </div>
       {hasMore && (
         <Button variant="ghost" size="xs" className="shrink-0 text-muted-foreground" aria-expanded={open} onClick={() => setOpen(!open)}>
-          Details {open ? <ChevronDown /> : <ChevronRight />}
+          {t('runs.planView.details')} {open ? <ChevronDown /> : <ChevronRight />}
         </Button>
       )}
     </li>
@@ -322,7 +323,7 @@ function Messages({ tone, title, items }: { tone: 'warn' | 'error'; title: strin
       </ul>
       {items.length > 5 && (
         <Button variant="link" size="xs" className="mt-1 ml-6 h-auto px-0 text-current" onClick={() => setAll(!all)}>
-          {all ? 'Weniger anzeigen' : `Alle ${items.length} anzeigen`}
+          {all ? t('runs.planView.showLess') : t('runs.planView.showAllLength', { length: items.length })}
         </Button>
       )}
     </div>
@@ -336,20 +337,20 @@ export function PlanApplyBar({ run }: { run: RunDetail }) {
   const a = run.planApplicability
   if (run.status !== 'Succeeded' || !a) return null
   const changes = run.plan ? planTotal(run.plan) : undefined
-  const reason = !canApply ? 'Anwenden erfordert die Rolle Operator.' : !a.applicable ? a.reason ?? 'Diese Planung kann nicht angewendet werden.'
-    : apply.frozen ? 'Während einer Sperrzeit kann nicht angewendet werden.' : undefined
+  const reason = !canApply ? t('runs.planView.applyingRequiresTheOperatorRole') : !a.applicable ? a.reason ?? t('runs.planView.thisPlanCannotBeApplied')
+    : apply.frozen ? t('runs.planView.cannotApplyDuringAChange') : undefined
   return (
     <Card className={cn('flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3', a.applicable ? 'border-sky-500/30' : 'bg-muted/30')}>
       <span className={cn('grid size-9 shrink-0 place-content-center rounded-lg [&_svg]:size-4', a.applicable ? 'bg-sky-500/10 text-sky-600 dark:text-sky-300' : 'bg-muted text-muted-foreground')}>
         {a.applicable ? <FlaskConical /> : <Lock />}
       </span>
       <div className="min-w-0 flex-1 basis-60">
-        <p className="text-sm font-medium">{a.applicable ? 'Diese Planung kann angewendet werden' : 'Anwenden nicht möglich'}</p>
+        <p className="text-sm font-medium">{a.applicable ? t('runs.planView.thisPlanCanBeApplied') : t('runs.planView.applyNotPossible')}</p>
         <p className="text-[13px] text-muted-foreground">
           {a.applicable ? (
             <>
-              Gleicher Konfigurationsstand wie bei der Planung
-              {a.expiresAt && <> · gültig bis <span title={formatDateTime(a.expiresAt)}>{formatDateTime(a.expiresAt)}</span> ({formatRelative(a.expiresAt)})</>}
+              {t('runs.planView.sameConfigurationStateAsIn')}
+              {a.expiresAt && <> {t('runs.planView.validUntil')} <span title={formatDateTime(a.expiresAt)}>{formatDateTime(a.expiresAt)}</span> ({formatRelative(a.expiresAt)})</>}
             </>
           ) : (
             a.reason
@@ -366,7 +367,7 @@ export function PlanApplyBar({ run }: { run: RunDetail }) {
             onClick={() => apply.start(requestFromRun(run), run.id, changes, run.domain?.key)}
           >
             {!apply.isPending && (apply.needsApproval ? <UsersRound /> : <Zap />)}
-            {apply.needsApproval ? 'Diesen Plan zur Freigabe einreichen …' : 'Diesen Plan anwenden …'}
+            {apply.needsApproval ? t('runs.planView.submitThisPlanForApproval') : t('runs.planView.applyThisPlan')}
           </Button>
         </span>
       </Tooltip>
@@ -386,14 +387,14 @@ export function PlanCompact({ plan, planRunId, limit = 6 }: { plan: DeployPlan; 
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <p className="flex items-center gap-2 text-[13px] font-medium">
           <ClipboardList className="size-4 text-sky-600 dark:text-sky-400" />
-          Geplante Änderungen laut Planung #{planRunId}
+          {t('runs.planView.plannedChangesOf', { id: planRunId })}
         </p>
         <Button variant="link" size="xs" className="h-auto px-0" asChild>
-          <Link to={`/laeufe/${planRunId}`}>Alle {total} ansehen <ArrowRight /></Link>
+          <Link to={`/laeufe/${planRunId}`}>{t('runs.planView.viewAll', { count: total })} <ArrowRight /></Link>
         </Button>
       </div>
       {total === 0 ? (
-        <p className="text-[13px] text-muted-foreground">Keine Änderungen nötig – das AD entspricht bereits der Soll-Konfiguration.</p>
+        <p className="text-[13px] text-muted-foreground">{t('runs.planView.noChangesNeededAdAlready')}</p>
       ) : (
         <>
           <div className="flex flex-wrap gap-1.5">
@@ -417,13 +418,13 @@ export function PlanCompact({ plan, planRunId, limit = 6 }: { plan: DeployPlan; 
               }),
             )}
           </ul>
-          {total > limit && <p className="text-xs text-muted-foreground">… und {total - limit} weitere{counts && <> ({counts} insgesamt)</>}</p>}
+          {total > limit && <p className="text-xs text-muted-foreground">{counts ? t('runs.planView.andMoreTotal', { count: total - limit, counts }) : t('runs.planView.andMore', { count: total - limit })}</p>}
         </>
       )}
       {(plan.errors.length > 0 || plan.warnings.length > 0) && (
         <p className="flex items-center gap-1.5 text-xs text-amber-800 dark:text-amber-300">
           <AlertTriangle className="size-3.5" />
-          {[plan.errors.length && `${plan.errors.length} Fehler`, plan.warnings.length && `${plan.warnings.length} Hinweis(e)`].filter(Boolean).join(', ')} in der Planung
+          {t('runs.planView.problemsInPlan', { list: [plan.errors.length && t('runs.planView.errorsCount', { count: plan.errors.length }), plan.warnings.length && t('runs.planView.warningsCount', { count: plan.warnings.length })].filter(Boolean).join(', ') })}
         </p>
       )}
     </div>
@@ -437,11 +438,11 @@ export function PlanMissing({ run }: { run: RunDetail }) {
     <Card>
       <EmptyState
         icon={pending ? <Clock /> : <ClipboardList />}
-        title={pending ? 'Planung läuft …' : 'Keine Plandatei'}
+        title={pending ? t('runs.planView.planRunning') : t('runs.planView.noPlanFile')}
         description={
           pending
-            ? 'Die geplanten Änderungen erscheinen hier, sobald der Planungslauf abgeschlossen ist.'
-            : 'Für diesen Lauf liegt keine auswertbare Planung vor. Die geplanten Änderungen stehen im Protokoll.'
+            ? t('runs.planView.thePlannedChangesAppearHere')
+            : t('runs.planView.noEvaluablePlanExistsFor')
         }
       />
     </Card>

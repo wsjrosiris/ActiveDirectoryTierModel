@@ -57,7 +57,7 @@ export default function DriftChart({ data }: { data: Point[] }) {
                 <p className="text-muted-foreground">{formatDateShort(p.at)}</p>
                 <p className="mt-1 flex items-center gap-1.5 text-foreground">
                   <span className="size-2 rounded-full bg-primary" />
-                  {p.driftCount === 0 ? t('dashboard.driftChart.noDrift') : t('dashboard.driftChart.driftcountDeviations', { driftCount: p.driftCount })}
+                  {p.driftCount === 0 ? t('dashboard.driftChart.noDrift') : t('dashboard.driftChart.driftcountDeviations', { driftCount: p.driftCount, count: p.driftCount })}
                 </p>
               </div>
             )

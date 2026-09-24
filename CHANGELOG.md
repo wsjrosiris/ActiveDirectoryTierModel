@@ -63,6 +63,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   existing data to the first domain; PowerShell client `-Domain`.
 - `Audit-TierModel.ps1 -OutputFormat Html` (self-contained, print-friendly report) and `-OutputFormat NUnitXml`
   (NUnit 3, one suite per area) – previously placeholders.
+- Service: **English user interface** (i18next, 3,800+ keys) and server-side localization (Accept-Language);
+  language per user, instance default language for persisted texts; migration UserLanguage.
 - Service: **compliance score** per tier on the dashboard with 30-day history and breakdown.
 - Roadmap for the next features (`docs/service/roadmap.md`).
 

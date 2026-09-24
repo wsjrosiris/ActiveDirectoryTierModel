@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using TierModel.Service.Config;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Monitoring;
 
@@ -39,9 +40,9 @@ public static class ComplianceCalculator
 
     public static readonly int[] Tiers = [0, 1, 2];
 
-    private static readonly IReadOnlyDictionary<string, string> SeverityText = new Dictionary<string, string>
+    private static string SeverityText(string severity) => severity switch
     {
-        ["High"] = "hoch", ["Medium"] = "mittel", ["Low"] = "niedrig",
+        "High" => L.T("hoch"), "Low" => L.T("niedrig"), _ => L.T("mittel"),
     };
 
     public static string NormalizeSeverity(string? severity) => severity?.Trim().ToLowerInvariant() switch
@@ -63,23 +64,23 @@ public static class ComplianceCalculator
             {
                 var each = Weights.AuditDrift[g.Key.Severity];
                 deductions[g.Key.Value].Add(new("audit", g.Key.Severity,
-                    $"{Count(g.Count(), "Abweichung", "Abweichungen")} im Audit (Schweregrad {SeverityText[g.Key.Severity]})", g.Count(), each, each * g.Count()));
+                    L.F("{0} im Audit (Schweregrad {1})", Count(g.Count(), L.TC("count", "Abweichung"), L.TC("count", "Abweichungen")), SeverityText(g.Key.Severity)), g.Count(), each, each * g.Count()));
             }
 
         if (monitor is not null)
         {
             if (monitor.Unexpected.Count > 0)
                 deductions[0].Add(new("unexpected", null,
-                    $"{Count(monitor.Unexpected.Count, "nicht erwartetes Mitglied", "nicht erwartete Mitglieder")} in geschützten Gruppen",
+                    L.F("{0} in geschützten Gruppen", Count(monitor.Unexpected.Count, L.T("nicht erwartetes Mitglied"), L.T("nicht erwartete Mitglieder"))),
                     monitor.Unexpected.Count, Weights.UnexpectedMember, Weights.UnexpectedMember * monitor.Unexpected.Count));
             foreach (var g in monitor.Hygiene.Where(h => h.Tier is 0 or 1 or 2).GroupBy(h => (h.Tier!.Value, Severity: NormalizeSeverity(h.Severity))))
             {
                 var each = Weights.Hygiene[g.Key.Severity];
                 deductions[g.Key.Value].Add(new("hygiene", g.Key.Severity,
-                    $"{Count(g.Count(), "Hygiene-Befund", "Hygiene-Befunde")} (Schweregrad {SeverityText[g.Key.Severity]})", g.Count(), each, each * g.Count()));
+                    L.F("{0} (Schweregrad {1})", Count(g.Count(), L.TC("count", "Hygiene-Befund"), L.TC("count", "Hygiene-Befunde")), SeverityText(g.Key.Severity)), g.Count(), each, each * g.Count()));
             }
             if (monitor.AttackPaths.Count > 0)
-                deductions[0].Add(new("attackPath", "High", $"{Count(monitor.AttackPaths.Count, "Angriffspfad", "Angriffspfade")} zu Tier 0",
+                deductions[0].Add(new("attackPath", "High", L.F("{0} zu Tier 0", Count(monitor.AttackPaths.Count, L.TC("count", "Angriffspfad"), L.TC("count", "Angriffspfade"))),
                     monitor.AttackPaths.Count, Weights.AttackPath, Weights.AttackPath * monitor.AttackPaths.Count));
         }
 

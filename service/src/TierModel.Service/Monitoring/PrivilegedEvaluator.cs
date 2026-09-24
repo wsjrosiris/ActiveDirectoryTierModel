@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using TierModel.Service.Config;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Monitoring;
 
@@ -144,14 +145,14 @@ public static class PrivilegedEvaluator
     /// <summary>Why a member of a protected/Tier 0 group is expected; null when it is not.</summary>
     public static string? IsExpected(PrivilegedGroup group, PrivilegedMember member, Tier0Config config)
     {
-        if (IsBuiltinAdministrator(member.Sid)) return "Integriertes Administratorkonto";
-        if (IsComputer(member.ObjectClass) && DomainControllerGroups.Any(p => SidMatches(group.Sid, p))) return "Domänencontroller";
-        if (DefaultNesting.Any(n => SidMatches(group.Sid, n.Group) && SidMatches(member.Sid, n.Member))) return "Standard-Verschachtelung";
-        if (IsGroup(member.ObjectClass) && (config.IsTier0Group(member.SamAccountName) || config.IsTier0Group(member.Name))) return "Tier-0-Gruppe laut Konfiguration";
-        if (!IsGroup(member.ObjectClass) && config.IsTier0Account(member.SamAccountName)) return "Tier-0-Konto laut Konfiguration";
+        if (IsBuiltinAdministrator(member.Sid)) return L.T("Integriertes Administratorkonto");
+        if (IsComputer(member.ObjectClass) && DomainControllerGroups.Any(p => SidMatches(group.Sid, p))) return L.T("Domänencontroller");
+        if (DefaultNesting.Any(n => SidMatches(group.Sid, n.Group) && SidMatches(member.Sid, n.Member))) return L.T("Standard-Verschachtelung");
+        if (IsGroup(member.ObjectClass) && (config.IsTier0Group(member.SamAccountName) || config.IsTier0Group(member.Name))) return L.T("Tier-0-Gruppe laut Konfiguration");
+        if (!IsGroup(member.ObjectClass) && config.IsTier0Account(member.SamAccountName)) return L.T("Tier-0-Konto laut Konfiguration");
         // Personal admin accounts are usually not in the users section; they live in the Tier 0 account OUs of the model.
-        if (!IsGroup(member.ObjectClass) && TierRules.TierOf(ParentDn(member.DistinguishedName)) == 0) return "Konto in einer Tier-0-OU";
-        if (config.JitFor(group, member) is { } jit) return $"Erwartet (JIT bis {Maintenance.MaintenanceCalendar.Format(jit.ExpiresAt)})";
+        if (!IsGroup(member.ObjectClass) && TierRules.TierOf(ParentDn(member.DistinguishedName)) == 0) return L.T("Konto in einer Tier-0-OU");
+        if (config.JitFor(group, member) is { } jit) return L.F("Erwartet (JIT bis {0})", Maintenance.MaintenanceCalendar.Format(jit.ExpiresAt));
         return null;
     }
 
@@ -179,13 +180,13 @@ public static class PrivilegedEvaluator
         var newFindings = new List<string>();
         var prevUnexpected = (previousEvaluation?.Unexpected ?? []).Select(u => Key(u.GroupSid, u.MemberSid)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var u in unexpected.Where(u => !prevUnexpected.Contains(Key(u.GroupSid, u.MemberSid))))
-            newFindings.Add($"Nicht erwartet: {u.MemberName} in {u.GroupName}{(u.Direct ? "" : $" (über {string.Join(" › ", u.Via)})")}");
+            newFindings.Add(L.F("Nicht erwartet: {0} in {1}{2}", u.MemberName, u.GroupName, (u.Direct ? "" : L.F(" (über {0})", string.Join(" › ", u.Via)))));
         var prevHygiene = (previousEvaluation?.Hygiene ?? []).Where(h => h.Severity == High).Select(h => Key(h.Rule, h.Sid)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var h in hygiene.Where(h => h.Severity == High && !prevHygiene.Contains(Key(h.Rule, h.Sid))))
-            newFindings.Add($"Hygiene (hoch): {h.Account} – {h.Title}");
+            newFindings.Add(L.F("Hygiene (hoch): {0} – {1}", h.Account, h.Title));
         var prevPaths = (previousEvaluation?.AttackPaths ?? []).Select(PathKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var p in paths.Where(p => !prevPaths.Contains(PathKey(p))))
-            newFindings.Add($"Angriffspfad: {p.Sentence}");
+            newFindings.Add(L.F("Angriffspfad: {0}", p.Sentence));
 
         return new PrivilegedEvaluation(previous is null, changes, unexpected, hygiene, paths, newFindings, thresholds);
     }
@@ -249,17 +250,18 @@ public static class PrivilegedEvaluator
 
     // ------------------------------------------------------------------ hygiene (roadmap 8)
 
-    /// <summary>German titles of the hygiene rules.</summary>
-    public static readonly IReadOnlyDictionary<string, string> RuleTitles = new Dictionary<string, string>
+    /// <summary>Titles of the hygiene rules (language of the evaluation, see <see cref="L"/>).</summary>
+    public static string RuleTitle(string rule) => rule switch
     {
-        ["NotInProtectedUsers"] = "Nicht in „Protected Users“",
-        ["DelegationAllowed"] = "Delegierung erlaubt",
-        ["PasswordOld"] = "Passwort zu alt",
-        ["Stale"] = "Lange nicht angemeldet",
-        ["HasSpn"] = "SPN gesetzt (Kerberoasting)",
-        ["PasswordNeverExpires"] = "Passwort läuft nie ab",
-        ["OrphanedAdminCount"] = "adminCount verwaist",
-        ["DisabledButPrivileged"] = "Deaktiviert, aber privilegiert",
+        "NotInProtectedUsers" => L.T("Nicht in „Protected Users“"),
+        "DelegationAllowed" => L.T("Delegierung erlaubt"),
+        "PasswordOld" => L.T("Passwort zu alt"),
+        "Stale" => L.T("Lange nicht angemeldet"),
+        "HasSpn" => L.T("SPN gesetzt (Kerberoasting)"),
+        "PasswordNeverExpires" => L.T("Passwort läuft nie ab"),
+        "OrphanedAdminCount" => L.T("adminCount verwaist"),
+        "DisabledButPrivileged" => L.T("Deaktiviert, aber privilegiert"),
+        _ => rule,
     };
 
     /// <summary>
@@ -281,7 +283,7 @@ public static class PrivilegedEvaluator
     {
         var result = new List<HygieneFinding>();
         void Add(string rule, string severity, PrivilegedAccount a, string value) =>
-            result.Add(new(rule, RuleTitles[rule], severity, a.Sid, a.DisplayName, a.DistinguishedName, a.ObjectClass, a.Tier, value));
+            result.Add(new(rule, RuleTitle(rule), severity, a.Sid, a.DisplayName, a.DistinguishedName, a.ObjectClass, a.Tier, value));
 
         foreach (var a in data.Accounts)
         {
@@ -292,36 +294,36 @@ public static class PrivilegedEvaluator
 
             if (a.Enabled == false)
             {
-                if (privileged) Add("DisabledButPrivileged", Medium, a, $"Deaktiviert, aber Mitglied von {memberText}");
+                if (privileged) Add("DisabledButPrivileged", Medium, a, L.F("Deaktiviert, aber Mitglied von {0}", memberText));
                 continue;
             }
 
             if (user && a.ServicePrincipalNames.Count > 0)
                 Add("HasSpn", privileged ? High : Medium, a,
                     $"{a.ServicePrincipalNames.Count} SPN{(a.ServicePrincipalNames.Count == 1 ? "" : "s")}: {string.Join(", ", a.ServicePrincipalNames.Take(3))}{(a.ServicePrincipalNames.Count > 3 ? " …" : "")}"
-                    + (privileged ? $" – Mitglied von {memberText}" : ""));
+                    + (privileged ? L.F(" – Mitglied von {0}", memberText) : ""));
             if (user && a.AccountNotDelegated != true)
-                Add("DelegationAllowed", a.Tier == 0 ? High : Medium, a, "„Das Konto ist vertraulich und kann nicht delegiert werden“ ist nicht gesetzt");
+                Add("DelegationAllowed", a.Tier == 0 ? High : Medium, a, L.T("„Das Konto ist vertraulich und kann nicht delegiert werden“ ist nicht gesetzt"));
             if (user && a.Tier == 0 && a.ProtectedUsers != true)
-                Add("NotInProtectedUsers", Medium, a, "Kein Mitglied der Gruppe „Protected Users“");
+                Add("NotInProtectedUsers", Medium, a, L.T("Kein Mitglied der Gruppe „Protected Users“"));
             if (user)
             {
                 if (a.PasswordLastSet is not { } pw)
-                    Add("PasswordOld", Medium, a, "Passwort wurde nie gesetzt");
+                    Add("PasswordOld", Medium, a, L.T("Passwort wurde nie gesetzt"));
                 else if ((now - pw).TotalDays > t.PasswordMaxAgeDays)
-                    Add("PasswordOld", Medium, a, $"Passwort zuletzt geändert vor {Days(now - pw)} Tagen ({Date(pw)}), erlaubt sind {t.PasswordMaxAgeDays}");
+                    Add("PasswordOld", Medium, a, L.F("Passwort zuletzt geändert vor {0} Tagen ({1}), erlaubt sind {2}", Days(now - pw), Date(pw), t.PasswordMaxAgeDays));
             }
             if (a.LastLogon is not { } logon)
-                Add("Stale", Low, a, "Noch nie angemeldet");
+                Add("Stale", Low, a, L.T("Noch nie angemeldet"));
             else if ((now - logon).TotalDays > t.StaleDays)
-                Add("Stale", Low, a, $"Letzte Anmeldung vor {Days(now - logon)} Tagen ({Date(logon)}), Schwellwert {t.StaleDays}");
+                Add("Stale", Low, a, L.F("Letzte Anmeldung vor {0} Tagen ({1}), Schwellwert {2}", Days(now - logon), Date(logon), t.StaleDays));
             if (user && a.PasswordNeverExpires == true)
-                Add("PasswordNeverExpires", Low, a, "„Kennwort läuft nie ab“ ist gesetzt");
+                Add("PasswordNeverExpires", Low, a, L.T("„Kennwort läuft nie ab“ ist gesetzt"));
         }
 
         foreach (var o in data.AdminCountOrphans)
-            result.Add(new("OrphanedAdminCount", RuleTitles["OrphanedAdminCount"], Low, o.Sid, o.SamAccountName ?? o.Sid, o.DistinguishedName, o.ObjectClass,
-                TierRules.TierOf(o.DistinguishedName), "adminCount=1, aber in keiner geschützten Gruppe mehr – die Berechtigungen bleiben eingeschränkt vererbt"));
+            result.Add(new("OrphanedAdminCount", RuleTitle("OrphanedAdminCount"), Low, o.Sid, o.SamAccountName ?? o.Sid, o.DistinguishedName, o.ObjectClass,
+                TierRules.TierOf(o.DistinguishedName), L.T("adminCount=1, aber in keiner geschützten Gruppe mehr – die Berechtigungen bleiben eingeschränkt vererbt")));
 
         return result;
     }
@@ -332,31 +334,30 @@ public static class PrivilegedEvaluator
 
     // ------------------------------------------------------------------ attack paths (roadmap 9)
 
-    private static readonly IReadOnlyDictionary<string, string> ObjectTypeLabels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    public static string ObjectTypeLabel(string type) => type.ToLowerInvariant() switch
     {
-        ["DomainRoot"] = "Domänenstamm",
-        ["AdminSDHolder"] = "AdminSDHolder",
-        ["ProtectedGroup"] = "geschützte Gruppe",
-        ["Tier0OU"] = "Tier-0-OU",
-        ["Tier0GPO"] = "Tier-0-GPO",
-        ["DomainControllersOU"] = "OU der Domänencontroller",
+        "domainroot" => L.T("Domänenstamm"),
+        "adminsdholder" => "AdminSDHolder",
+        "protectedgroup" => L.T("geschützte Gruppe"),
+        "tier0ou" => L.T("Tier-0-OU"),
+        "tier0gpo" => L.T("Tier-0-GPO"),
+        "domaincontrollersou" => L.T("OU der Domänencontroller"),
+        _ => type,
     };
-
-    public static string ObjectTypeLabel(string type) => ObjectTypeLabels.GetValueOrDefault(type) ?? type;
 
     public static string PrincipalDescription(string principalClass, int? memberCount) => principalClass.ToLowerInvariant() switch
     {
-        "group" => memberCount is { } n ? $"Gruppe, {n} {(n == 1 ? "Mitglied" : "Mitglieder")}" : "Gruppe",
-        "user" or "inetorgperson" => "Benutzer",
+        "group" => memberCount is { } n ? L.F("Gruppe, {0} {1}", n, (n == 1 ? L.TC("count", "Mitglied") : L.TC("count", "Mitglieder"))) : L.T("Gruppe"),
+        "user" or "inetorgperson" => L.T("Benutzer"),
         "computer" => "Computer",
         "msds-groupmanagedserviceaccount" => "gMSA",
         "msds-managedserviceaccount" => "MSA",
-        "foreignsecurityprincipal" => "fremder Sicherheitsprinzipal",
-        _ => "Objekt",
+        "foreignsecurityprincipal" => L.T("fremder Sicherheitsprinzipal"),
+        _ => L.T("Objekt"),
     };
 
     private static string JoinGerman(IReadOnlyList<string> items) =>
-        items.Count <= 1 ? string.Join("", items) : $"{string.Join(", ", items.Take(items.Count - 1))} und {items[^1]}";
+        items.Count <= 1 ? string.Join("", items) : L.F("{0} und {1}", string.Join(", ", items.Take(items.Count - 1)), items[^1]);
 
     /// <summary>
     /// ACL findings on Tier 0 objects whose principal is not Tier 0 per configuration. First stage: the direct right;
@@ -375,13 +376,13 @@ public static class PrivilegedEvaluator
                 continue;
 
             var name = TierRules.Bare(f.PrincipalName);
-            var sentence = $"{name} ({PrincipalDescription(f.PrincipalClass ?? "", f.MemberCount)}) hat {JoinGerman(f.Rights)} auf {f.ObjectName} ({ObjectTypeLabel(f.ObjectType ?? "")})"
-                + (f.Inherited == true ? " – geerbt" : "");
+            var sentence = L.F("{0} ({1}) hat {2} auf {3} ({4})", name, PrincipalDescription(f.PrincipalClass ?? "", f.MemberCount), JoinGerman(f.Rights), f.ObjectName, ObjectTypeLabel(f.ObjectType ?? ""))
+                + (f.Inherited == true ? L.T(" – geerbt") : "");
             string? path = null;
             if (IsGroup(f.PrincipalClass ?? "") && f.SampleMembers.Count > 0)
             {
                 var more = (f.MemberCount ?? f.SampleMembers.Count) - f.SampleMembers.Count;
-                path = $"Über die Mitgliedschaft in {name}: {string.Join(", ", f.SampleMembers)}{(more > 0 ? $" und {more} weitere" : "")}";
+                path = L.F("Über die Mitgliedschaft in {0}: {1}{2}", name, string.Join(", ", f.SampleMembers), (more > 0 ? L.F(" und {0} weitere", more) : ""));
             }
             result.Add(new(f.ObjectDn, f.ObjectType ?? "", f.ObjectName, f.PrincipalSid ?? "", f.PrincipalName, f.PrincipalClass ?? "", f.Rights,
                 f.MemberCount, f.SampleMembers, f.Inherited == true, High, sentence, path));
@@ -395,11 +396,11 @@ public static class PrivilegedEvaluator
     public static List<string> NotificationLines(PrivilegedEvaluation e, int max = 10)
     {
         var lines = e.Changes.Select(c => c.Change == "Added"
-                ? $"+ {c.MemberName} zu {c.GroupName} hinzugefügt{(c.Direct ? "" : $" (über {string.Join(" › ", c.Via)})")}"
-                : $"− {c.MemberName} aus {c.GroupName} entfernt")
+                ? L.F("+ {0} zu {1} hinzugefügt{2}", c.MemberName, c.GroupName, (c.Direct ? "" : L.F(" (über {0})", string.Join(" › ", c.Via))))
+                : L.F("− {0} aus {1} entfernt", c.MemberName, c.GroupName))
             .Concat(e.NewFindings).ToList();
         if (lines.Count <= max) return lines;
         var rest = lines.Count - (max - 1);
-        return [.. lines.Take(max - 1), $"… und {rest} weitere"];
+        return [.. lines.Take(max - 1), L.F("… und {0} weitere", rest)];
     }
 }

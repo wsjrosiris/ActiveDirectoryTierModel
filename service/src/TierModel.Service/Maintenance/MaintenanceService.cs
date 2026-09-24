@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using TierModel.Service.Data;
 using TierModel.Service.Runs;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Maintenance;
 
@@ -31,7 +32,7 @@ public class MaintenanceService(AppDbContext db, RunQueue queue, ChangeLogServic
     public static bool IsRestricted(Run run) => run.Kind == RunKind.Deploy && run.Mode == RunMode.Apply;
 
     public static string FreezeMessage(FreezePeriod f) =>
-        $"Sperrzeit „{f.Reason}“: Änderungen im Active Directory sind bis {MaintenanceCalendar.Format(f.To)} gesperrt. Anwenden ist erst danach wieder möglich.";
+        L.F("Sperrzeit „{0}“: Änderungen im Active Directory sind bis {1} gesperrt. Anwenden ist erst danach wieder möglich.", f.Reason, MaintenanceCalendar.Format(f.To));
 
     /// <summary>German error when an apply cannot be requested now (active freeze, or no possible start at all); otherwise null.</summary>
     public async Task<string?> CheckApplyRequestAsync(DateTimeOffset now, int domainId, CancellationToken ct = default)
@@ -39,7 +40,7 @@ public class MaintenanceService(AppDbContext db, RunQueue queue, ChangeLogServic
         var cal = await CalendarAsync(domainId, ct);
         if (cal.FreezeAt(now) is { } freeze) return FreezeMessage(freeze);
         if (cal.NextAllowedStart(now) is null)
-            return "In den nächsten Monaten gibt es kein Wartungsfenster außerhalb einer Sperrzeit. Bitte die Wartungsfenster prüfen.";
+            return L.T("In den nächsten Monaten gibt es kein Wartungsfenster außerhalb einer Sperrzeit. Bitte die Wartungsfenster prüfen.");
         return null;
     }
 
@@ -70,7 +71,7 @@ public class MaintenanceService(AppDbContext db, RunQueue queue, ChangeLogServic
                 {
                     promoted++;
                     changeLog.Add("system", "run.window-start", "run", run.Id.ToString(),
-                        $"Deploy #{run.Id} von {run.RequestedBy}: Wartungsfenster erreicht, Lauf eingereiht", domainId: run.DomainId);
+                        L.PF("Deploy #{0} von {1}: Wartungsfenster erreicht, Lauf eingereiht", run.Id, run.RequestedBy), domainId: run.DomainId);
                 }
             }
             else

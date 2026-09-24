@@ -6,6 +6,7 @@
 
 import { fieldLabels, humanizeKey } from './field-labels'
 import { ouFullDn } from './ou'
+import { currentLanguage, currentLocale, t } from '../i18n/index.ts'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = any
@@ -49,7 +50,7 @@ export function keyLabel(key: string) {
   return fieldLabels[key] ?? humanizeKey(key)
 }
 
-const shortDn = (dn: unknown) => String(dn ?? '').replace(/,\{\{DOMAIN_DN\}\}$/, '').replace(/^\{\{DOMAIN_DN\}\}$/, 'Domänenstamm')
+const shortDn = (dn: unknown) => String(dn ?? '').replace(/,\{\{DOMAIN_DN\}\}$/, '').replace(/^\{\{DOMAIN_DN\}\}$/, t('lib.ou.domainRoot'))
 
 /* ------------------------------------------------------------------ collections per section */
 
@@ -77,31 +78,31 @@ const aclCollection: Collection = {
 export function collectionsFor(sectionKey: string): Collection[] {
   switch (sectionKey) {
     case 'ous':
-      return [{ path: ['organizationUnits'], kind: 'array', entity: 'OU', id: (o) => ouFullDn(o ?? {}).toLowerCase(), title: (o) => o?.name ?? '?', summary: ['path'] }]
+      return [{ path: ['organizationUnits'], kind: 'array', entity: t('lib.structuredDiff.ou'), id: (o) => ouFullDn(o ?? {}).toLowerCase(), title: (o) => o?.name ?? '?', summary: ['path'] }]
     case 'groups':
-      return [{ path: ['groups'], kind: 'array', entity: 'Gruppe', id: (g) => String(g?.samaccountname ?? '').toLowerCase(), title: (g) => g?.name || g?.samaccountname || '?', summary: ['samaccountname', 'groupscope', 'path'] }]
+      return [{ path: ['groups'], kind: 'array', entity: t('lib.structuredDiff.group'), id: (g) => String(g?.samaccountname ?? '').toLowerCase(), title: (g) => g?.name || g?.samaccountname || '?', summary: ['samaccountname', 'groupscope', 'path'] }]
     case 'users':
-      return [{ path: ['users'], kind: 'array', entity: 'Benutzer', id: (u) => String(u?.samAccountName ?? '').toLowerCase(), title: (u) => u?.samAccountName ?? '?', summary: ['displayName', 'ouPath'] }]
+      return [{ path: ['users'], kind: 'array', entity: t('lib.structuredDiff.user'), id: (u) => String(u?.samAccountName ?? '').toLowerCase(), title: (u) => u?.samAccountName ?? '?', summary: ['displayName', 'ouPath'] }]
     case 'acls':
     case 'msa':
     case 'gmsa':
     case 'dmsa':
       return [aclCollection]
     case 'winlaps':
-      return [{ path: ['winLapsDelegations'], kind: 'array', entity: 'LAPS-Delegation', id: (w) => String(w?.ouDn ?? '').toLowerCase(), title: (w) => shortDn(w?.ouDn), summary: ['readGroup', 'resetGroup'] }]
+      return [{ path: ['winLapsDelegations'], kind: 'array', entity: t('lib.structuredDiff.lapsDelegation'), id: (w) => String(w?.ouDn ?? '').toLowerCase(), title: (w) => shortDn(w?.ouDn), summary: ['readGroup', 'resetGroup'] }]
     case 'admx':
-      return [{ path: ['admx', 'files'], kind: 'map', entity: 'Datei', id: (_f, k) => k.toLowerCase(), title: (_f, k) => k, summary: ['comment', 'hash'] }]
+      return [{ path: ['admx', 'files'], kind: 'map', entity: t('lib.structuredDiff.file'), id: (_f, k) => k.toLowerCase(), title: (_f, k) => k, summary: ['comment', 'hash'] }]
     case 'authsilos':
       return [
-        { path: ['authenticationPolicies'], kind: 'array', entity: 'Richtlinie', id: (p) => String(p?.name ?? '').toLowerCase(), title: (p) => p?.name ?? '?', summary: ['enforce', 'userTgtLifetimeMins'] },
-        { path: ['authenticationPolicySilos'], kind: 'array', entity: 'Silo', id: (p) => String(p?.name ?? '').toLowerCase(), title: (p) => p?.name ?? '?', summary: ['enforce', 'userAuthenticationPolicy'] },
-        { path: ['deviceGroupSync'], kind: 'array', entity: 'Gerätegruppe', id: (p) => String(p?.group ?? '').toLowerCase(), title: (p) => p?.group ?? '?', summary: ['sourceOUs'] },
+        { path: ['authenticationPolicies'], kind: 'array', entity: t('lib.structuredDiff.policy'), id: (p) => String(p?.name ?? '').toLowerCase(), title: (p) => p?.name ?? '?', summary: ['enforce', 'userTgtLifetimeMins'] },
+        { path: ['authenticationPolicySilos'], kind: 'array', entity: t('lib.structuredDiff.silo'), id: (p) => String(p?.name ?? '').toLowerCase(), title: (p) => p?.name ?? '?', summary: ['enforce', 'userAuthenticationPolicy'] },
+        { path: ['deviceGroupSync'], kind: 'array', entity: t('lib.structuredDiff.deviceGroup'), id: (p) => String(p?.group ?? '').toLowerCase(), title: (p) => p?.group ?? '?', summary: ['sourceOUs'] },
       ]
     case 'gpos':
-      return [{ path: ['gpos'], kind: 'map', entity: 'GPO-Ziel', id: (_g, k) => k.toLowerCase(), title: (g, k) => (isObj(g) && g.displayName) || shortDn(k) }]
+      return [{ path: ['gpos'], kind: 'map', entity: t('lib.structuredDiff.gpoTarget'), id: (_g, k) => k.toLowerCase(), title: (g, k) => (isObj(g) && g.displayName) || shortDn(k) }]
     default:
       if (sectionKey.startsWith('adml'))
-        return [{ path: ['adml', 'files'], kind: 'map', entity: 'Datei', id: (_f, k) => k.toLowerCase(), title: (_f, k) => k, summary: ['comment', 'hash'] }]
+        return [{ path: ['adml', 'files'], kind: 'map', entity: t('lib.structuredDiff.file'), id: (_f, k) => k.toLowerCase(), title: (_f, k) => k, summary: ['comment', 'hash'] }]
       return []
   }
 }
@@ -134,7 +135,7 @@ function identityKey(a: Json[], b: Json[]): string | null {
 function itemLabel(item: Json, index: number, idKey: string | null): string {
   if (idKey && isObj(item)) return String(item[idKey])
   if (isObj(item)) for (const k of ID_KEYS) if (typeof item[k] === 'string' && item[k]) return item[k]
-  return `Eintrag ${index + 1}`
+  return t('lib.structuredDiff.entryValue', { value: index + 1 })
 }
 
 export function diffValue(before: Json, after: Json, path: Seg[], out: FieldChange[]) {
@@ -216,22 +217,22 @@ function summarize(item: Json, keys: string[] | undefined): { label: string; val
 }
 
 export function formatValue(v: Json, max = 90): string {
-  if (v === null || v === undefined || v === '') return '(leer)'
-  if (typeof v === 'boolean') return v ? 'Ja' : 'Nein'
-  if (typeof v === 'number') return v.toLocaleString('de-DE')
+  if (v === null || v === undefined || v === '') return t('lib.structuredDiff.empty')
+  if (typeof v === 'boolean') return v ? t('common.yes') : t('common.no')
+  if (typeof v === 'number') return v.toLocaleString(currentLocale())
   if (Array.isArray(v)) {
-    if (!v.length) return '(keine)'
+    if (!v.length) return t('common.none')
     if (isScalarList(v)) return clip(v.map(String).join(', '), max)
-    return `${v.length} ${v.length === 1 ? 'Eintrag' : 'Einträge'}`
+    return t('lib.structuredDiff.entriesCount', { count: v.length })
   }
   if (isObj(v)) {
     const n = Object.keys(v).length
-    return `${n} ${n === 1 ? 'Feld' : 'Felder'}`
+    return t('lib.structuredDiff.fieldsCount', { count: n })
   }
   const s = String(v)
   const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
-  if (d) return `${d[3]}.${d[2]}.${d[1]}`
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s) && !Number.isNaN(Date.parse(s))) return new Date(s).toLocaleString('de-DE')
+  if (d) return currentLanguage() === 'en' ? `${d[3]}/${d[2]}/${d[1]}` : `${d[3]}.${d[2]}.${d[1]}`
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s) && !Number.isNaN(Date.parse(s))) return new Date(s).toLocaleString(currentLocale())
   return clip(s, max)
 }
 
@@ -326,7 +327,7 @@ export function diffSection(sectionKey: string, before: Json, after: Json): Sect
     const key = head.map((s) => s.key).join('/') || '__root'
     let g = byGroup.get(key)
     if (!g) {
-      g = { key: `settings:${key}`, title: head.map((s) => s.label).join(' › ') || 'Allgemein', kind: 'changed', fields: [] }
+      g = { key: `settings:${key}`, title: head.map((s) => s.label).join(' › ') || t('lib.structuredDiff.general'), kind: 'changed', fields: [] }
       byGroup.set(key, g)
     }
     g.fields.push({ ...f, path: f.path.slice(head.length) } as FieldChange)

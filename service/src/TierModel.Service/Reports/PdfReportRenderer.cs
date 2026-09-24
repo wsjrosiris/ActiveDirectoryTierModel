@@ -2,6 +2,7 @@ using MigraDoc.DocumentObjectModel;
 using MigraDoc.DocumentObjectModel.Tables;
 using MigraDoc.Rendering;
 using PdfSharp.Fonts;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Reports;
 
@@ -145,9 +146,9 @@ public static class PdfReportRenderer
         var right = row.Cells[1].AddParagraph();
         right.Style = "Small";
         right.Format.Alignment = ParagraphAlignment.Right;
-        right.AddText("Seite ");
+        right.AddText(L.T("Seite "));
         right.AddPageField();
-        right.AddText(" von ");
+        right.AddText(L.T(" von "));
         right.AddNumPagesField();
     }
 
@@ -157,7 +158,7 @@ public static class PdfReportRenderer
         bar.Format.Borders.Top.Color = Brand;
         bar.Format.Borders.Top.Width = Unit.FromPoint(4);
         bar.Format.SpaceAfter = Unit.FromMillimeter(8);
-        var brand = bar.AddFormattedText("TIERMODEL SERVICE · BERICHT");
+        var brand = bar.AddFormattedText(L.T("TIERMODEL SERVICE · BERICHT"));
         brand.Font.Color = Brand;
         brand.Font.Bold = true;
         brand.Font.Size = 8.5;
@@ -187,20 +188,20 @@ public static class PdfReportRenderer
             l.Format.Font.Color = Muted;
             row.Cells[1].AddParagraph(Breakable(value)).Format.Font.Bold = true;
         }
-        Meta(d.From is null ? "Stand" : "Zeitraum", d.From is null && d.To is { } st ? ReportBuilder.Date(st) : HtmlReportRenderer.Range(d));
-        Meta("Grundlage", d.Basis);
-        Meta("Instanz", d.Instance);
-        Meta("Erstellt von", d.GeneratedBy);
-        Meta("Erstellt am", ReportBuilder.DateTime(d.GeneratedAt));
+        Meta(d.From is null ? L.T("Stand") : L.T("Zeitraum"), d.From is null && d.To is { } st ? ReportBuilder.Date(st) : HtmlReportRenderer.Range(d));
+        Meta(L.T("Grundlage"), d.Basis);
+        Meta(L.T("Instanz"), d.Instance);
+        Meta(L.T("Erstellt von"), d.GeneratedBy);
+        Meta(L.T("Erstellt am"), ReportBuilder.DateTime(d.GeneratedAt));
 
-        var h = section.AddParagraph("Compliance-Wert", "Heading2");
+        var h = section.AddParagraph(L.T("Compliance-Wert"), "Heading2");
         h.Format.SpaceBefore = Unit.FromMillimeter(10);
-        section.AddParagraph("Aktueller Stand je Ebene (0–100)", "Intro");
+        section.AddParagraph(L.T("Aktueller Stand je Ebene (0–100)"), "Intro");
         Tiles(section, d.Scores.Select(s => (s.Label, s.Score?.ToString() ?? "–", (string?)s.Note, ReportBuilder.ScoreTone(s.Score))).ToList(), width, 20);
 
         if (d.Highlights.Count > 0)
         {
-            var h2 = section.AddParagraph("Auf einen Blick", "Heading2");
+            var h2 = section.AddParagraph(L.T("Auf einen Blick"), "Heading2");
             h2.Format.SpaceBefore = Unit.FromMillimeter(8);
             Tiles(section, d.Highlights.Select(s => (s.Label, s.Value, (string?)null, s.Tone)).ToList(), width, 16);
         }
@@ -431,7 +432,7 @@ public class ReportFontResolver : IFontResolver
         {
             if (Cache.TryGetValue(faceName, out var cached)) return cached;
             var path = PathFor(faceName) ?? (faceName == "mono" ? PathFor("sans") : null)
-                ?? throw new InvalidOperationException("Für den PDF-Bericht wurde keine Schriftart gefunden (Segoe UI, Arial, Liberation Sans oder DejaVu Sans).");
+                ?? throw new InvalidOperationException(L.T("Für den PDF-Bericht wurde keine Schriftart gefunden (Segoe UI, Arial, Liberation Sans oder DejaVu Sans)."));
             return Cache[faceName] = File.ReadAllBytes(path);
         }
     }

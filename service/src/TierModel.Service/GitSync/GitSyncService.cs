@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TierModel.Service.Config;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.GitSync;
 
@@ -146,11 +147,11 @@ public class GitSyncService(AppDbContext db, SettingsService settings, GitSyncQu
         var enabled = r.Enabled;
         if (enabled || !string.IsNullOrWhiteSpace(r.RepositoryUrl))
             if (GitRepositorySync.UrlError(r.RepositoryUrl, AllowFileUrls) is { } e) errors["repositoryUrl"] = [e];
-        if (!GitRepositorySync.IsValidBranch(r.Branch)) errors["branch"] = ["Gültigen Branch-Namen angeben, z. B. main."];
-        if (GitRepositorySync.NormalizeRepoPath(r.PathInRepo) is null) errors["pathInRepo"] = ["Relativen Ordner angeben, z. B. config (ohne .. und ohne .git)."];
-        if (!string.IsNullOrWhiteSpace(r.AuthorEmail) && !r.AuthorEmail.Contains('@')) errors["authorEmail"] = ["Gültige E-Mail-Adresse angeben."];
-        if ((r.AuthorName?.Length ?? 0) > 200) errors["authorName"] = ["Höchstens 200 Zeichen."];
-        if ((r.Username?.Length ?? 0) > 200) errors["username"] = ["Höchstens 200 Zeichen."];
+        if (!GitRepositorySync.IsValidBranch(r.Branch)) errors["branch"] = [L.T("Gültigen Branch-Namen angeben, z. B. main.")];
+        if (GitRepositorySync.NormalizeRepoPath(r.PathInRepo) is null) errors["pathInRepo"] = [L.T("Relativen Ordner angeben, z. B. config (ohne .. und ohne .git).")];
+        if (!string.IsNullOrWhiteSpace(r.AuthorEmail) && !r.AuthorEmail.Contains('@')) errors["authorEmail"] = [L.T("Gültige E-Mail-Adresse angeben.")];
+        if ((r.AuthorName?.Length ?? 0) > 200) errors["authorName"] = [L.T("Höchstens 200 Zeichen.")];
+        if ((r.Username?.Length ?? 0) > 200) errors["username"] = [L.T("Höchstens 200 Zeichen.")];
         if ((r.Password?.Length ?? 0) > 2000) errors["password"] = ["Zu lang."];
         return errors;
     }
@@ -211,7 +212,7 @@ public class GitSyncService(AppDbContext db, SettingsService settings, GitSyncQu
                 repo.Fetch();
                 if (!repo.CatchUp())
                 {
-                    st = st with { Conflict = true, ConflictSince = DateTimeOffset.UtcNow, LastError = "Konflikt: Im Repository wurde die Konfiguration außerhalb des Dienstes geändert.", LastErrorAt = DateTimeOffset.UtcNow, Ahead = repo.AheadCount() };
+                    st = st with { Conflict = true, ConflictSince = DateTimeOffset.UtcNow, LastError = L.P("Konflikt: Im Repository wurde die Konfiguration außerhalb des Dienstes geändert."), LastErrorAt = DateTimeOffset.UtcNow, Ahead = repo.AheadCount() };
                     status.SkippedWhileConflict += sections.Count;
                     await SaveStateAsync(st, ct);
                     logger.LogWarning("Git sync: conflict with remote changes in the configuration path");
@@ -221,7 +222,7 @@ public class GitSyncService(AppDbContext db, SettingsService settings, GitSyncQu
 
             if (full)
             {
-                await CommitAllAsync(repo, s, instance, takeRemote ? "Remote übernommen, aktueller Stand neu exportiert" : "Synchronisierung aller Bereiche", ct);
+                await CommitAllAsync(repo, s, instance, takeRemote ? L.P("Remote übernommen, aktueller Stand neu exportiert") : L.P("Synchronisierung aller Bereiche"), ct);
                 status.NeedsFull = false;
                 committed = sections.Count; // the full export contains them
             }
@@ -244,7 +245,7 @@ public class GitSyncService(AppDbContext db, SettingsService settings, GitSyncQu
                     st = st with { LastSyncAt = now, LastCommit = repo.LocalTip()?.Sha, LastError = null, LastErrorAt = null, Ahead = 0 };
                     break;
                 case GitPushOutcome.Conflict:
-                    st = st with { Conflict = true, ConflictSince = now, LastError = push.Error ?? "Konflikt beim Push.", LastErrorAt = now, LastCommit = repo.LocalTip()?.Sha, Ahead = repo.AheadCount() };
+                    st = st with { Conflict = true, ConflictSince = now, LastError = push.Error ?? L.P("Konflikt beim Push."), LastErrorAt = now, LastCommit = repo.LocalTip()?.Sha, Ahead = repo.AheadCount() };
                     logger.LogWarning("Git sync: push rejected, conflict: {Error}", push.Error);
                     break;
                 default:
@@ -278,7 +279,7 @@ public class GitSyncService(AppDbContext db, SettingsService settings, GitSyncQu
         versions[def.Key] = v.Version;
         var files = new List<GitFile> { new(repo.FilePath(def.FileName, root), v.Content), new(repo.VersionsPathFor(root), VersionsJson(versions)) };
         var author = await AuthorAsync(v.CreatedBy, s, v.CreatedAt, ct);
-        var message = CommitMessage(string.IsNullOrWhiteSpace(v.Comment) ? $"{def.Title}: Version {v.Version}" : v.Comment!,
+        var message = CommitMessage(string.IsNullOrWhiteSpace(v.Comment) ? L.PF("{0}: Version {1}", def.PersistedTitle, v.Version) : v.Comment!,
             [("TierModel-Section", def.Key), ("TierModel-Version", v.Version.ToString()), ("TierModel-Domain", domains.Multiple ? domain.Key : ""),
              ("TierModel-Instance", instance)]);
         repo.Commit(files, author, Committer(s), message);
@@ -392,7 +393,7 @@ public class GitSyncWorker(GitSyncQueue queue, GitSyncStatus status, IServiceSco
             while (batch.Count < 200 && queue.Reader.TryRead(out var item)) batch.Add(item);
             if (queue.TakeOverflow()) batch.Add(new GitSyncRequest(GitSyncKind.Full));
             status.Busy = true;
-            heartbeats.Busy(HeartbeatName, "Synchronisiert mit Git");
+            heartbeats.Busy(HeartbeatName, L.T("Synchronisiert mit Git"));
             try
             {
                 await using var scope = scopes.CreateAsyncScope();
@@ -434,24 +435,24 @@ public static class GitHealth
         var s = await git.GetSettingsAsync(ct);
         if (!s.Enabled) return null;
         var st = await git.GetStatusAsync(ct);
-        static string F(DateTimeOffset? t) => t is { } v ? v.ToLocalTime().ToString("dd.MM.yyyy HH:mm") : "–";
+        static string F(DateTimeOffset? t) => t is { } v ? v.ToLocalTime().ToString(L.DateTimeFormat) : "–";
         var facts = new List<HealthFactDto>
         {
             new("Repository", s.RepositoryUrl),
             new("Branch", s.Branch),
-            new("Letzte Synchronisierung", F(st.LastSyncAt)),
-            new("Letzter Commit", st.LastCommit is { Length: >= 7 } c ? c[..7] : "–"),
-            new("Ausstehend", st.Pending.ToString()),
+            new(L.T("Letzte Synchronisierung"), F(st.LastSyncAt)),
+            new(L.T("Letzter Commit"), st.LastCommit is { Length: >= 7 } c ? c[..7] : "–"),
+            new(L.T("Ausstehend"), st.Pending.ToString()),
         };
-        if (st.LastError is not null) facts.Add(new("Letzter Fehler", st.LastError));
+        if (st.LastError is not null) facts.Add(new(L.T("Letzter Fehler"), st.LastError));
         return st.State switch
         {
-            "conflict" => new HealthItemDto("git", "Git-Anbindung", HealthService.Error,
-                "Konflikt mit Änderungen im Repository – es wird nicht mehr übertragen. In den Einstellungen „Remote übernehmen“ ausführen.", facts),
-            "error" => new HealthItemDto("git", "Git-Anbindung", HealthService.Warn, $"Übertragung fehlgeschlagen, wird wiederholt: {st.LastError}", facts),
-            "never" => new HealthItemDto("git", "Git-Anbindung", HealthService.Warn, "Noch nicht synchronisiert.", facts),
-            _ => new HealthItemDto("git", "Git-Anbindung", HealthService.Ok,
-                st.Pending > 0 ? $"{st.Pending} Änderung(en) werden übertragen." : $"Synchron (zuletzt {F(st.LastSyncAt)}).", facts),
+            "conflict" => new HealthItemDto("git", L.T("Git-Anbindung"), HealthService.Error,
+                L.T("Konflikt mit Änderungen im Repository – es wird nicht mehr übertragen. In den Einstellungen „Remote übernehmen“ ausführen."), facts),
+            "error" => new HealthItemDto("git", L.T("Git-Anbindung"), HealthService.Warn, L.F("Übertragung fehlgeschlagen, wird wiederholt: {0}", st.LastError), facts),
+            "never" => new HealthItemDto("git", L.T("Git-Anbindung"), HealthService.Warn, L.T("Noch nicht synchronisiert."), facts),
+            _ => new HealthItemDto("git", L.T("Git-Anbindung"), HealthService.Ok,
+                st.Pending > 0 ? L.F("{0} Änderung(en) werden übertragen.", st.Pending) : L.F("Synchron (zuletzt {0}).", F(st.LastSyncAt)), facts),
         };
     }
 }

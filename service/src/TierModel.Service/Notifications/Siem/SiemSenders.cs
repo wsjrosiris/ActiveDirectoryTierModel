@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.DataProtection;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Notifications.Siem;
 
@@ -44,7 +45,7 @@ public class SyslogSender
                 try { await tcp.ConnectAsync(s.Host, s.Port, timeout.Token); }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 {
-                    throw new InvalidOperationException($"Keine Verbindung zu {s.Host}:{s.Port} innerhalb von {ConnectTimeout.TotalSeconds:0} Sekunden.");
+                    throw new InvalidOperationException(L.PF("Keine Verbindung zu {0}:{1} innerhalb von {2:0} Sekunden.", s.Host, s.Port, ConnectTimeout.TotalSeconds));
                 }
             }
             Stream stream = tcp.GetStream();
@@ -71,7 +72,7 @@ public class SyslogSender
         }
         catch (System.Security.Authentication.AuthenticationException ex)
         {
-            throw new InvalidOperationException($"TLS-Verbindung zu {s.Host}:{s.Port} fehlgeschlagen: {ex.GetBaseException().Message}", ex);
+            throw new InvalidOperationException(L.PF("TLS-Verbindung zu {0}:{1} fehlgeschlagen: {2}", s.Host, s.Port, ex.GetBaseException().Message), ex);
         }
     }
 }
@@ -120,7 +121,7 @@ public class LogAnalyticsSender(IHttpClientFactory httpFactory, TimeProvider clo
         if (!response.IsSuccessStatusCode || json?["access_token"]?.GetValue<string>() is not { Length: > 0 } token)
         {
             var error = json?["error_description"]?.GetValue<string>() ?? json?["error"]?.GetValue<string>() ?? Shorten(text);
-            throw new InvalidOperationException($"Anmeldung bei Entra ID (Client-Credentials) fehlgeschlagen: HTTP {(int)response.StatusCode} – {FirstLine(error)}");
+            throw new InvalidOperationException(L.PF("Anmeldung bei Entra ID (Client-Credentials) fehlgeschlagen: HTTP {0} – {1}", (int)response.StatusCode, FirstLine(error)));
         }
         var seconds = json["expires_in"] switch
         {
@@ -200,7 +201,7 @@ public class LogAnalyticsSender(IHttpClientFactory httpFactory, TimeProvider clo
                 try { response = await client.SendAsync(request, ct); }
                 catch (HttpRequestException ex)
                 {
-                    throw new InvalidOperationException($"Logs Ingestion API nicht erreichbar: {ex.GetBaseException().Message}", ex);
+                    throw new InvalidOperationException(L.PF("Logs Ingestion API nicht erreichbar: {0}", ex.GetBaseException().Message), ex);
                 }
                 using (response)
                 {
@@ -209,7 +210,7 @@ public class LogAnalyticsSender(IHttpClientFactory httpFactory, TimeProvider clo
                     if (!response.IsSuccessStatusCode)
                     {
                         var text = await response.Content.ReadAsStringAsync(ct);
-                        throw new InvalidOperationException($"Logs Ingestion API: HTTP {(int)response.StatusCode} – {Shorten(text)}");
+                        throw new InvalidOperationException(L.PF("Logs Ingestion API: HTTP {0} – {1}", (int)response.StatusCode, Shorten(text)));
                     }
                     break;
                 }
@@ -230,7 +231,7 @@ public class SiemSender(SyslogSender syslog, LogAnalyticsSender logAnalytics, ID
     public async Task SendAsync(NotificationChannel channel, IReadOnlyList<SiemEvent> events, CancellationToken ct)
     {
         var config = SiemChannelConfig.Read(channel, _secrets)
-            ?? throw new InvalidOperationException("Die Kanal-Konfiguration ist unvollständig – bitte den Kanal bearbeiten und speichern.");
+            ?? throw new InvalidOperationException(L.P("Die Kanal-Konfiguration ist unvollständig – bitte den Kanal bearbeiten und speichern."));
         switch (channel.Type)
         {
             case ChannelType.Syslog when config.Syslog is { } s:
@@ -240,7 +241,7 @@ public class SiemSender(SyslogSender syslog, LogAnalyticsSender logAnalytics, ID
                 await logAnalytics.SendAsync(l, config.ClientSecret, events, ct);
                 break;
             default:
-                throw new InvalidOperationException("Die Kanal-Konfiguration ist unvollständig – bitte den Kanal bearbeiten und speichern.");
+                throw new InvalidOperationException(L.P("Die Kanal-Konfiguration ist unvollständig – bitte den Kanal bearbeiten und speichern."));
         }
     }
 }

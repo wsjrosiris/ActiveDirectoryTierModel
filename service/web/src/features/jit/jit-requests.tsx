@@ -316,7 +316,10 @@ export function HistoryList({ items }: { items: JitRequest[] }) {
 
 function outcome(r: JitRequest): string {
   const parts: string[] = []
-  if (r.decidedBy) parts.push(`${r.status === 'Rejected' ? t('jit.jitRequests.rejected') : t('jit.jitRequests.approved')} von ${r.decidedBy}${r.decisionComment ? `: „${r.decisionComment}“` : ''}`)
+  if (r.decidedBy) {
+    const decision = r.status === 'Rejected' ? t('jit.jitRequests.decisionRejectedBy', { user: r.decidedBy }) : t('jit.jitRequests.decisionApprovedBy', { user: r.decidedBy })
+    parts.push(r.decisionComment ? t('jit.jitRequests.decisionComment', { decision, comment: r.decisionComment }) : decision)
+  }
   if (r.grantedAt) parts.push(t('jit.jitRequests.grantedAt', { at: formatDateTime(r.grantedAt) }))
   if (r.status === 'Expired' && r.expiresAt) parts.push(t('jit.jitRequests.expiredAt', { at: formatDateTime(r.expiresAt) }))
   if (r.status === 'Revoked' && r.revokedAt) parts.push(r.revokedBy ? t('jit.jitRequests.revokedAtBy', { at: formatDateTime(r.revokedAt), by: r.revokedBy }) : t('jit.jitRequests.revokedAt', { at: formatDateTime(r.revokedAt) }))

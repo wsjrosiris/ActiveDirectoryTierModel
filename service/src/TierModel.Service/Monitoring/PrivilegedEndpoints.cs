@@ -3,6 +3,7 @@ using TierModel.Service.Auth;
 using TierModel.Service.Config;
 using TierModel.Service.Data;
 using TierModel.Service.Runs;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Monitoring;
 
@@ -64,7 +65,7 @@ public static class PrivilegedEndpoints
                     var isUnexpected = unexpected.Contains((g.Sid, m.Sid));
                     var note = isUnexpected ? null
                         : PrivilegedEvaluator.IsExpected(g, m, tier0)
-                          ?? (!m.IsDirect && m.Via.Count > 0 && monitored.Contains(m.Via[^1]) ? $"Wird bei {m.Via[^1]} bewertet" : null);
+                          ?? (!m.IsDirect && m.Via.Count > 0 && monitored.Contains(m.Via[^1]) ? L.F("Wird bei {0} bewertet", m.Via[^1]) : null);
                     return new PrivilegedMemberDto(m.Sid, m.SamAccountName, m.DisplayName, m.ObjectClass, m.DistinguishedName, m.IsDirect, m.Via,
                         m.Enabled, isUnexpected, note);
                 })
@@ -80,7 +81,9 @@ public static class PrivilegedEndpoints
             var info = new SnapshotInfoDto(latest.RunId, latest.TakenAt, data.Metadata.PreferredDc, data.Metadata.Domain, evaluation.Baseline,
                 data.Groups.Count, data.MemberCount, data.Accounts.Count, data.Errors);
             return new PrivilegedOverviewDto(info, evaluation.Thresholds, groups, evaluation.Unexpected,
-                evaluation.Hygiene.OrderBy(h => SeverityRank(h.Severity)).ThenBy(h => h.Account, StringComparer.CurrentCultureIgnoreCase).ToList(),
+                // Rule titles in the request language; the details were stored in the instance default language.
+                evaluation.Hygiene.Select(h => h with { Title = PrivilegedEvaluator.RuleTitle(h.Rule) })
+                    .OrderBy(h => SeverityRank(h.Severity)).ThenBy(h => h.Account, StringComparer.CurrentCultureIgnoreCase).ToList(),
                 evaluation.AttackPaths, lastRunDto, schedules, count);
         });
 

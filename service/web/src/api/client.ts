@@ -59,7 +59,7 @@ import type {
   WindowsAuthUpdate,
 } from './types'
 import { DOMAIN_HEADER, getDomainKey, withDomain } from '@/lib/domain'
-import { t } from '@/i18n'
+import { currentLanguage, t } from '@/i18n'
 
 export class ApiError extends Error {
   readonly status: number
@@ -141,7 +141,8 @@ export interface RequestOptions {
 
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const method = (opts.method ?? 'GET').toUpperCase()
-  const headers: Record<string, string> = { Accept: 'application/json' }
+  // The service answers in the active UI language (messages, validation, on-demand reports).
+  const headers: Record<string, string> = { Accept: 'application/json', 'Accept-Language': currentLanguage() }
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
   if (opts.raw) headers['Content-Type'] = opts.raw.type || 'application/octet-stream'
   // Domain-bound data of the selected domain (roadmap 17); without the header the service uses its default domain.
@@ -210,6 +211,8 @@ const enc = encodeURIComponent
 export const api = {
   auth: {
     me: () => request<MeResponse>('/api/auth/me', { noRedirect: true }),
+    /** UI language of the current user; null = browser default. */
+    setLanguage: (language: 'de' | 'en' | null) => put<User>('/api/auth/me/language', { language }),
     login: (body: LoginRequest) => post<User>('/api/auth/login', body),
     logout: () => post<void>('/api/auth/logout'),
     changePassword: (body: ChangePasswordRequest) => post<void>('/api/auth/change-password', body),
@@ -337,7 +340,7 @@ export const api = {
     types: () => get<ReportTypeInfo[]>('/api/reports'),
     /** Document URL (iframe preview or download). from/to: yyyy-MM-dd. */
     url: (type: ReportType, p: { from?: string; to?: string; format: 'pdf' | 'html'; download?: boolean }) =>
-      withDomain(`/api/reports/${enc(type)}${qs({ from: p.from, to: p.to, format: p.format, download: p.download === undefined ? undefined : String(p.download) })}`),
+      withDomain(`/api/reports/${enc(type)}${qs({ from: p.from, to: p.to, format: p.format, download: p.download === undefined ? undefined : String(p.download), lang: currentLanguage() })}`),
     schedules: () => get<ReportSchedule[]>('/api/reports/schedules'),
     updateSchedules: (body: ReportScheduleInput[]) => put<ReportSchedule[]>('/api/reports/schedules', body),
     sendSchedule: (id: string) => post<void>(`/api/reports/schedules/${enc(id)}/send`),

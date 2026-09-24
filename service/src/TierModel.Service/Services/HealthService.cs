@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using TierModel.Service.Data;
 using TierModel.Service.Notifications;
 using TierModel.Service.Runs;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service;
 
@@ -70,16 +71,16 @@ public class HealthService(
     public async Task<HealthDetailsDto> GetAsync(CancellationToken ct)
     {
         var items = new List<HealthItemDto> { Application(), Certificate() };
-        items.Add(await Safe("database", "Datenbank", () => DatabaseAsync(ct)));
-        items.Add(await Safe("queue", "Warteschlange", () => QueueAsync(ct)));
-        items.Add(await Safe("lastRuns", "Letzte erfolgreiche Läufe", () => LastRunsAsync(ct)));
-        if (domains.Multiple) items.Add(await Safe("domains", "Domänen", () => DomainsAsync(ct)));
+        items.Add(await Safe("database", L.T("Datenbank"), () => DatabaseAsync(ct)));
+        items.Add(await Safe("queue", L.T("Warteschlange"), () => QueueAsync(ct)));
+        items.Add(await Safe("lastRuns", L.T("Letzte erfolgreiche Läufe"), () => LastRunsAsync(ct)));
+        if (domains.Multiple) items.Add(await Safe("domains", L.T("Domänen"), () => DomainsAsync(ct)));
         items.Add(WorkPath());
         items.Add(await PowerShellAsync(ct));
         items.Add(Framework());
         items.Add(Workers());
         items.Add(DataProtection());
-        items.Add(await Safe("changelog", "Änderungsprotokoll", () => ChangeLogChainAsync(ct)));
+        items.Add(await Safe("changelog", L.T("Änderungsprotokoll"), () => ChangeLogChainAsync(ct)));
         if (git is not null && await GitSync.GitHealth.CheckAsync(git, ct) is { } gitItem) items.Add(gitItem);
         var overall = items.Any(i => i.Status == Error) ? Error : items.Any(i => i.Status == Warn) ? Warn : Ok;
         return new HealthDetailsDto(overall, DateTimeOffset.UtcNow, AppVersion, items);
@@ -91,16 +92,16 @@ public class HealthService(
         var r = await ChangeLogChain.VerifyCachedAsync(db, ct: ct);
         var facts = new List<HealthFactDto>
         {
-            new("Einträge geprüft", r.Count.ToString("N0", De)),
-            new("Letzter Eintrag", r.LastId is { } id ? $"#{id}" : "–"),
-            new("Ketten-Ende (SHA-256)", r.LastHash ?? "–"),
-            new("Geprüft", Format(r.CheckedAt)),
+            new(L.T("Einträge geprüft"), r.Count.ToString("N0", De)),
+            new(L.T("Letzter Eintrag"), r.LastId is { } id ? $"#{id}" : "–"),
+            new(L.T("Ketten-Ende (SHA-256)"), r.LastHash ?? "–"),
+            new(L.T("Geprüft"), Format(r.CheckedAt)),
         };
         if (r.Ok)
-            return new HealthItemDto("changelog", "Änderungsprotokoll", Ok,
-                $"Hash-Kette vollständig ({r.Count:N0} Einträge). Das Ketten-Ende regelmäßig notieren: damit fällt auch ein Austausch der ganzen Tabelle auf.", facts);
-        facts.Insert(0, new("Unterbrochen bei", $"#{r.BrokenAtId}"));
-        return new HealthItemDto("changelog", "Änderungsprotokoll", Error, $"Hash-Kette unterbrochen bei Eintrag #{r.BrokenAtId}: {r.Problem}.", facts);
+            return new HealthItemDto("changelog", L.T("Änderungsprotokoll"), Ok,
+                L.F("Hash-Kette vollständig ({0:N0} Einträge). Das Ketten-Ende regelmäßig notieren: damit fällt auch ein Austausch der ganzen Tabelle auf.", r.Count), facts);
+        facts.Insert(0, new(L.T("Unterbrochen bei"), $"#{r.BrokenAtId}"));
+        return new HealthItemDto("changelog", L.T("Änderungsprotokoll"), Error, L.F("Hash-Kette unterbrochen bei Eintrag #{0}: {1}.", r.BrokenAtId, r.Problem), facts);
     }
 
     private async Task<HealthItemDto> Safe(string key, string title, Func<Task<HealthItemDto>> check)
@@ -112,28 +113,28 @@ public class HealthService(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Health check {Key} failed", key);
-            return new HealthItemDto(key, title, Error, $"Prüfung fehlgeschlagen: {ex.GetBaseException().Message}", []);
+            return new HealthItemDto(key, title, Error, L.F("Prüfung fehlgeschlagen: {0}", ex.GetBaseException().Message), []);
         }
     }
 
     private static HealthItemDto Application()
     {
         var uptime = DateTimeOffset.UtcNow - ProcessStarted;
-        return new HealthItemDto("app", "Anwendung", Ok, $"TierModel Service {AppVersion} läuft seit {FormatDuration(uptime)}.",
+        return new HealthItemDto("app", L.T("Anwendung"), Ok, L.F("TierModel Service {0} läuft seit {1}.", AppVersion, FormatDuration(uptime)),
         [
-            new("Version", AppVersion),
-            new("Gestartet", Format(ProcessStarted)),
-            new("Laufzeit", FormatDuration(uptime)),
+            new(L.T("Version"), AppVersion),
+            new(L.T("Gestartet"), Format(ProcessStarted)),
+            new(L.T("Laufzeit"), FormatDuration(uptime)),
             new(".NET", Environment.Version.ToString()),
-            new("Betriebssystem", System.Runtime.InteropServices.RuntimeInformation.OSDescription),
-            new("Rechner", Environment.MachineName),
+            new(L.T("Betriebssystem"), System.Runtime.InteropServices.RuntimeInformation.OSDescription),
+            new(L.T("Rechner"), Environment.MachineName),
         ]);
     }
 
     /// <summary>The configured HTTPS certificate: loaded by thumbprint, or a certificate file from the Kestrel section.</summary>
     public (X509Certificate2? Certificate, string Source) ResolveCertificate()
     {
-        if (certificateSource.Certificate is { } loaded) return (loaded, certificateSource.Description);
+        if (certificateSource.Certificate is { } loaded) return (loaded, L.T(certificateSource.Description));
         var paths = new List<(string Path, string? Password)>();
         var kestrel = configuration.GetSection("Kestrel");
         void AddFrom(IConfigurationSection c)
@@ -150,14 +151,14 @@ public class HealthService(
                 var cert = Path.GetExtension(full).ToLowerInvariant() is ".pfx" or ".p12"
                     ? X509CertificateLoader.LoadPkcs12FromFile(full, password)
                     : X509CertificateLoader.LoadCertificateFromFile(full);
-                return (cert, $"Datei {full}");
+                return (cert, L.F("Datei {0}", full));
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Certificate file {Path} could not be read", path);
             }
         }
-        return (null, certificateSource.Description);
+        return (null, L.T(certificateSource.Description));
     }
 
     private bool UsesHttps() =>
@@ -166,33 +167,33 @@ public class HealthService(
 
     private HealthItemDto Certificate()
     {
-        const string title = "HTTPS-Zertifikat";
+        var title = L.T("HTTPS-Zertifikat");
         var (cert, source) = ResolveCertificate();
         if (cert is null)
         {
             return UsesHttps()
                 ? new HealthItemDto("certificate", title, Warn,
-                    "Kein Zertifikat hinterlegt – Kestrel verwendet ein Standard- bzw. Entwicklungszertifikat. Fingerabdruck in appsettings.json eintragen (TierModel:CertificateThumbprint).",
-                    [new("Quelle", source)])
+                    L.T("Kein Zertifikat hinterlegt – Kestrel verwendet ein Standard- bzw. Entwicklungszertifikat. Fingerabdruck in appsettings.json eintragen (TierModel:CertificateThumbprint)."),
+                    [new(L.T("Quelle"), source)])
                 : new HealthItemDto("certificate", title, Warn,
-                    "Der Dienst ist nur über HTTP erreichbar (Entwicklung). Für den Betrieb ein HTTPS-Zertifikat einrichten.",
-                    [new("Quelle", source)]);
+                    L.T("Der Dienst ist nur über HTTP erreichbar (Entwicklung). Für den Betrieb ein HTTPS-Zertifikat einrichten."),
+                    [new(L.T("Quelle"), source)]);
         }
         var notAfter = new DateTimeOffset(cert.NotAfter.ToUniversalTime());
         var days = (int)Math.Floor((notAfter - DateTimeOffset.UtcNow).TotalDays);
         var status = days < 0 ? Error : days < CertificateWarnDays ? Warn : Ok;
-        var message = days < 0 ? $"Das Zertifikat ist seit {Format(notAfter)} abgelaufen."
-            : days < CertificateWarnDays ? $"Das Zertifikat läuft in {days} Tag(en) ab ({Format(notAfter)}). Bitte rechtzeitig erneuern."
-            : $"Gültig bis {Format(notAfter)} (noch {days} Tage).";
+        var message = days < 0 ? L.F("Das Zertifikat ist seit {0} abgelaufen.", Format(notAfter))
+            : days < CertificateWarnDays ? L.F("Das Zertifikat läuft in {0} Tag(en) ab ({1}). Bitte rechtzeitig erneuern.", days, Format(notAfter))
+            : L.F("Gültig bis {0} (noch {1} Tage).", Format(notAfter), days);
         return new HealthItemDto("certificate", title, status, message,
         [
-            new("Antragsteller", cert.Subject),
-            new("Aussteller", cert.Issuer),
-            new("Fingerabdruck", cert.Thumbprint),
-            new("Gültig ab", Format(new DateTimeOffset(cert.NotBefore.ToUniversalTime()))),
-            new("Gültig bis", Format(notAfter)),
-            new("Verbleibende Tage", days.ToString()),
-            new("Quelle", source),
+            new(L.T("Antragsteller"), cert.Subject),
+            new(L.T("Aussteller"), cert.Issuer),
+            new(L.T("Fingerabdruck"), cert.Thumbprint),
+            new(L.T("Gültig ab"), Format(new DateTimeOffset(cert.NotBefore.ToUniversalTime()))),
+            new(L.T("Gültig bis"), Format(notAfter)),
+            new(L.T("Verbleibende Tage"), days.ToString()),
+            new(L.T("Quelle"), source),
         ]);
     }
 
@@ -216,16 +217,16 @@ public class HealthService(
         var pending = (await db.Database.GetPendingMigrationsAsync(ct)).ToList();
         var status = pending.Count > 0 ? Warn : Ok;
         var message = pending.Count > 0
-            ? $"{pending.Count} Migration(en) ausstehend – Dienst neu starten, damit sie angewendet werden."
-            : $"PostgreSQL {version.Split(' ')[0]}, {FormatBytes(size)}, alle Migrationen angewendet.";
-        return new HealthItemDto("database", "Datenbank", status, message,
+            ? L.F("{0} Migration(en) ausstehend – Dienst neu starten, damit sie angewendet werden.", pending.Count)
+            : L.F("PostgreSQL {0}, {1}, alle Migrationen angewendet.", version.Split(' ')[0], FormatBytes(size));
+        return new HealthItemDto("database", L.T("Datenbank"), status, message,
         [
-            new("Server-Version", version),
-            new("Datenbank", name),
-            new("Größe", FormatBytes(size)),
-            new("Angewendete Migrationen", applied.Count.ToString()),
-            new("Ausstehende Migrationen", pending.Count.ToString()),
-            new("Letzte Migration", applied.LastOrDefault() ?? "–"),
+            new(L.T("Server-Version"), version),
+            new(L.T("Datenbank"), name),
+            new(L.T("Größe"), FormatBytes(size)),
+            new(L.T("Angewendete Migrationen"), applied.Count.ToString()),
+            new(L.T("Ausstehende Migrationen"), pending.Count.ToString()),
+            new(L.T("Letzte Migration"), applied.LastOrDefault() ?? "–"),
         ]);
     }
 
@@ -239,15 +240,15 @@ public class HealthService(
         // Runs execute one at a time, so a waiting run is normal while another is running.
         var status = age is { } a && running == 0 && a > TimeSpan.FromMinutes(5) ? Error
             : age is { } b && b > TimeSpan.FromHours(4) ? Warn : Ok;
-        var message = status == Error ? $"Ein Lauf wartet seit {FormatDuration(age!.Value)}, aber keiner wird ausgeführt – Worker prüfen."
-            : status == Warn ? $"Der älteste Lauf wartet seit {FormatDuration(age!.Value)}."
-            : queued + running == 0 ? "Keine Läufe in der Warteschlange." : $"{running} laufend, {queued} wartend.";
-        return new HealthItemDto("queue", "Warteschlange", status, message,
+        var message = status == Error ? L.F("Ein Lauf wartet seit {0}, aber keiner wird ausgeführt – Worker prüfen.", FormatDuration(age!.Value))
+            : status == Warn ? L.F("Der älteste Lauf wartet seit {0}.", FormatDuration(age!.Value))
+            : queued + running == 0 ? L.T("Keine Läufe in der Warteschlange.") : L.F("{0} laufend, {1} wartend.", running, queued);
+        return new HealthItemDto("queue", L.T("Warteschlange"), status, message,
         [
-            new("Laufend", running.ToString()),
-            new("Wartend", queued.ToString()),
-            new("Warten auf Freigabe", awaiting.ToString()),
-            new("Ältester wartender Lauf", age is null ? "–" : $"seit {FormatDuration(age.Value)}"),
+            new(L.T("Laufend"), running.ToString()),
+            new(L.T("Wartend"), queued.ToString()),
+            new(L.T("Warten auf Freigabe"), awaiting.ToString()),
+            new(L.T("Ältester wartender Lauf"), age is null ? "–" : L.F("seit {0}", FormatDuration(age.Value))),
         ]);
     }
 
@@ -260,18 +261,18 @@ public class HealthService(
         {
             if (!d.Enabled)
             {
-                facts.Add(new(d.DisplayName, "deaktiviert"));
+                facts.Add(new(d.DisplayName, L.T("deaktiviert")));
                 continue;
             }
             var id = d.Id;
             var audit = await db.Runs.Where(r => r.DomainId == id && r.Kind == RunKind.Audit && r.Status == RunStatus.Succeeded).OrderByDescending(r => r.Id)
                 .Select(r => r.FinishedAt).FirstOrDefaultAsync(ct);
             if (audit is null || DateTimeOffset.UtcNow - audit > TimeSpan.FromDays(7)) stale++;
-            facts.Add(new(d.DisplayName, $"{(d.PreferredDc.Length == 0 ? "kein DC" : d.PreferredDc)} · letztes Audit {(audit is { } a ? Format(a) : "noch keins")}"));
+            facts.Add(new(d.DisplayName, L.F("{0} · letztes Audit {1}", (d.PreferredDc.Length == 0 ? L.T("kein DC") : d.PreferredDc), (audit is { } a ? Format(a) : L.T("noch keins")))));
         }
         var enabled = domains.All.Count(d => d.Enabled);
-        return new HealthItemDto("domains", "Domänen", stale > 0 ? Warn : Ok,
-            stale > 0 ? $"{stale} von {enabled} aktiven Domänen ohne erfolgreiches Audit in den letzten 7 Tagen." : $"{enabled} aktive Domänen, alle mit aktuellem Audit.",
+        return new HealthItemDto("domains", L.T("Domänen"), stale > 0 ? Warn : Ok,
+            stale > 0 ? L.F("{0} von {1} aktiven Domänen ohne erfolgreiches Audit in den letzten 7 Tagen.", stale, enabled) : L.F("{0} aktive Domänen, alle mit aktuellem Audit.", enabled),
             facts);
     }
 
@@ -289,18 +290,18 @@ public class HealthService(
         var failed24h = await db.Runs.CountAsync(r => r.Status == RunStatus.Failed && r.FinishedAt >= since, ct);
         var auditAge = audit?.FinishedAt is { } at ? DateTimeOffset.UtcNow - at : (TimeSpan?)null;
         var status = audit is null || auditAge > TimeSpan.FromDays(7) || failed24h > 0 ? Warn : Ok;
-        var message = audit is null ? "Noch kein erfolgreiches Audit – Abweichungen vom Soll-Zustand werden nicht erkannt."
-            : auditAge > TimeSpan.FromDays(7) ? $"Das letzte erfolgreiche Audit liegt {FormatDuration(auditAge!.Value)} zurück. Einen Zeitplan einrichten."
-            : failed24h > 0 ? (failed24h == 1 ? "1 fehlgeschlagener Lauf" : $"{failed24h} fehlgeschlagene Läufe") + " in den letzten 24 Stunden."
-            : $"Letztes erfolgreiches Audit vor {FormatDuration(auditAge!.Value)}.";
-        string Describe(long? id, DateTimeOffset? at) => id is null ? "noch keiner" : $"#{id} · {(at is { } t ? Format(t) : "–")}";
-        return new HealthItemDto("lastRuns", "Letzte erfolgreiche Läufe", status, message,
+        var message = audit is null ? L.T("Noch kein erfolgreiches Audit – Abweichungen vom Soll-Zustand werden nicht erkannt.")
+            : auditAge > TimeSpan.FromDays(7) ? L.F("Das letzte erfolgreiche Audit liegt {0} zurück. Einen Zeitplan einrichten.", FormatDuration(auditAge!.Value))
+            : failed24h > 0 ? (failed24h == 1 ? L.T("1 fehlgeschlagener Lauf") : L.F("{0} fehlgeschlagene Läufe", failed24h)) + L.T(" in den letzten 24 Stunden.")
+            : L.F("Letztes erfolgreiches Audit vor {0}.", FormatDuration(auditAge!.Value));
+        string Describe(long? id, DateTimeOffset? at) => id is null ? L.T("noch keiner") : $"#{id} · {(at is { } t ? Format(t) : "–")}";
+        return new HealthItemDto("lastRuns", L.T("Letzte erfolgreiche Läufe"), status, message,
         [
             new("Audit", Describe(audit?.Id, audit?.FinishedAt)),
-            new("Deploy (Planung)", Describe(plan?.Id, plan?.FinishedAt)),
-            new("Deploy (Anwenden)", Describe(apply?.Id, apply?.FinishedAt)),
-            new("Überwachung", Describe(monitor?.Id, monitor?.FinishedAt)),
-            new("Fehlgeschlagen (24 Std.)", failed24h.ToString()),
+            new(L.T("Deploy (Planung)"), Describe(plan?.Id, plan?.FinishedAt)),
+            new(L.T("Deploy (Anwenden)"), Describe(apply?.Id, apply?.FinishedAt)),
+            new(L.T("Überwachung"), Describe(monitor?.Id, monitor?.FinishedAt)),
+            new(L.T("Fehlgeschlagen (24 Std.)"), failed24h.ToString()),
         ]);
     }
 
@@ -308,7 +309,7 @@ public class HealthService(
     {
         var path = options.Value.WorkPath;
         if (!Directory.Exists(path))
-            return new HealthItemDto("workPath", "Arbeitsverzeichnis", Error, "Das Arbeitsverzeichnis existiert nicht.", [new("Pfad", path)]);
+            return new HealthItemDto("workPath", L.T("Arbeitsverzeichnis"), Error, L.T("Das Arbeitsverzeichnis existiert nicht."), [new(L.T("Pfad"), path)]);
         try
         {
             var drive = new DriveInfo(Path.GetFullPath(path));
@@ -317,20 +318,20 @@ public class HealthService(
             var total = drive.TotalSize;
             var pct = total > 0 ? free * 100.0 / total : 100;
             var status = free < 1L << 30 ? Error : free < 5L << 30 || pct < 10 ? Warn : Ok;
-            var message = status == Ok ? $"{FormatBytes(free)} frei ({pct.ToString("0", De)} %)."
-                : $"Nur noch {FormatBytes(free)} frei ({pct.ToString("0", De)} %) – Aufbewahrungsdauer verkürzen oder Platz schaffen.";
+            var message = status == Ok ? L.F("{0} frei ({1} %).", FormatBytes(free), pct.ToString("0", De))
+                : L.F("Nur noch {0} frei ({1} %) – Aufbewahrungsdauer verkürzen oder Platz schaffen.", FormatBytes(free), pct.ToString("0", De));
             var runs = Workspace.RunsRoot(options.Value);
-            return new HealthItemDto("workPath", "Arbeitsverzeichnis", status, message,
+            return new HealthItemDto("workPath", L.T("Arbeitsverzeichnis"), status, message,
             [
-                new("Pfad", path),
-                new("Frei", FormatBytes(free)),
-                new("Gesamt", FormatBytes(total)),
-                new("Laufordner", Directory.Exists(runs) ? Directory.EnumerateDirectories(runs).Count().ToString() : "0"),
+                new(L.T("Pfad"), path),
+                new(L.T("Frei"), FormatBytes(free)),
+                new(L.T("Gesamt"), FormatBytes(total)),
+                new(L.T("Laufordner"), Directory.Exists(runs) ? Directory.EnumerateDirectories(runs).Count().ToString() : "0"),
             ]);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            return new HealthItemDto("workPath", "Arbeitsverzeichnis", Warn, $"Freier Speicherplatz konnte nicht ermittelt werden: {ex.Message}", [new("Pfad", path)]);
+            return new HealthItemDto("workPath", L.T("Arbeitsverzeichnis"), Warn, L.F("Freier Speicherplatz konnte nicht ermittelt werden: {0}", ex.Message), [new(L.T("Pfad"), path)]);
         }
     }
 
@@ -339,11 +340,11 @@ public class HealthService(
         var pwsh = options.Value.PwshPath;
         var (version, error) = await PwshVersionAsync(pwsh, ct);
         if (version is null)
-            return new HealthItemDto("pwsh", "PowerShell", Error, $"PowerShell konnte nicht gestartet werden: {error}", [new("Pfad", pwsh)]);
+            return new HealthItemDto("pwsh", "PowerShell", Error, L.F("PowerShell konnte nicht gestartet werden: {0}", error), [new(L.T("Pfad"), pwsh)]);
         var major = int.TryParse(version.Split('.')[0], out var m) ? m : 0;
         return new HealthItemDto("pwsh", "PowerShell", major >= 7 ? Ok : Warn,
-            major >= 7 ? $"PowerShell {version} ist einsatzbereit." : $"PowerShell {version} ist zu alt – benötigt wird Version 7 oder neuer.",
-            [new("Pfad", pwsh), new("Version", version)]);
+            major >= 7 ? L.F("PowerShell {0} ist einsatzbereit.", version) : L.F("PowerShell {0} ist zu alt – benötigt wird Version 7 oder neuer.", version),
+            [new(L.T("Pfad"), pwsh), new(L.T("Version"), version)]);
     }
 
     /// <summary>Runs pwsh once to read its version; cached for ten minutes (starting pwsh takes a moment).</summary>
@@ -365,7 +366,7 @@ public class HealthService(
                 foreach (var a in new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "$PSVersionTable.PSVersion.ToString()" }) psi.ArgumentList.Add(a);
                 psi.Environment["POWERSHELL_TELEMETRY_OPTOUT"] = "1";
                 psi.Environment["POWERSHELL_UPDATECHECK"] = "Off";
-                using var p = Process.Start(psi) ?? throw new InvalidOperationException("Prozess wurde nicht gestartet.");
+                using var p = Process.Start(psi) ?? throw new InvalidOperationException(L.T("Prozess wurde nicht gestartet."));
                 p.StandardInput.Close();
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 timeout.CancelAfter(TimeSpan.FromSeconds(15));
@@ -377,10 +378,10 @@ public class HealthService(
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 {
                     try { p.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
-                    throw new TimeoutException("Keine Antwort innerhalb von 15 Sekunden.");
+                    throw new TimeoutException(L.T("Keine Antwort innerhalb von 15 Sekunden."));
                 }
                 var text = (await output).Trim().Split('\n').Select(l => l.Trim()).LastOrDefault(l => l.Length > 0);
-                if (p.ExitCode != 0 || text is null || !char.IsDigit(text[0])) error = $"Unerwartete Ausgabe (Exit-Code {p.ExitCode}): {text ?? "leer"}";
+                if (p.ExitCode != 0 || text is null || !char.IsDigit(text[0])) error = L.F("Unerwartete Ausgabe (Exit-Code {0}): {1}", p.ExitCode, text ?? L.T("leer"));
                 else version = text;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -402,22 +403,22 @@ public class HealthService(
         var files = new[] { "Deploy-TierModel.ps1", "Audit-TierModel.ps1" };
         var missing = files.Where(f => !File.Exists(Path.Combine(path, f))).ToList();
         if (!Directory.Exists(Path.Combine(path, "modules"))) missing.Add("modules\\");
-        var facts = new List<HealthFactDto> { new("Pfad", path) };
+        var facts = new List<HealthFactDto> { new(L.T("Pfad"), path) };
         var deploy = Path.Combine(path, "Deploy-TierModel.ps1");
-        if (File.Exists(deploy)) facts.Add(new("Deploy-TierModel.ps1 geändert", Format(new DateTimeOffset(File.GetLastWriteTimeUtc(deploy), TimeSpan.Zero))));
+        if (File.Exists(deploy)) facts.Add(new(L.T("Deploy-TierModel.ps1 geändert"), Format(new DateTimeOffset(File.GetLastWriteTimeUtc(deploy), TimeSpan.Zero))));
         return missing.Count == 0
-            ? new HealthItemDto("framework", "Framework", Ok, "Deploy- und Audit-Skripte sind vorhanden.", facts)
-            : new HealthItemDto("framework", "Framework", Error, $"Im Framework-Pfad fehlt: {string.Join(", ", missing)}.", facts);
+            ? new HealthItemDto("framework", "Framework", Ok, L.T("Deploy- und Audit-Skripte sind vorhanden."), facts)
+            : new HealthItemDto("framework", "Framework", Error, L.F("Im Framework-Pfad fehlt: {0}.", string.Join(", ", missing)), facts);
     }
 
     private HealthItemDto Workers()
     {
         var workers = new (string Name, string Title)[]
         {
-            (RunWorker.HeartbeatName, "Ausführung von Läufen"),
-            (ScheduleWorker.HeartbeatName, "Zeitpläne und Aufräumen"),
-            (NotificationWorker.HeartbeatName, "Benachrichtigungen"),
-            (Jit.JitWorker.HeartbeatName, "Befristeter Zugriff (Ablauf)"),
+            (RunWorker.HeartbeatName, L.T("Ausführung von Läufen")),
+            (ScheduleWorker.HeartbeatName, L.T("Zeitpläne und Aufräumen")),
+            (NotificationWorker.HeartbeatName, L.T("Benachrichtigungen")),
+            (Jit.JitWorker.HeartbeatName, L.T("Befristeter Zugriff (Ablauf)")),
         };
         var facts = new List<HealthFactDto>();
         var worst = Ok;
@@ -430,20 +431,20 @@ public class HealthService(
             if (e is null)
             {
                 status = Warn;
-                state = "noch keine Rückmeldung";
+                state = L.T("noch keine Rückmeldung");
             }
             else
             {
                 var age = DateTimeOffset.UtcNow - e.LastBeat;
                 status = e.Activity is not null ? Ok : age > e.Interval * 10 ? Error : age > e.Interval * 3 ? Warn : Ok;
-                state = e.Activity ?? (status == Ok ? $"aktiv (vor {FormatDuration(age)})" : $"keine Rückmeldung seit {FormatDuration(age)}");
+                state = e.Activity ?? (status == Ok ? L.F("aktiv (vor {0})", FormatDuration(age)) : L.F("keine Rückmeldung seit {0}", FormatDuration(age)));
             }
             if (status != Ok) problems.Add(title);
             if (status == Error || (status == Warn && worst == Ok)) worst = status;
             facts.Add(new(title, state));
         }
-        return new HealthItemDto("workers", "Hintergrunddienste", worst,
-            problems.Count == 0 ? "Alle Hintergrunddienste arbeiten." : $"Auffällig: {string.Join(", ", problems)}.", facts);
+        return new HealthItemDto("workers", L.T("Hintergrunddienste"), worst,
+            problems.Count == 0 ? L.T("Alle Hintergrunddienste arbeiten.") : L.F("Auffällig: {0}.", string.Join(", ", problems)), facts);
     }
 
     private HealthItemDto DataProtection()
@@ -451,11 +452,11 @@ public class HealthService(
         var path = Path.Combine(options.Value.WorkPath, "keys");
         var keys = Directory.Exists(path) ? Directory.EnumerateFiles(path, "key-*.xml").Count() : 0;
         return keys > 0
-            ? new HealthItemDto("dataProtection", "Schlüssel für Anmeldung und Geheimnisse", Ok,
-                $"{keys} Schlüssel vorhanden{(OperatingSystem.IsWindows() ? ", mit DPAPI geschützt" : "")}. Beim Umzug mitsichern, sonst sind gespeicherte Geheimnisse unlesbar.",
-                [new("Pfad", path), new("Schlüssel", keys.ToString())])
-            : new HealthItemDto("dataProtection", "Schlüssel für Anmeldung und Geheimnisse", Warn,
-                "Es wurden noch keine Schlüssel gespeichert – Anmeldungen überstehen keinen Neustart.", [new("Pfad", path)]);
+            ? new HealthItemDto("dataProtection", L.T("Schlüssel für Anmeldung und Geheimnisse"), Ok,
+                L.F("{0} Schlüssel vorhanden{1}. Beim Umzug mitsichern, sonst sind gespeicherte Geheimnisse unlesbar.", keys, (OperatingSystem.IsWindows() ? L.T(", mit DPAPI geschützt") : "")),
+                [new(L.T("Pfad"), path), new(L.T("Schlüssel"), keys.ToString())])
+            : new HealthItemDto("dataProtection", L.T("Schlüssel für Anmeldung und Geheimnisse"), Warn,
+                L.T("Es wurden noch keine Schlüssel gespeichert – Anmeldungen überstehen keinen Neustart."), [new(L.T("Pfad"), path)]);
     }
 
     /// <summary>Daily: warns via notification channels when the HTTPS certificate expires within 30 days (at most once a day).</summary>
@@ -474,12 +475,12 @@ public class HealthService(
         logger.LogWarning("HTTPS certificate {Thumbprint} expires in {Days} day(s)", cert.Thumbprint, days);
     }
 
-    private static string Format(DateTimeOffset t) => t.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
+    private static string Format(DateTimeOffset t) => t.ToLocalTime().ToString(L.DateTimeFormat);
 
     public static string FormatDuration(TimeSpan t) => t.TotalMinutes < 1 ? $"{Math.Max(0, (int)t.TotalSeconds)} s"
         : t.TotalHours < 1 ? $"{(int)t.TotalMinutes} min"
-        : t.TotalDays < 1 ? $"{(int)t.TotalHours} Std. {t.Minutes} min"
-        : $"{(int)t.TotalDays} Tag(en) {t.Hours} Std.";
+        : t.TotalDays < 1 ? L.F("{0} Std. {1} min", (int)t.TotalHours, t.Minutes)
+        : L.F("{0} Tag(en) {1} Std.", (int)t.TotalDays, t.Hours);
 
     public static string FormatBytes(long bytes) => bytes switch
     {

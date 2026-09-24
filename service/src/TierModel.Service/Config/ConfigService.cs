@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Config;
 
@@ -79,9 +80,9 @@ public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions
             db.ConfigVersions.Add(new ConfigVersion
             {
                 DomainId = domainId, SectionKey = def.Key, Version = 1, Content = content, Sha256 = Hash(content),
-                CreatedBy = "system", CreatedAt = now, Comment = $"Import aus {def.FileName}",
+                CreatedBy = "system", CreatedAt = now, Comment = L.PF("Import aus {0}", def.FileName),
             });
-            changeLog.Add("system", "config.import", "config", def.Key, $"{def.Title}: aus {def.FileName} importiert", domainId: domainId);
+            changeLog.Add("system", "config.import", "config", def.Key, L.PF("{0}: aus {1} importiert", def.PersistedTitle, def.FileName), domainId: domainId);
             logger.LogInformation("Imported config section {Key} from {File} for domain {Domain}", def.Key, file, domainId);
         }
         await db.SaveChangesAsync(ct);
@@ -137,7 +138,7 @@ public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions
     {
         var def = ConfigCatalog.Find(key) ?? throw new KeyNotFoundException(key);
         if (content is not JsonObject)
-            throw new ArgumentException("Der Inhalt muss ein JSON-Objekt sein.");
+            throw new ArgumentException(L.T("Der Inhalt muss ein JSON-Objekt sein."));
 
         var id = DomainId;
         await using var tx = await db.Database.BeginTransactionAsync(ct);
@@ -169,7 +170,7 @@ public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions
         section.UpdatedAt = now;
         section.UpdatedBy = user;
         changeLog.Add(user, action, "config", def.Key,
-            $"{def.Title}: Version {baseVersion} → {newVersion}" + (string.IsNullOrWhiteSpace(comment) ? "" : $" ({comment.Trim()})"),
+            L.PF("{0}: Version {1} → {2}", def.PersistedTitle, baseVersion, newVersion) + (string.IsNullOrWhiteSpace(comment) ? "" : $" ({comment.Trim()})"),
             new { section = def.Key, fromVersion = baseVersion, toVersion = newVersion, comment });
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
@@ -183,7 +184,7 @@ public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions
     {
         var def = ConfigCatalog.Find(key) ?? throw new KeyNotFoundException(key);
         if (content is not JsonObject)
-            throw new ArgumentException("Der Inhalt muss ein JSON-Objekt sein.");
+            throw new ArgumentException(L.T("Der Inhalt muss ein JSON-Objekt sein."));
         var id = DomainId;
         if (await db.ConfigSections.AnyAsync(s => s.DomainId == id && s.Key == def.Key, ct))
             throw new ConfigConflictException(await db.ConfigSections.Where(s => s.DomainId == id && s.Key == def.Key).Select(s => s.CurrentVersion).FirstAsync(ct));
@@ -196,7 +197,7 @@ public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions
             CreatedBy = user, CreatedAt = now, Comment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim(),
         });
         changeLog.Add(user, action, "config", def.Key,
-            $"{def.Title}: Version 1 angelegt" + (string.IsNullOrWhiteSpace(comment) ? "" : $" ({comment.Trim()})"),
+            L.PF("{0}: Version 1 angelegt", def.PersistedTitle) + (string.IsNullOrWhiteSpace(comment) ? "" : $" ({comment.Trim()})"),
             new { section = def.Key, fromVersion = 0, toVersion = 1, comment });
         try
         {
@@ -242,7 +243,7 @@ public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions
             }
             var id = DomainId;
             var v = await db.ConfigVersions.AsNoTracking().FirstOrDefaultAsync(x => x.DomainId == id && x.SectionKey == def.Key && x.Version == wanted, ct)
-                ?? throw new InvalidOperationException($"Festgeschriebene Version {wanted} von '{def.Key}' existiert nicht mehr.");
+                ?? throw new InvalidOperationException(L.PF("Festgeschriebene Version {0} von '{1}' existiert nicht mehr.", wanted, def.Key));
             result.Add((def, wanted, v.Content));
         }
         return result;

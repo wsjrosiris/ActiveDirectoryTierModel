@@ -5,6 +5,7 @@ using TierModel.Service.Data;
 using TierModel.Service.Endpoints;
 using TierModel.Service.Monitoring;
 using TierModel.Service.Runs;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Notifications.Siem;
 
@@ -147,12 +148,12 @@ public static class SiemEvents
         var (id, name, severity, message) = e switch
         {
             NotificationEvent.Drift => (Drift, "Audit drift detected", 5,
-                $"Audit #{run.Id}: {run.DriftCount} Abweichung(en) zwischen Soll-Konfiguration und Active Directory"),
-            NotificationEvent.Failure => (RunFailed, "Run failed", 6, $"{RunService.RunTitle(run)} #{run.Id} fehlgeschlagen: {run.Message}"),
+                L.PF("Audit #{0}: {1} Abweichung(en) zwischen Soll-Konfiguration und Active Directory", run.Id, run.DriftCount)),
+            NotificationEvent.Failure => (RunFailed, "Run failed", 6, L.PF("{0} #{1} fehlgeschlagen: {2}", RunService.RunTitle(run, persisted: true), run.Id, run.Message)),
             NotificationEvent.Apply => (DeployApplied, "Deployment applied", 7,
-                $"Deploy #{run.Id} hat Änderungen im Active Directory angewendet" + (run.ApprovedBy is null ? "" : $" (freigegeben von {run.ApprovedBy})")),
-            NotificationEvent.ApprovalRequested => (ApprovalRequested, "Approval requested", 4, $"{run.RequestedBy} möchte Deploy #{run.Id} anwenden"),
-            _ => (PrivilegedChange, "Privileged group change", 8, $"Überwachung #{run.Id}: Änderung an privilegierten Gruppen"),
+                L.PF("Deploy #{0} hat Änderungen im Active Directory angewendet", run.Id) + (run.ApprovedBy is null ? "" : L.PF(" (freigegeben von {0})", run.ApprovedBy))),
+            NotificationEvent.ApprovalRequested => (ApprovalRequested, "Approval requested", 4, L.PF("{0} möchte Deploy #{1} anwenden", run.RequestedBy, run.Id)),
+            _ => (PrivilegedChange, "Privileged group change", 8, L.PF("Überwachung #{0}: Änderung an privilegierten Gruppen", run.Id)),
         };
         var url = string.IsNullOrWhiteSpace(publicBaseUrl) ? null : $"{publicBaseUrl.TrimEnd('/')}/laeufe/{run.Id}";
         return new SiemEvent(id, name, severity, run.Kind.ToString(), run.FinishedAt ?? DateTimeOffset.UtcNow, message, Clean(
@@ -180,8 +181,8 @@ public static class SiemEvents
             var added = c.Change == "Added";
             events.Add(new SiemEvent(added ? MemberAdded : MemberRemoved, added ? "Privileged member added" : "Privileged member removed",
                 added ? 8 : 5, "PrivilegedAccess", at,
-                added ? $"{c.MemberName} zu {c.GroupName} hinzugefügt{(c.Direct ? "" : $" (über {string.Join(" › ", c.Via)})")}"
-                    : $"{c.MemberName} aus {c.GroupName} entfernt",
+                added ? L.PF("{0} zu {1} hinzugefügt{2}", c.MemberName, c.GroupName, (c.Direct ? "" : L.PF(" (über {0})", string.Join(" › ", c.Via))))
+                    : L.PF("{0} aus {1} entfernt", c.MemberName, c.GroupName),
                 Clean([
                     F(SiemFields.Action, c.Change), F(SiemFields.Group, c.GroupName), F(SiemFields.GroupSid, c.GroupSid),
                     F(SiemFields.Account, c.MemberSam ?? c.MemberName), F(SiemFields.AccountSid, c.MemberSid), F("objectClass", c.ObjectClass),
@@ -192,7 +193,7 @@ public static class SiemEvents
         var prevUnexpected = (previous?.Unexpected ?? []).Select(u => u.GroupSid + "|" + u.MemberSid).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var u in current.Unexpected.Where(u => !prevUnexpected.Contains(u.GroupSid + "|" + u.MemberSid)))
             events.Add(new SiemEvent(UnexpectedMember, "Unexpected privileged member", 9, "PrivilegedAccess", at,
-                $"Nicht erwartet: {u.MemberName} in {u.GroupName}{(u.Direct ? "" : $" (über {string.Join(" › ", u.Via)})")}",
+                L.PF("Nicht erwartet: {0} in {1}{2}", u.MemberName, u.GroupName, (u.Direct ? "" : L.PF(" (über {0})", string.Join(" › ", u.Via)))),
                 Clean([
                     F(SiemFields.Group, u.GroupName), F(SiemFields.GroupSid, u.GroupSid), F(SiemFields.Account, u.MemberSam ?? u.MemberName),
                     F(SiemFields.AccountSid, u.MemberSid), F("objectClass", u.ObjectClass), F(SiemFields.Direct, u.Direct ? "true" : "false"),
@@ -203,7 +204,7 @@ public static class SiemEvents
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var h in current.Hygiene.Where(h => h.Severity == PrivilegedEvaluator.High && !prevHygiene.Contains(h.Rule + "|" + h.Sid)))
             events.Add(new SiemEvent(HygieneFinding, "Admin account hygiene finding", 7, "Hygiene", at,
-                $"Hygiene (hoch): {h.Account} – {h.Title}: {h.Value}",
+                L.PF("Hygiene (hoch): {0} – {1}: {2}", h.Account, h.Title, h.Value),
                 Clean([
                     F(SiemFields.Rule, h.Rule), F(SiemFields.Account, h.Account), F(SiemFields.AccountSid, h.Sid), F(SiemFields.Tier, h.Tier),
                     F(SiemFields.Object, h.DistinguishedName), F(SiemFields.Details, h.Value), F("findingSeverity", h.Severity), .. common,
@@ -212,7 +213,7 @@ public static class SiemEvents
         static string PathKey(AttackPath p) => $"{p.ObjectDn}|{p.PrincipalSid}|{string.Join(',', p.Rights.Order(StringComparer.OrdinalIgnoreCase))}";
         var prevPaths = (previous?.AttackPaths ?? []).Select(PathKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var p in current.AttackPaths.Where(p => !prevPaths.Contains(PathKey(p))))
-            events.Add(new SiemEvent(AttackPath, "Attack path to Tier 0", 9, "AttackPath", at, $"Angriffspfad: {p.Sentence}",
+            events.Add(new SiemEvent(AttackPath, "Attack path to Tier 0", 9, "AttackPath", at, L.PF("Angriffspfad: {0}", p.Sentence),
                 Clean([
                     F(SiemFields.Account, p.PrincipalName), F(SiemFields.AccountSid, p.PrincipalSid), F("objectClass", p.PrincipalClass),
                     F(SiemFields.Object, p.ObjectDn), F("objectType", p.ObjectType), F(SiemFields.Rights, string.Join(", ", p.Rights)),

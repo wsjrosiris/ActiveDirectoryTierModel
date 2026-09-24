@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FlaskConical, FolderCog, Globe, Lock, Save, Settings2, ShieldUser, Terminal, UsersRound } from 'lucide-react'
+import { FlaskConical, FolderCog, Globe, Languages, Lock, Save, Settings2, ShieldUser, Terminal, UsersRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import type { Settings, SettingsUpdate } from '@/api/types'
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Combobox } from '@/components/ui/combobox'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { Field } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
@@ -234,6 +235,29 @@ function SettingsPage() {
           <Card>
             <CardHeader>
               <div>
+                <CardTitle className="flex items-center gap-2"><Languages className="size-4 text-muted-foreground" /> {t('admin.settings.languageTitle')}</CardTitle>
+                <CardDescription>{t('admin.settings.languageDescription')}</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-5">
+              <div className="grid gap-5 sm:grid-cols-2">
+                <Field label={t('admin.settings.defaultLanguage')} htmlFor="st-default-language" hint={t('admin.settings.defaultLanguageHint')}>
+                  <Select
+                    id="st-default-language"
+                    value={form.defaultLanguage}
+                    onValueChange={(v) => setForm({ ...form, defaultLanguage: v === 'en' ? 'en' : 'de' })}
+                    options={[
+                      { value: 'de', label: 'Deutsch' },
+                      { value: 'en', label: 'English' },
+                    ]}
+                  />
+                </Field>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <div>
                 <CardTitle className="flex items-center gap-2">{t('admin.settings.environment')} <Lock className="size-3.5 text-muted-foreground" /></CardTitle>
                 <CardDescription>{t('admin.settings.setInTheServiceConfiguration')}</CardDescription>
               </div>
@@ -271,7 +295,7 @@ function publicUrlError(v: string): string | null {
 
 function formatDays(hours: number) {
   const d = hours / 24
-  return Number.isInteger(d) ? t('admin.settings.days', { count: d }) : t('admin.settings.daysFraction', { value: d.toLocaleString(currentLocale(), { maximumFractionDigits: 1 }) })
+  return Number.isInteger(d) ? t('admin.settings.days', { count: d }) : t('admin.settings.daysFraction', { count: d, value: d.toLocaleString(currentLocale(), { maximumFractionDigits: 1 }) })
 }
 
 function ReadOnlyRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {

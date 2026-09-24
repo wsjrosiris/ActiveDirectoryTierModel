@@ -46,6 +46,7 @@ import { tierMeta, tierOf } from '@/lib/tier'
 import { cn, formatDateTime, formatRelative } from '@/lib/utils'
 import { draftStore } from './draft-store'
 import { OusEditor, type EditorProps } from './editors'
+import { t } from '@/i18n'
 
 /* Live view of Active Directory next to the configuration (roadmap 14): Soll | Ist | Vergleich. */
 
@@ -74,7 +75,7 @@ export function useAdRefresh() {
       qc.setQueryData(adTreeKey, await api.ad.tree(false))
       qc.invalidateQueries({ queryKey: ['ad', 'object'] })
     } catch (e) {
-      toast.error('Active Directory konnte nicht gelesen werden', { description: e instanceof Error ? e.message : undefined })
+      toast.error(t('config.adView.activeDirectoryCouldNotBe'), { description: e instanceof Error ? e.message : undefined })
     } finally {
       setBusy(false)
     }
@@ -86,8 +87,8 @@ export function useAdRefresh() {
 
 export const compareStatusMeta: Record<CompareStatus, { label: string; variant: 'success' | 'danger' | 'info' | 'warning'; icon: React.ReactNode }> = {
   same: { label: 'gleich', variant: 'success', icon: <CircleCheck /> },
-  missing: { label: 'fehlt im AD', variant: 'danger', icon: <CircleMinus /> },
-  extra: { label: 'nur im AD', variant: 'info', icon: <CirclePlus /> },
+  missing: { label: t('config.adView.missingInAd'), variant: 'danger', icon: <CircleMinus /> },
+  extra: { label: t('config.adView.onlyInAd'), variant: 'info', icon: <CirclePlus /> },
   different: { label: 'abweichend', variant: 'warning', icon: <TriangleAlert /> },
 }
 
@@ -97,17 +98,17 @@ export function CompareBadge({ status }: { status: CompareStatus }) {
 }
 
 const inheritanceText: Record<string, string> = {
-  None: 'Nur dieses Objekt',
-  All: 'Objekt und alle Nachfolger',
-  Descendents: 'Nur Nachfolger',
-  SelfAndChildren: 'Objekt und direkte Kinder',
-  Children: 'Nur direkte Kinder',
+  None: t('config.adView.thisObjectOnly'),
+  All: t('config.adView.objectAndAllDescendants'),
+  Descendents: t('config.adView.descendantsOnly'),
+  SelfAndChildren: t('config.adView.objectAndDirectChildren'),
+  Children: t('config.adView.directChildrenOnly'),
 }
 
 /** "OU=Tier 0,OU=Admin,DC=contoso,DC=local" → "Admin › Tier 0" */
 export function adPath(dn: string, domainDn?: string | null) {
   const rel = domainDn && dn.toLowerCase().endsWith(domainDn.toLowerCase()) ? dn.slice(0, dn.length - domainDn.length).replace(/,$/, '') : dn
-  if (!rel) return 'Domänenstamm'
+  if (!rel) return t('config.adView.domainRoot')
   return rel
     .split(/,(?=\s*[A-Za-z]+=)/)
     .filter((p) => !/^DC=/i.test(p.trim()))
@@ -186,7 +187,7 @@ function LiveTree<T extends TreeNodeData>({
             tabIndex={hasChildren ? 0 : -1}
             onClick={() => hasChildren && toggle(n.dn)}
             className={cn('grid size-5 shrink-0 place-content-center rounded text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring', !hasChildren && 'invisible')}
-            aria-label={open ? `${n.name} zuklappen` : `${n.name} aufklappen`}
+            aria-label={open ? t('config.adView.collapseName', { name: n.name }) : t('config.adView.expandName', { name: n.name })}
           >
             <ChevronRight className={cn('size-3.5 transition-transform duration-150', open && 'rotate-90')} />
           </button>
@@ -206,10 +207,10 @@ function LiveTree<T extends TreeNodeData>({
     <div>
       <div className="mb-2 flex flex-wrap items-center justify-end gap-1">
         <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={() => setExpanded(new Set(all.map((a) => a.dn)))}>
-          <ChevronsUpDown /> Alle öffnen
+          <ChevronsUpDown /> {t('config.adView.expandAll')}
         </Button>
         <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={() => setExpanded(new Set())}>
-          <ChevronsDownUp /> Alle schließen
+          <ChevronsDownUp /> {t('config.adView.collapseAll')}
         </Button>
       </div>
       <div role="tree" aria-label={label} className="text-sm">
@@ -235,14 +236,14 @@ function SourceHeader({ data, refresh, busy, children }: { data: Pick<AdTree, 's
         </span>
       )}
       {data?.source === 'Testdaten' && (
-        <Tooltip content="Entwicklungsmodus: Die Daten stammen aus einem simulierten Active Directory.">
-          <Badge variant="warning">Testdaten</Badge>
+        <Tooltip content={t('config.adView.developmentModeTheDataComes')}>
+          <Badge variant="warning">{t('config.adView.testData')}</Badge>
         </Tooltip>
       )}
-      {data?.readAt && <span title={formatDateTime(data.readAt)}>Stand {formatRelative(data.readAt)}</span>}
+      {data?.readAt && <span title={formatDateTime(data.readAt)}>{t('config.adView.asOf')} {formatRelative(data.readAt)}</span>}
       {children}
       <Button variant="outline" size="sm" className="ml-auto" onClick={refresh} disabled={busy}>
-        <RefreshCw className={cn(busy && 'animate-spin')} /> Neu laden
+        <RefreshCw className={cn(busy && 'animate-spin')} /> {t('config.adView.reload')}
       </Button>
     </div>
   )
@@ -253,8 +254,8 @@ function Unavailable({ message }: { message: string | null }) {
     <Card>
       <EmptyState
         icon={<ServerOff />}
-        title="Active Directory nicht verfügbar"
-        description={message ?? 'Die Ist-Ansicht kann das Active Directory derzeit nicht lesen.'}
+        title={t('config.adView.activeDirectoryNotAvailable')}
+        description={message ?? t('config.adView.theLiveViewCannotRead')}
       />
     </Card>
   )
@@ -280,21 +281,21 @@ export function AdTreeView() {
   return (
     <>
       <SourceHeader data={d} refresh={refresh} busy={busy}>
-        <span>{d.nodes.length} OUs</span>
+        <span>{d.nodes.length} {t('config.adView.ous', { count: d.nodes.length })}</span>
       </SourceHeader>
-      {d.truncated && <p className="mb-3 text-[13px] text-amber-700 dark:text-amber-300">Es werden nur die ersten {d.nodes.length} OUs angezeigt.</p>}
+      {d.truncated && <p className="mb-3 text-[13px] text-amber-700 dark:text-amber-300">{t('config.adView.truncated', { count: d.nodes.length })}</p>}
       <Card className="p-4">
         <LiveTree
-          label="OU-Struktur im Active Directory"
+          label={t('config.adView.ouStructureInActiveDirectory')}
           nodes={d.nodes.map((n) => ({ ...n, parentDn: n.parentDn }))}
           rootLabel={d.domain?.distinguishedName ?? ''}
           onSelect={(n) => setSelected(n.dn)}
           renderExtra={(n) => (
             <span className="flex shrink-0 items-center gap-1.5 text-muted-foreground">
-              {n.protected && <Tooltip content="Vor versehentlichem Löschen geschützt"><Lock className="size-3 opacity-60" /></Tooltip>}
-              {n.blockInheritance && <Tooltip content="GPO-Vererbung blockiert"><Ban className="size-3 opacity-60" /></Tooltip>}
+              {n.protected && <Tooltip content={t('config.adView.protectedFromAccidentalDeletion')}><Lock className="size-3 opacity-60" /></Tooltip>}
+              {n.blockInheritance && <Tooltip content={t('config.adView.gpoInheritanceBlocked')}><Ban className="size-3 opacity-60" /></Tooltip>}
               {n.gpos.length > 0 && (
-                <Tooltip content={`Verknüpfte GPOs: ${n.gpos.join(', ')}`}>
+                <Tooltip content={t('config.adView.linkedGposJoin', { join: n.gpos.join(', ') })}>
                   <span className="inline-flex items-center gap-0.5 text-[11px]"><Link2 className="size-3" />{n.gpos.length}</span>
                 </Tooltip>
               )}
@@ -316,26 +317,26 @@ function AceTable({ aces }: { aces: AdAce[] }) {
     <div className="grid gap-2">
       {aces.length > own.length && (
         <Button variant="ghost" size="xs" className="justify-self-start text-muted-foreground" onClick={() => setShowDefault((v) => !v)}>
-          {showDefault ? 'Standardberechtigungen ausblenden' : `${aces.length - own.length} Standardberechtigungen einblenden`}
+          {showDefault ? t('config.adView.hideDefaultPermissions') : t('config.adView.showValueDefaultPermissions', { value: aces.length - own.length })}
         </Button>
       )}
       {list.length === 0 ? (
-        <p className="text-[13px] text-muted-foreground">Keine eigenen Berechtigungen – nur geerbte.</p>
+        <p className="text-[13px] text-muted-foreground">{t('config.adView.noExplicitPermissionsOnlyInherited')}</p>
       ) : (
         <div className="grid gap-2">
           {list.map((a, i) => (
             <div key={i} className={cn('rounded-lg border px-3 py-2 text-[13px]', a.isDefault && 'opacity-60')}>
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="min-w-0 font-medium break-all">{a.principal}</span>
-                {a.type === 'Deny' ? <Badge variant="danger">Verweigern</Badge> : <Badge variant="success">Zulassen</Badge>}
-                {a.isDefault && <Badge variant="muted">Standard</Badge>}
+                {a.type === 'Deny' ? <Badge variant="danger">{t('config.adView.deny')}</Badge> : <Badge variant="success">{t('config.adView.allow')}</Badge>}
+                {a.isDefault && <Badge variant="muted">{t('config.adView.default')}</Badge>}
               </div>
               <div className="mt-1 flex flex-wrap gap-1">
                 {a.rights.map((r) => <Badge key={r} variant="secondary" className="font-normal">{r}</Badge>)}
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                {a.objectType ? `Für „${a.objectType}“` : 'Für alle Objekte'}
-                {a.inheritedObjectType ? ` auf „${a.inheritedObjectType}“-Objekten` : ''} · {inheritanceText[a.inheritance] ?? a.inheritance}
+                {a.objectType ? t('config.adView.forObjecttype', { objectType: a.objectType }) : t('config.adView.forAllObjects')}
+                {a.inheritedObjectType ? t('config.adView.onInheritedobjecttypeObjects', { inheritedObjectType: a.inheritedObjectType }) : ''} · {inheritanceText[a.inheritance] ?? a.inheritance}
               </p>
             </div>
           ))}
@@ -372,13 +373,13 @@ export function AdObjectSheet({ dn, domainDn, onOpenChange, onNavigate }: { dn: 
           {q.isLoading ? (
             <div className="grid gap-2">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-8" />)}</div>
           ) : q.isError || !o?.available ? (
-            <p className="text-[13px] text-muted-foreground">{o?.message ?? 'Das Objekt konnte nicht gelesen werden.'}</p>
+            <p className="text-[13px] text-muted-foreground">{o?.message ?? t('config.adView.theObjectCouldNotBe')}</p>
           ) : (
             <>
               <div className="flex flex-wrap gap-1.5">
-                <Badge variant="outline">{o.kind === 'organizationalUnit' ? 'Organisationseinheit' : objectClassLabels[o.kind] ?? o.kind}</Badge>
-                {o.ou?.protected && <Badge variant="muted"><Lock /> Löschschutz</Badge>}
-                {o.ou?.blockInheritance && <Badge variant="muted"><Ban /> GPO-Vererbung blockiert</Badge>}
+                <Badge variant="outline">{o.kind === 'organizationalUnit' ? t('config.adView.organizationalUnit') : objectClassLabels[o.kind] ?? o.kind}</Badge>
+                {o.ou?.protected && <Badge variant="muted"><Lock /> {t('config.adView.deletionProtection')}</Badge>}
+                {o.ou?.blockInheritance && <Badge variant="muted"><Ban /> {t('config.adView.gpoInheritanceBlocked')}</Badge>}
                 <TierBadge tier={tierOf(o.dn)} />
               </div>
               {o.ou && (
@@ -386,10 +387,10 @@ export function AdObjectSheet({ dn, domainDn, onOpenChange, onNavigate }: { dn: 
                   {o.ou.counts && (
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                       {[
-                        ['Benutzer', o.ou.counts.users],
-                        ['Gruppen', o.ou.counts.groups],
-                        ['Computer', o.ou.counts.computers],
-                        ['Sonstige', o.ou.counts.other],
+                        [t('config.adView.users'), o.ou.counts.users],
+                        [t('config.adView.groups'), o.ou.counts.groups],
+                        [t('config.adView.computers'), o.ou.counts.computers],
+                        [t('config.adView.other'), o.ou.counts.other],
                       ].map(([label, n]) => (
                         <div key={label} className="rounded-lg border bg-card px-3 py-2">
                           <p className="text-[11px] text-muted-foreground uppercase">{label}</p>
@@ -398,9 +399,9 @@ export function AdObjectSheet({ dn, domainDn, onOpenChange, onNavigate }: { dn: 
                       ))}
                     </div>
                   )}
-                  <Section title={`Untergeordnete OUs (${o.ou.childOus.length})`} icon={<Folder />}>
+                  <Section title={t('config.adView.childOusLength', { length: o.ou.childOus.length })} icon={<Folder />}>
                     {o.ou.childOus.length === 0 ? (
-                      <p className="text-[13px] text-muted-foreground">Keine.</p>
+                      <p className="text-[13px] text-muted-foreground">{t('config.adView.none')}</p>
                     ) : (
                       <div className="flex flex-wrap gap-1.5">
                         {o.ou.childOus.map((c) => (
@@ -409,13 +410,13 @@ export function AdObjectSheet({ dn, domainDn, onOpenChange, onNavigate }: { dn: 
                       </div>
                     )}
                   </Section>
-                  <Section title={`GPO-Verknüpfungen (${o.ou.gpoLinks.length})`} icon={<Link2 />}>
+                  <Section title={t('config.adView.gpoLinksLength', { length: o.ou.gpoLinks.length })} icon={<Link2 />}>
                     {o.ou.gpoLinks.length === 0 ? (
-                      <p className="text-[13px] text-muted-foreground">Keine.</p>
+                      <p className="text-[13px] text-muted-foreground">{t('config.adView.none')}</p>
                     ) : (
                       <Card className="overflow-hidden">
                         <Table>
-                          <THead><TR><TH className="w-12">Nr.</TH><TH>GPO</TH><TH>Status</TH></TR></THead>
+                          <THead><TR><TH className="w-12">{t('config.adView.no')}</TH><TH>{t('config.adView.gpo')}</TH><TH>{t('common.status')}</TH></TR></THead>
                           <TBody>
                             {o.ou.gpoLinks.map((l) => (
                               <TR key={`${l.order}-${l.name}`}>
@@ -423,8 +424,8 @@ export function AdObjectSheet({ dn, domainDn, onOpenChange, onNavigate }: { dn: 
                                 <TD><span className="break-words">{l.name}</span></TD>
                                 <TD>
                                   <div className="flex flex-wrap gap-1">
-                                    {l.enabled ? <Badge variant="success">aktiv</Badge> : <Badge variant="muted">deaktiviert</Badge>}
-                                    {l.enforced && <Badge variant="warning">erzwungen</Badge>}
+                                    {l.enabled ? <Badge variant="success">{t('config.adView.enabled')}</Badge> : <Badge variant="muted">{t('config.adView.disabled')}</Badge>}
+                                    {l.enforced && <Badge variant="warning">{t('config.adView.enforced')}</Badge>}
                                   </div>
                                 </TD>
                               </TR>
@@ -437,9 +438,9 @@ export function AdObjectSheet({ dn, domainDn, onOpenChange, onNavigate }: { dn: 
                 </>
               )}
               {o.members && (
-                <Section title={`Mitglieder (${o.members.length})`} icon={<Users />}>
+                <Section title={t('config.adView.membersLength', { length: o.members.length })} icon={<Users />}>
                   {o.members.length === 0 ? (
-                    <p className="text-[13px] text-muted-foreground">Keine direkten Mitglieder.</p>
+                    <p className="text-[13px] text-muted-foreground">{t('config.adView.noDirectMembers')}</p>
                   ) : (
                     <div className="grid gap-1.5">
                       {o.members.map((m) => (
@@ -447,14 +448,14 @@ export function AdObjectSheet({ dn, domainDn, onOpenChange, onNavigate }: { dn: 
                           <span className="font-medium">{m.name}</span>
                           <span className="text-muted-foreground">{m.samAccountName}</span>
                           <Badge variant="outline">{objectClassLabels[m.objectClass] ?? m.objectClass}</Badge>
-                          {m.enabled === false && <Badge variant="muted">deaktiviert</Badge>}
+                          {m.enabled === false && <Badge variant="muted">{t('config.adView.disabled')}</Badge>}
                         </div>
                       ))}
                     </div>
                   )}
                 </Section>
               )}
-              <Section title="Eigene Berechtigungen" icon={<ShieldAlert />}>
+              <Section title={t('config.adView.explicitPermissions')} icon={<ShieldAlert />}>
                 <AceTable aces={o.aces} />
               </Section>
             </>
@@ -490,7 +491,7 @@ export function adoptOus(selected: OuComparison[], all: OuComparison[]): number 
       protectFromAccidentalDeletion: i.protected ?? true,
       disableInheritance: false,
       blockGpoInheritance: i.blockInheritance ?? false,
-      comment: 'Aus dem Active Directory übernommen',
+      comment: t('config.adView.adoptedFromActiveDirectory'),
     }
     if (known.has(ouFullDn(item).toLowerCase())) continue
     known.add(ouFullDn(item).toLowerCase())
@@ -536,7 +537,7 @@ function CompareSheet({
           <>
             <SheetHeader>
               <div className="flex flex-wrap items-center gap-2">
-                <SheetTitle>{item.isRoot ? 'Domänenstamm' : item.name}</SheetTitle>
+                <SheetTitle>{item.isRoot ? t('config.adView.domainRoot') : item.name}</SheetTitle>
                 <CompareBadge status={item.status} />
               </div>
               <SheetDescription className="break-all">{adPath(item.dn, data.domain?.distinguishedName)}</SheetDescription>
@@ -544,18 +545,18 @@ function CompareSheet({
             <SheetBody className="grid content-start gap-5">
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-lg border px-3 py-2">
-                  <p className="text-[11px] text-muted-foreground uppercase">Berechtigungen</p>
-                  <p className="text-[13px]">Soll {item.desiredAces} · Ist {item.actualAces}</p>
+                  <p className="text-[11px] text-muted-foreground uppercase">{t('config.adView.permissions')}</p>
+                  <p className="text-[13px]">{t('config.adView.desiredActual', { desired: item.desiredAces, actual: item.actualAces })}</p>
                 </div>
                 <div className="rounded-lg border px-3 py-2">
-                  <p className="text-[11px] text-muted-foreground uppercase">GPO-Verknüpfungen</p>
-                  <p className="text-[13px]">Soll {item.desiredLinks} · Ist {item.actualLinks}</p>
+                  <p className="text-[11px] text-muted-foreground uppercase">{t('config.adView.gpoLinks')}</p>
+                  <p className="text-[13px]">{t('config.adView.desiredActual', { desired: item.desiredLinks, actual: item.actualLinks })}</p>
                 </div>
               </div>
               <section className="grid gap-2">
-                <h3 className="text-[13px] font-semibold">Unterschiede</h3>
+                <h3 className="text-[13px] font-semibold">{t('config.adView.differences')}</h3>
                 {item.differences.length === 0 ? (
-                  <p className="flex items-center gap-2 text-[13px] text-muted-foreground"><CircleCheck className="size-4 text-emerald-500" /> Soll und Ist stimmen überein.</p>
+                  <p className="flex items-center gap-2 text-[13px] text-muted-foreground"><CircleCheck className="size-4 text-emerald-500" /> {t('config.adView.desiredAndActualStateMatch')}</p>
                 ) : (
                   <ul className="grid gap-2">
                     {item.differences.map((d, i) => (
@@ -571,12 +572,12 @@ function CompareSheet({
             <SheetFooter className="flex-wrap">
               {item.inAd && (
                 <Button variant="outline" size="sm" onClick={() => onShowAd(item.dn)}>
-                  <Network /> Im AD anzeigen
+                  <Network /> {t('config.adView.showInAd')}
                 </Button>
               )}
               {item.configIndex !== null && onEdit && (
                 <Button variant="outline" size="sm" onClick={() => onEdit(item.configIndex!)}>
-                  <Pencil /> {canEdit ? 'Im Soll bearbeiten' : 'Im Soll anzeigen'}
+                  <Pencil /> {canEdit ? t('config.adView.editInDesiredState') : t('config.adView.showInDesiredState')}
                 </Button>
               )}
               {item.status === 'extra' && canEdit && (
@@ -584,11 +585,11 @@ function CompareSheet({
                   size="sm"
                   onClick={() => {
                     const n = adoptOus([item], data.result?.items ?? [])
-                    if (n) toast.success(n === 1 ? 'OU in den Entwurf übernommen' : `${n} OUs in den Entwurf übernommen`, { description: 'Zum Übernehmen speichern.' })
-                    else toast('Die OU ist bereits im Entwurf.')
+                    if (n) toast.success(n === 1 ? t('config.adView.ouAdoptedIntoTheDraft') : t('config.adView.nOusAdoptedIntoThe', { n }), { description: t('config.adView.saveToApply') })
+                    else toast(t('config.adView.theOuIsAlreadyIn'))
                   }}
                 >
-                  <Download /> In Konfiguration übernehmen
+                  <Download /> {t('config.adView.adoptIntoConfiguration')}
                 </Button>
               )}
             </SheetFooter>
@@ -629,25 +630,25 @@ export function AdCompareView({ onEdit }: { onEdit?: (index: number) => void }) 
       <SourceHeader data={d} refresh={refresh} busy={busy} />
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Segmented<CompareFilter>
-          aria-label="Vergleich filtern"
+          aria-label={t('config.adView.filterComparison')}
           value={filter}
           onValueChange={setFilter}
           options={[
-            { value: 'all', label: `Alle · ${items.length}` },
-            { value: 'missing', label: `fehlt im AD · ${s.missing}`, icon: <CircleMinus className="text-rose-500" /> },
-            { value: 'extra', label: `nur im AD · ${s.extra}`, icon: <CirclePlus className="text-sky-500" /> },
-            { value: 'different', label: `abweichend · ${s.different - (root?.status === 'different' ? 1 : 0)}`, icon: <TriangleAlert className="text-amber-500" /> },
-            { value: 'same', label: `gleich · ${s.same - (root?.status === 'same' ? 1 : 0)}`, icon: <CircleCheck className="text-emerald-500" /> },
+            { value: 'all', label: t('config.adView.allLength', { length: items.length }) },
+            { value: 'missing', label: t('config.adView.missingInAdMissing', { missing: s.missing }), icon: <CircleMinus className="text-rose-500" /> },
+            { value: 'extra', label: t('config.adView.onlyInAdExtra', { extra: s.extra }), icon: <CirclePlus className="text-sky-500" /> },
+            { value: 'different', label: t('config.adView.differentValue', { value: s.different - (root?.status === 'different' ? 1 : 0) }), icon: <TriangleAlert className="text-amber-500" /> },
+            { value: 'same', label: t('config.adView.sameValue', { value: s.same - (root?.status === 'same' ? 1 : 0) }), icon: <CircleCheck className="text-emerald-500" /> },
           ]}
           className="[&_button]:h-7 [&_button]:px-2.5 [&_button]:text-xs"
         />
         <Segmented<'tree' | 'list'>
-          aria-label="Darstellung"
+          aria-label={t('config.adView.layout')}
           value={layout}
           onValueChange={setLayout}
           options={[
-            { value: 'tree', label: 'Baum', icon: <Network /> },
-            { value: 'list', label: 'Liste', icon: <ListChecks /> },
+            { value: 'tree', label: t('config.adView.tree'), icon: <Network /> },
+            { value: 'list', label: t('config.adView.list'), icon: <ListChecks /> },
           ]}
           className="ml-auto [&_button]:h-7 [&_button]:px-2.5 [&_button]:text-xs"
         />
@@ -659,17 +660,17 @@ export function AdCompareView({ onEdit }: { onEdit?: (index: number) => void }) 
           className="mb-3 flex w-full items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-left text-[13px] text-amber-900 hover:bg-amber-500/15 dark:text-amber-200"
         >
           <TriangleAlert className="size-4 shrink-0" />
-          <span className="min-w-0 flex-1">Am Domänenstamm gibt es {root.differences.length} Abweichung{root.differences.length === 1 ? '' : 'en'}.</span>
+          <span className="min-w-0 flex-1">{t('config.adView.rootDifferences', { count: root.differences.length })}</span>
           <ChevronRight className="size-4" />
         </button>
       )}
       <Card className="p-4">
         {visible.length === 0 ? (
-          <EmptyState compact icon={<GitCompareArrows />} title="Keine Einträge" description="Für diesen Filter gibt es keine OUs." />
+          <EmptyState compact icon={<GitCompareArrows />} title={t('config.adView.noEntries')} description={t('config.adView.thereAreNoOusFor')} />
         ) : layout === 'tree' ? (
           <LiveTree
             key={filter}
-            label="Vergleich Soll und Ist"
+            label={t('config.adView.desiredAndActualComparison')}
             nodes={treeItems.map((i) => ({ ...i, parentDn: i.parentDn && byDn.has(i.parentDn.toLowerCase()) ? i.parentDn : null }))}
             rootLabel={d.domain?.distinguishedName ?? ''}
             defaultDepth={filter === 'all' ? 2 : 10}
@@ -677,7 +678,7 @@ export function AdCompareView({ onEdit }: { onEdit?: (index: number) => void }) 
             renderExtra={(n) => (
               <span className={cn('flex shrink-0 items-center gap-1.5', !visibleDns.has(n.dn.toLowerCase()) && 'opacity-40')}>
                 {n.differences.length > 0 && n.status === 'different' && <span className="text-[11px] text-muted-foreground">{n.differences.length}</span>}
-                {n.builtin ? <Badge variant="muted">integriert</Badge> : <CompareBadge status={n.status} />}
+                {n.builtin ? <Badge variant="muted">{t('config.adView.builtIn')}</Badge> : <CompareBadge status={n.status} />}
               </span>
             )}
           />
@@ -734,13 +735,13 @@ export function OusSection(props: EditorProps) {
   return (
     <div className="grid gap-3">
       <Segmented<View>
-        aria-label="Soll, Ist oder Vergleich"
+        aria-label={t('config.adView.desiredActualOrComparison')}
         value={view}
         onValueChange={setView}
         options={[
-          { value: 'soll', label: 'Soll', icon: <Pencil /> },
-          { value: 'ist', label: 'Ist', icon: <Network /> },
-          { value: 'vergleich', label: 'Vergleich', icon: <GitCompareArrows /> },
+          { value: 'soll', label: t('config.adView.desired'), icon: <Pencil /> },
+          { value: 'ist', label: t('config.adView.actual'), icon: <Network /> },
+          { value: 'vergleich', label: t('config.adView.comparison'), icon: <GitCompareArrows /> },
         ]}
         className="justify-self-start"
       />

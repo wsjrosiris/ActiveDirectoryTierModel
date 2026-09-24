@@ -15,6 +15,7 @@ import { diffSection, type SectionDiff } from '@/lib/structured-diff'
 import { ChangeList, DiffCounts } from './change-list'
 import { draftStore } from './draft-store'
 import { sectionQuery } from './queries'
+import { t } from '@/i18n'
 
 export function useAfterConfigChange() {
   const qc = useQueryClient()
@@ -56,8 +57,8 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
   const save = async () => {
     const invalid = draftStore.invalidJsonKeys()
     if (invalid.length) {
-      toast.error('Ungültige Eingaben', {
-        description: `„${invalid.map((k) => sectionFallbackTitles[k] ?? k).join('“, „')}“ enthält ungültige Eingaben. Bitte zuerst korrigieren – sonst würde der letzte gültige Stand gespeichert.`,
+      toast.error(t('config.saveDialog.invalidInput'), {
+        description: t('config.saveDialog.joinContainsInvalidInputPlease', { join: invalid.map((k) => sectionFallbackTitles[k] ?? k).join(t('config.saveDialog.quoteSeparator')) }),
       })
       return
     }
@@ -76,19 +77,19 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
         if (e instanceof ApiError && e.status === 409) {
           setConflict({ key, remaining: keys.slice(i) })
         } else if (e instanceof ApiError && e.status === 401) {
-          toast.error('Sitzung abgelaufen', {
-            description: 'Ihre Änderungen sind noch da. Bitte in einem neuen Tab anmelden und dann hier erneut speichern.',
+          toast.error(t('config.saveDialog.sessionExpired'), {
+            description: t('config.saveDialog.yourChangesAreStillThere'),
             duration: 15000,
           })
         } else {
-          toast.error(`Speichern von „${sectionFallbackTitles[key] ?? key}“ fehlgeschlagen`, { description: errorMessage(e) })
+          toast.error(t('config.saveDialog.savingValueFailed', { value: sectionFallbackTitles[key] ?? key }), { description: errorMessage(e) })
         }
-        if (done.length) toast.success(`${done.length} Sektion(en) gespeichert`)
+        if (done.length) toast.success(t('config.saveDialog.lengthSectionSSaved', { length: done.length }))
         return
       }
     }
     setSaving(false)
-    toast.success(keys.length === 1 ? 'Änderungen gespeichert' : `${keys.length} Sektionen gespeichert`, {
+    toast.success(keys.length === 1 ? t('config.saveDialog.changesSaved') : t('config.saveDialog.lengthSectionsSaved', { length: keys.length, count: keys.length }), {
       description: comment.trim(),
     })
     setComment('')
@@ -101,7 +102,7 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
     await qc.refetchQueries({ queryKey: sectionQuery(key).queryKey })
     setConflict(null)
     onOpenChange(false)
-    toast('Neueste Version geladen', { description: 'Ihre Änderungen an dieser Sektion wurden verworfen.' })
+    toast(t('config.saveDialog.latestVersionLoaded'), { description: t('config.saveDialog.yourChangesToThisSection') })
   }
 
   const keepEditing = async (key: string) => {
@@ -111,12 +112,12 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
       await qc.fetchQuery({ ...sectionQuery(key), staleTime: 0 })
       draftStore.rebase(key)
     } catch (e) {
-      toast.error('Neueste Version konnte nicht geladen werden', { description: errorMessage(e) })
+      toast.error(t('config.saveDialog.latestVersionCouldNotBe'), { description: errorMessage(e) })
     }
     setConflict(null)
     onOpenChange(false)
-    toast('Entwurf auf neuesten Stand gesetzt', {
-      description: 'Ihre Änderungen bleiben erhalten. Die Änderungsliste zeigt jetzt auch, welche Änderungen der anderen Person Ihr Speichern zurücknehmen würde.',
+    toast(t('config.saveDialog.draftUpdatedToTheLatest'), {
+      description: t('config.saveDialog.yourChangesAreKeptThe'),
     })
   }
 
@@ -127,9 +128,9 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
       <Dialog open={open && !conflict} onOpenChange={(o) => !saving && onOpenChange(o)}>
         <DialogContent className="max-w-4xl gap-5">
           <DialogHeader>
-            <DialogTitle>Änderungen speichern</DialogTitle>
+            <DialogTitle>{t('config.saveDialog.saveChanges')}</DialogTitle>
             <DialogDescription>
-              Prüfen Sie die Änderungen. Jede gespeicherte Sektion erhält eine neue Version, die später wiederhergestellt werden kann.
+              {t('config.saveDialog.reviewTheChangesEverySaved')}
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -159,14 +160,14 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
               if (comment.trim()) save()
             }}
           >
-            <Field label="Kommentar" htmlFor="save-comment" required hint="Wird in der Versionshistorie und im Änderungsprotokoll angezeigt.">
+            <Field label={t('config.saveDialog.comment')} htmlFor="save-comment" required hint={t('config.saveDialog.shownInTheVersionHistory')}>
               <Textarea
                 id="save-comment"
                 autoFocus
                 rows={2}
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                placeholder="Was wurde geändert und warum?"
+                placeholder={t('config.saveDialog.whatWasChangedAndWhy')}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && comment.trim()) {
                     e.preventDefault()
@@ -176,9 +177,9 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
               />
             </Field>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Abbrechen</Button>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>{t('common.cancel')}</Button>
               <Button type="submit" disabled={!comment.trim()} loading={saving}>
-                {!saving && <Save />} {keys.length > 1 ? `${keys.length} Sektionen speichern` : 'Speichern'}
+                {!saving && <Save />} {keys.length > 1 ? t('config.saveDialog.saveLengthSections', { length: keys.length, count: keys.length }) : t('common.save')}
               </Button>
             </DialogFooter>
           </form>
@@ -195,20 +196,20 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
                     <AlertTriangle className="size-4" />
                   </div>
                   <div className="grid min-w-0 gap-1.5">
-                    <DialogTitle>Konflikt beim Speichern</DialogTitle>
+                    <DialogTitle>{t('config.saveDialog.conflictWhileSaving')}</DialogTitle>
                     <DialogDescription>
-                      „{sectionFallbackTitles[conflict.key] ?? conflict.key}“ wurde inzwischen von jemand anderem geändert. Ihre Version basiert auf einem veralteten Stand. „Neu laden“ verwirft Ihre Änderungen. „Weiter bearbeiten“ behält sie; die nächste Änderungsliste zeigt dann auch, welche Änderungen der anderen Person Ihr Speichern zurücknehmen würde.
-                      {conflict.remaining.length > 1 && ` ${conflict.remaining.length - 1} weitere Sektion(en) wurden noch nicht gespeichert.`}
+                      {t('config.saveDialog.conflictText', { section: sectionFallbackTitles[conflict.key] ?? conflict.key })}
+                      {conflict.remaining.length > 1 && t('config.saveDialog.valueFurtherSectionSHave', { value: conflict.remaining.length - 1 })}
                     </DialogDescription>
                   </div>
                 </div>
               </DialogHeader>
               <DialogFooter className="flex-wrap">
                 <Button variant="outline" onClick={() => keepEditing(conflict.key)}>
-                  Weiter bearbeiten
+                  {t('config.saveDialog.continueEditing')}
                 </Button>
                 <Button variant="destructive" onClick={() => reload(conflict.key)}>
-                  Neu laden (Änderungen verwerfen)
+                  {t('config.saveDialog.reloadDiscardChanges')}
                 </Button>
               </DialogFooter>
             </>

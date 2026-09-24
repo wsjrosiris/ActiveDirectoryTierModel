@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { fieldLabel } from '@/lib/field-labels'
 import { cn } from '@/lib/utils'
 import type { EditorProps } from './editors'
+import { t } from '@/i18n'
 
 /* A generic, recursive form for any JSON-shaped object: every value gets a fitting input,
  * nested objects become collapsible fieldsets and arrays of objects a list of cards.
@@ -57,7 +58,7 @@ function itemTitle(item: Json, index: number): string {
     const firstString = Object.values(item).find((x) => typeof x === 'string' && x && x.length < 60)
     if (typeof firstString === 'string') return firstString
   }
-  return `Eintrag ${index + 1}`
+  return t('config.objectForm.entryValue', { value: index + 1 })
 }
 
 interface NodeProps {
@@ -84,7 +85,7 @@ function KeyLabel({ name, htmlFor }: { name: string; htmlFor?: string }) {
 function RemoveButton({ onRemove, label }: { onRemove?: () => void; label: string }) {
   if (!onRemove) return null
   return (
-    <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground hover:text-destructive" onClick={onRemove} aria-label={`${label} entfernen`}>
+    <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground hover:text-destructive" onClick={onRemove} aria-label={t('config.objectForm.removeLabel', { label })}>
       <Trash2 />
     </Button>
   )
@@ -171,7 +172,7 @@ function StringListField({ name, value, onChange, readOnly, id, onRemove }: Node
         options={options}
         disabled={readOnly}
         onChange={(next) => onChange(numeric ? next.map((x) => (Number.isNaN(Number(x)) ? x : Number(x))) : next)}
-        placeholder="Wert eingeben und mit Enter hinzufügen …"
+        placeholder={t('config.objectForm.enterAValueAndAdd')}
       />
     </div>
   )
@@ -232,7 +233,7 @@ function ObjectArrayField({ name, value, onChange, readOnly, depth, id, onRemove
       defaultOpen={depth < 2}
       actions={<RemoveButton onRemove={onRemove} label={label} />}
     >
-      {items.length === 0 && <p className="text-xs text-muted-foreground">Keine Einträge.</p>}
+      {items.length === 0 && <p className="text-xs text-muted-foreground">{t('config.objectForm.noEntries')}</p>}
       {items.map((item, i) => (
         <Collapsible
           key={i}
@@ -254,7 +255,7 @@ function ObjectArrayField({ name, value, onChange, readOnly, depth, id, onRemove
       ))}
       {!readOnly && (
         <Button type="button" variant="outline" size="sm" className="justify-self-start" onClick={add}>
-          <Plus /> Eintrag hinzufügen
+          <Plus /> {t('config.objectForm.addEntry')}
         </Button>
       )}
     </Collapsible>
@@ -270,7 +271,7 @@ function AddEntry({ onAdd, existing }: { onAdd: (key: string) => void; existing:
   if (!open)
     return (
       <Button type="button" variant="outline" size="sm" className="justify-self-start" onClick={() => setOpen(true)}>
-        <Plus /> Eintrag hinzufügen
+        <Plus /> {t('config.objectForm.addEntry')}
       </Button>
     )
   return (
@@ -279,7 +280,7 @@ function AddEntry({ onAdd, existing }: { onAdd: (key: string) => void; existing:
         autoFocus
         value={key}
         onChange={(e) => setKey(e.target.value)}
-        placeholder="Schlüssel, z. B. computer"
+        placeholder={t('config.objectForm.keyEGComputer')}
         className="h-8 max-w-60 font-mono text-[13px]"
         aria-invalid={dup || undefined}
         onKeyDown={(e) => {
@@ -290,9 +291,9 @@ function AddEntry({ onAdd, existing }: { onAdd: (key: string) => void; existing:
           if (e.key === 'Escape') setOpen(false)
         }}
       />
-      <Button type="button" size="sm" disabled={!k || dup} onClick={() => { onAdd(k); setKey(''); setOpen(false) }}>Hinzufügen</Button>
-      <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>Abbrechen</Button>
-      {dup && <span className="text-xs text-destructive">Schlüssel existiert bereits.</span>}
+      <Button type="button" size="sm" disabled={!k || dup} onClick={() => { onAdd(k); setKey(''); setOpen(false) }}>{t('common.add')}</Button>
+      <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>{t('common.cancel')}</Button>
+      {dup && <span className="text-xs text-destructive">{t('config.objectForm.keyAlreadyExists')}</span>}
     </div>
   )
 }
@@ -389,7 +390,7 @@ export function ObjectFields({
 export function ObjectFormEditor({ content, setContent, readOnly, sectionKey }: EditorProps) {
   if (!isPlainObject(content)) {
     return (
-      <Card className="p-5 text-sm text-muted-foreground">Diese Sektion enthält keine bearbeitbaren Felder.</Card>
+      <Card className="p-5 text-sm text-muted-foreground">{t('config.objectForm.thisSectionContainsNoEditable')}</Card>
     )
   }
   const entries = Object.entries(content)
@@ -401,7 +402,7 @@ export function ObjectFormEditor({ content, setContent, readOnly, sectionKey }: 
     <div className="grid gap-4">
       {Object.keys(simple).length > 0 && (
         <Card className="p-5">
-          <h3 className="mb-4 text-[13px] font-semibold">Allgemein</h3>
+          <h3 className="mb-4 text-[13px] font-semibold">{t('config.objectForm.general')}</h3>
           <ObjectFields
             value={simple}
             readOnly={readOnly}

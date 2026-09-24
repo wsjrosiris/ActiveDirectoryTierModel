@@ -19,10 +19,12 @@ import { SortableTH, Table, TBody, TD, TH, THead, TR, type SortDir } from '@/com
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { TierDot } from '@/components/shared/badges'
 import { matchesTierFilter, type Tier, type TierFilter } from '@/lib/tier'
-import { cn, formatNumber } from '@/lib/utils'
+import { cn, formatNumber, modKey } from '@/lib/utils'
 import { useHotkey } from '@/hooks/use-hotkey'
 import type { TierIssue } from '@/lib/tier-rules'
 import { TierRuleAlerts } from './tier-rule-alerts'
+import { t } from '@/i18n'
+import { rich } from '@/i18n/rich'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Item = Record<string, any>
@@ -140,19 +142,19 @@ export function ListEditor(props: ListEditorProps) {
   }
   async function remove(index: number) {
     const ok = await confirm({
-      title: `${entity.singular} löschen?`,
+      title: t('config.listEditor.deleteSingular', { singular: entity.singular }),
       description: (
         <>
-          <span className="font-medium text-foreground">{itemLabel(items[index])}</span> wird aus dem Entwurf entfernt. Die Änderung wird erst beim Speichern übernommen und kann mit {`Strg+Z`} rückgängig gemacht werden.
+          {rich(t('config.listEditor.removeDescription', { key: `${modKey}+Z` }), { item: <span className="font-medium text-foreground">{itemLabel(items[index])}</span> })}
         </>
       ),
-      confirmText: 'Löschen',
+      confirmText: t('common.delete'),
       destructive: true,
     })
     if (!ok) return
     const next = items.filter((_, i) => i !== index)
     onItemsChange(next)
-    toast(`${entity.singular} entfernt`, { description: itemLabel(items[index]) })
+    toast(t('config.listEditor.singularRemoved', { singular: entity.singular }), { description: itemLabel(items[index]) })
   }
 
   function submit() {
@@ -165,8 +167,8 @@ export function ListEditor(props: ListEditorProps) {
     // item by identity instead of trusting the index, and never overwrite a different entry.
     const index = editing.index === null ? null : items[editing.index] === editing.original ? editing.index : items.indexOf(editing.original!)
     if (index === -1) {
-      toast.error(`${entity.singular} wurde zwischenzeitlich geändert oder entfernt`, {
-        description: 'Die Bearbeitung wurde nicht übernommen. Bitte den Eintrag erneut öffnen.',
+      toast.error(t('config.listEditor.singularWasChangedOrRemoved', { singular: entity.singular }), {
+        description: t('config.listEditor.theEditWasNotApplied'),
       })
       setEditing(null)
       return
@@ -174,8 +176,8 @@ export function ListEditor(props: ListEditorProps) {
     if (index === null) next.push(editing.value)
     else next[index] = editing.value
     onItemsChange(next)
-    toast.success(editing.index === null ? `${entity.singular} hinzugefügt` : `${entity.singular} aktualisiert`, {
-      description: 'Im Entwurf – zum Übernehmen speichern.',
+    toast.success(editing.index === null ? t('config.listEditor.singularAdded', { singular: entity.singular }) : t('config.listEditor.singularUpdated', { singular: entity.singular }), {
+      description: t('config.listEditor.inTheDraftSaveTo'),
     })
     setEditing(null)
   }
@@ -193,26 +195,26 @@ export function ListEditor(props: ListEditorProps) {
             ref={searchRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={`${entity.plural} filtern …`}
+            placeholder={t('config.listEditor.filterPlural', { plural: entity.plural })}
             className="h-8 pr-8 pl-8 text-[13px]"
-            aria-label={`${entity.plural} filtern`}
+            aria-label={t('config.listEditor.filterPlural2', { plural: entity.plural })}
           />
           {search && (
-            <button type="button" onClick={() => setSearch('')} className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground" aria-label="Filter leeren">
+            <button type="button" onClick={() => setSearch('')} className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground" aria-label={t('config.listEditor.clearFilter')}>
               <X className="size-3.5" />
             </button>
           )}
         </div>
         <Segmented<TierFilter>
-          aria-label="Tier-Filter"
+          aria-label={t('config.listEditor.tierFilter')}
           value={tier}
           onValueChange={setTier}
           options={[
-            { value: 'all', label: 'Alle' },
+            { value: 'all', label: t('config.listEditor.all') },
             { value: '0', label: `T0 · ${tierCounts['0']}`, icon: <TierDot tier={0} /> },
             { value: '1', label: `T1 · ${tierCounts['1']}`, icon: <TierDot tier={1} /> },
             { value: '2', label: `T2 · ${tierCounts['2']}`, icon: <TierDot tier={2} /> },
-            { value: 'none', label: 'Sonstige' },
+            { value: 'none', label: t('config.listEditor.other') },
           ]}
           className="[&_button]:h-7 [&_button]:px-2.5 [&_button]:text-xs"
         />
@@ -220,7 +222,7 @@ export function ListEditor(props: ListEditorProps) {
           {props.toolbarExtra}
           {!readOnly && (
             <Button size="sm" onClick={openNew}>
-              <Plus /> {entity.singular} hinzufügen
+              <Plus /> {t('config.listEditor.addSingular', { singular: entity.singular })}
             </Button>
           )}
         </div>
@@ -234,23 +236,23 @@ export function ListEditor(props: ListEditorProps) {
             items.length === 0 ? (
               <EmptyState
                 icon={<Inbox />}
-                title={`Keine ${entity.plural} konfiguriert`}
-                description={readOnly ? undefined : `Legen Sie ${entity.article === 'den' ? 'den ersten' : entity.article === 'das' ? 'das erste' : 'die erste'} ${entity.singular} an.`}
-                action={!readOnly && <Button size="sm" onClick={openNew}><Plus /> {entity.singular} hinzufügen</Button>}
+                title={t('config.listEditor.noPluralConfigured', { plural: entity.plural })}
+                description={readOnly ? undefined : t(entity.article === 'den' ? 'config.listEditor.createFirstM' : entity.article === 'das' ? 'config.listEditor.createFirstN' : 'config.listEditor.createFirstF', { singular: entity.singular })}
+                action={!readOnly && <Button size="sm" onClick={openNew}><Plus /> {t('config.listEditor.addSingular', { singular: entity.singular })}</Button>}
               />
             ) : (
               <EmptyState
                 icon={<Search />}
-                title="Keine Treffer"
-                description="Passen Sie Suche oder Tier-Filter an."
-                action={<Button size="sm" variant="outline" onClick={() => { setSearch(''); setTier('all') }}>Filter zurücksetzen</Button>}
+                title={t('common.noMatches')}
+                description={t('config.listEditor.adjustTheSearchOrTier')}
+                action={<Button size="sm" variant="outline" onClick={() => { setSearch(''); setTier('all') }}>{t('config.listEditor.resetFilters')}</Button>}
               />
             )
           ) : (
             <Table>
               <THead>
                 <TR>
-                  <TH className="w-3 pr-0" aria-label="Tier" />
+                  <TH className="w-3 pr-0" aria-label={t('config.listEditor.tier')} />
                   {columns.map((c) =>
                     c.sortValue ? (
                       <SortableTH key={c.id} label={c.header} active={sort?.id === c.id} dir={sort?.dir ?? 'asc'} onClick={() => toggleSort(c.id)} className={c.className} />
@@ -258,7 +260,7 @@ export function ListEditor(props: ListEditorProps) {
                       <TH key={c.id} className={c.className}>{c.header}</TH>
                     ),
                   )}
-                  <TH className="w-10"><span className="sr-only">Aktionen</span></TH>
+                  <TH className="w-10"><span className="sr-only">{t('common.actions')}</span></TH>
                 </TR>
               </THead>
               <TBody>
@@ -291,9 +293,9 @@ export function ListEditor(props: ListEditorProps) {
           )}
           <div className="flex items-center justify-between border-t bg-muted/20 px-5 py-2 text-xs text-muted-foreground">
             <span>
-              {rows.length === items.length ? `${formatNumber(items.length)} ${entity.plural}` : `${formatNumber(rows.length)} von ${formatNumber(items.length)} ${entity.plural}`}
+              {rows.length === items.length ? `${formatNumber(items.length)} ${entity.plural}` : t('config.listEditor.filteredCount', { shown: formatNumber(rows.length), total: formatNumber(items.length), plural: entity.plural })}
             </span>
-            {!readOnly && <span className="hidden sm:inline">Zeile anklicken zum Bearbeiten · <kbd className="font-sans">N</kbd> für neu</span>}
+            {!readOnly && <span className="hidden sm:inline">{rich(t('config.listEditor.clickHint'), { key: <kbd className="font-sans">N</kbd> })}</span>}
           </div>
         </Card>
       )}
@@ -315,15 +317,15 @@ export function ListEditor(props: ListEditorProps) {
                     {readOnly
                       ? itemLabel(editing.value) || entity.singular
                       : editing.index === null
-                        ? `${entity.singular} hinzufügen`
-                        : `${entity.singular} bearbeiten`}
+                        ? t('config.listEditor.addSingular', { singular: entity.singular })
+                        : t('config.listEditor.editSingular', { singular: entity.singular })}
                   </SheetTitle>
                 </div>
                 <SheetDescription>
                   {readOnly
-                    ? 'Nur-Lese-Ansicht – Ihre Rolle erlaubt keine Änderungen.'
+                    ? t('config.listEditor.readOnlyViewYourRole')
                     : editing.index === null
-                      ? 'Neuer Eintrag im Entwurf. Wird erst beim Speichern der Sektion übernommen.'
+                      ? t('config.listEditor.newEntryInTheDraft')
                       : itemLabel(editing.original ?? editing.value)}
                 </SheetDescription>
               </SheetHeader>
@@ -341,15 +343,15 @@ export function ListEditor(props: ListEditorProps) {
               </SheetBody>
               <SheetFooter>
                 {readOnly ? (
-                  <Button type="button" variant="outline" onClick={() => setEditing(null)}>Schließen</Button>
+                  <Button type="button" variant="outline" onClick={() => setEditing(null)}>{t('common.close')}</Button>
                 ) : (
                   <>
                     {Object.keys(errors).length > 0 && (
-                      <span className="mr-auto text-xs text-destructive">Bitte markierte Felder prüfen.</span>
+                      <span className="mr-auto text-xs text-destructive">{t('config.listEditor.pleaseCheckTheMarkedFields')}</span>
                     )}
-                    <Button type="button" variant="outline" onClick={() => setEditing(null)}>Abbrechen</Button>
+                    <Button type="button" variant="outline" onClick={() => setEditing(null)}>{t('common.cancel')}</Button>
                     <Button type="submit" disabled={editing.index !== null && !changed}>
-                      {editing.index === null ? 'Hinzufügen' : 'Übernehmen'}
+                      {editing.index === null ? t('common.add') : t('config.listEditor.apply')}
                     </Button>
                   </>
                 )}
@@ -382,14 +384,14 @@ function RowMenu({
           variant="ghost"
           size="icon-xs"
           className={cn('text-muted-foreground opacity-60 group-hover:opacity-100 data-[state=open]:opacity-100')}
-          aria-label="Aktionen"
+          aria-label={t('common.actions')}
         >
           <MoreHorizontal />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onSelect={onEdit}>
-          {readOnly ? <><Eye /> Anzeigen</> : <><Pencil /> Bearbeiten</>}
+          {readOnly ? <><Eye /> {t('config.listEditor.view')}</> : <><Pencil /> {t('common.edit')}</>}
         </DropdownMenuItem>
         {!readOnly && (
           <>
@@ -399,11 +401,11 @@ function RowMenu({
               </DropdownMenuItem>
             ))}
             <DropdownMenuItem onSelect={onDuplicate}>
-              <Copy /> Duplizieren
+              <Copy /> {t('config.listEditor.duplicate')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={onDelete} destructive>
-              <Trash2 /> Löschen
+              <Trash2 /> {t('common.delete')}
             </DropdownMenuItem>
           </>
         )}

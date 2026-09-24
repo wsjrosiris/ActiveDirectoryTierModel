@@ -323,7 +323,7 @@ function ScheduleSheet({ value, onClose }: { value: Schedule | 'new' | 'new-moni
     kind,
     // Switching a new schedule also switches the suggested defaults.
     cron: isNew && f.cron === (kind === 'Monitor' ? '0 2 * * *' : MONITOR_CRON) ? (kind === 'Monitor' ? MONITOR_CRON : '0 2 * * *') : f.cron,
-    name: isNew && (f.name === '' || f.name === 'Überwachung privilegierter Gruppen') ? (kind === 'Monitor' ? t('runs.audits.privilegedGroupMonitoring') : '') : f.name,
+    name: isNew && (f.name === '' || f.name === t('runs.audits.privilegedGroupMonitoring')) ? (kind === 'Monitor' ? t('runs.audits.privilegedGroupMonitoring') : '') : f.name,
   }))
 
   // Settings may arrive after the sheet opened.

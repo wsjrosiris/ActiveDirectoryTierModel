@@ -213,8 +213,8 @@ function LinkedPlanSummary({ planRunId }: { planRunId: number }) {
 /** Points the approver to the most recent planning run before this request. */
 function LatestPlanHint({ run }: { run: RunDetail }) {
   const q = useQuery({
-    queryKey: ['runs', { kind: t('runs.approvalPanel.deployment'), page: 1, pageSize: 50 }],
-    queryFn: () => api.runs.list({ kind: t('runs.approvalPanel.deployment'), page: 1, pageSize: 50 }),
+    queryKey: ['runs', { kind: 'Deploy', page: 1, pageSize: 50 }],
+    queryFn: () => api.runs.list({ kind: 'Deploy', page: 1, pageSize: 50 }),
     meta: { silent: true },
   })
   const plan = q.data?.items.find((r) => r.mode === 'Plan' && r.id < run.id)

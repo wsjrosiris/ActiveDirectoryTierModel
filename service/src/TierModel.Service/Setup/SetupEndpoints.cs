@@ -5,6 +5,7 @@ using TierModel.Service.Config;
 using TierModel.Service.Data;
 using TierModel.Service.AdView;
 using TierModel.Service;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Setup;
 
@@ -18,10 +19,10 @@ public static class GpoPrefix
 
     public static string? ValidatePrefix(string? prefix)
     {
-        if (string.IsNullOrWhiteSpace(prefix)) return "Bitte ein Präfix angeben.";
+        if (string.IsNullOrWhiteSpace(prefix)) return L.T("Bitte ein Präfix angeben.");
         var p = prefix.Trim();
-        if (p.Length > 20) return "Höchstens 20 Zeichen.";
-        if (p.IndexOfAny(Forbidden) >= 0 || p.Any(char.IsControl)) return "Nicht erlaubt sind \\ / : * ? \" < > |.";
+        if (p.Length > 20) return L.T("Höchstens 20 Zeichen.");
+        if (p.IndexOfAny(Forbidden) >= 0 || p.Any(char.IsControl)) return L.T("Nicht erlaubt sind \\ / : * ? \" < > |.");
         return null;
     }
 
@@ -123,7 +124,7 @@ public static class SetupEndpoints
         {
             var value = new CompletedValue(true, ctx.User.UserName(), DateTimeOffset.UtcNow, r?.Skipped == true);
             await settings.SetValueAsync(CompletedKeyFor(domain.Id), System.Text.Json.JsonSerializer.Serialize(value, System.Text.Json.JsonSerializerOptions.Web));
-            log.Add(ctx.User.UserName(), "setup.complete", "settings", null, r?.Skipped == true ? "Einrichtungsassistent übersprungen" : "Einrichtung abgeschlossen");
+            log.Add(ctx.User.UserName(), "setup.complete", "settings", null, r?.Skipped == true ? L.P("Einrichtungsassistent übersprungen") : L.P("Einrichtung abgeschlossen"));
             await db.SaveChangesAsync();
             return Results.NoContent();
         });

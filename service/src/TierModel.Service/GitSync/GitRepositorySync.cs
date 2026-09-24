@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using LibGit2Sharp;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.GitSync;
 
@@ -38,7 +39,7 @@ public sealed partial class GitRepositorySync : IDisposable
     {
         _path = localPath;
         _o = options;
-        _configDir = NormalizeRepoPath(configDir) ?? throw new GitSyncException("Ungültiger Pfad im Repository.");
+        _configDir = NormalizeRepoPath(configDir) ?? throw new GitSyncException(L.P("Ungültiger Pfad im Repository."));
         _domainRoots = (domainRoots ?? []).Where(r => NormalizeRepoPath(r) is { } n && !n.Contains('/')).Distinct(StringComparer.Ordinal).ToList();
     }
 
@@ -69,11 +70,11 @@ public sealed partial class GitRepositorySync : IDisposable
     public static string? UrlError(string? url, bool allowFileUrls)
     {
         if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url.Trim(), UriKind.Absolute, out var u))
-            return "Vollständige https-Adresse des Repositorys angeben, z. B. https://git.contoso.com/it/tiermodel-config.git";
+            return L.T("Vollständige https-Adresse des Repositorys angeben, z. B. https://git.contoso.com/it/tiermodel-config.git");
         if (u.Scheme == Uri.UriSchemeFile && allowFileUrls) return null;
-        if (u.Scheme != Uri.UriSchemeHttps) return "Nur https-Adressen sind erlaubt.";
-        if (!string.IsNullOrEmpty(u.UserInfo)) return "Zugangsdaten nicht in die Adresse schreiben, sondern in die Felder Benutzername und Token.";
-        if (!string.IsNullOrEmpty(u.Query) || !string.IsNullOrEmpty(u.Fragment)) return "Die Adresse darf keine Parameter enthalten.";
+        if (u.Scheme != Uri.UriSchemeHttps) return L.T("Nur https-Adressen sind erlaubt.");
+        if (!string.IsNullOrEmpty(u.UserInfo)) return L.T("Zugangsdaten nicht in die Adresse schreiben, sondern in die Felder Benutzername und Token.");
+        if (!string.IsNullOrEmpty(u.Query) || !string.IsNullOrEmpty(u.Fragment)) return L.T("Die Adresse darf keine Parameter enthalten.");
         return null;
     }
 
@@ -138,7 +139,7 @@ public sealed partial class GitRepositorySync : IDisposable
         }
         catch (LibGit2SharpException ex)
         {
-            throw new GitSyncException($"Abrufen fehlgeschlagen: {Redact(ex)}");
+            throw new GitSyncException(L.PF("Abrufen fehlgeschlagen: {0}", Redact(ex)));
         }
     }
 
@@ -245,7 +246,7 @@ public sealed partial class GitRepositorySync : IDisposable
         {
             var full = Path.GetFullPath(Path.Combine(_path, f.Path));
             if (!full.StartsWith(Path.GetFullPath(_path) + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-                throw new GitSyncException($"Unzulässiger Pfad: {f.Path}");
+                throw new GitSyncException(L.PF("Unzulässiger Pfad: {0}", f.Path));
             Directory.CreateDirectory(Path.GetDirectoryName(full)!);
             File.WriteAllBytes(full, Encoding.UTF8.GetBytes(f.Content));
             paths.Add(f.Path);
@@ -274,7 +275,7 @@ public sealed partial class GitRepositorySync : IDisposable
             if (ok) return new GitPushResult(GitPushOutcome.Pushed);
             if (!rejected || attempt > 0) return new GitPushResult(rejected ? GitPushOutcome.Conflict : GitPushOutcome.Failed, error);
             Fetch();
-            if (!CatchUp()) return new GitPushResult(GitPushOutcome.Conflict, "Die Gegenstelle enthält abweichende Änderungen an der Konfiguration.");
+            if (!CatchUp()) return new GitPushResult(GitPushOutcome.Conflict, L.P("Die Gegenstelle enthält abweichende Änderungen an der Konfiguration."));
         }
     }
 
@@ -292,14 +293,14 @@ public sealed partial class GitRepositorySync : IDisposable
         }
         catch (NonFastForwardException)
         {
-            return (false, true, "Push abgelehnt (nicht vorspulbar).");
+            return (false, true, L.P("Push abgelehnt (nicht vorspulbar)."));
         }
         catch (LibGit2SharpException ex)
         {
             var msg = Redact(ex);
-            return (false, IsRejection(msg), $"Push fehlgeschlagen: {msg}");
+            return (false, IsRejection(msg), L.PF("Push fehlgeschlagen: {0}", msg));
         }
-        if (statusError is not null) return (false, IsRejection(statusError), $"Push abgelehnt: {Redact(statusError, _o.Password)}");
+        if (statusError is not null) return (false, IsRejection(statusError), L.PF("Push abgelehnt: {0}", Redact(statusError, _o.Password)));
         // Remember what the remote has now, so AheadCount is 0.
         if (LocalTip() is { } tip) Repo.Refs.Add($"refs/remotes/{RemoteName}/{_o.Branch}", tip.Id, "push", allowOverwrite: true);
         return (true, false, null);

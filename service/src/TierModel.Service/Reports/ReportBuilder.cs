@@ -5,6 +5,7 @@ using TierModel.Service.Config;
 using TierModel.Service.Data;
 using TierModel.Service.Monitoring;
 using TierModel.Service.Runs;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Reports;
 
@@ -19,29 +20,36 @@ public class ReportBuilder(AppDbContext db, SettingsService settings, Domains.Do
 
     private static readonly CultureInfo De = CultureInfo.GetCultureInfo("de-DE");
 
-    public static string Date(DateTimeOffset d) => d.ToLocalTime().ToString("dd.MM.yyyy", De);
-    public static string DateTime(DateTimeOffset d) => d.ToLocalTime().ToString("dd.MM.yyyy HH:mm", De);
+    /// <summary>Dates in the report language (request language, or the instance default for scheduled e-mails).</summary>
+    private static CultureInfo DateCulture => L.Language == L.EnglishCode ? L.EnglishCulture : De;
+    public static string Date(DateTimeOffset d) => d.ToLocalTime().ToString(L.DateFormat, DateCulture);
+    public static string DateTime(DateTimeOffset d) => d.ToLocalTime().ToString(L.DateTimeFormat, DateCulture);
     public static string DateTime(DateTimeOffset? d) => d is { } v ? DateTime(v) : "–";
 
-    public static readonly IReadOnlyDictionary<string, string> AreaLabels = new Dictionary<string, string>
+    private static readonly IReadOnlySet<string> Areas = new HashSet<string> { "ous", "groups", "users", "acls", "gpos", "admx", "msa", "gmsa", "dmsa", "winlaps", "authsilos" };
+
+    public static string? AreaLabel(string area) => area switch
     {
-        ["ous"] = "OUs", ["groups"] = "Gruppen", ["users"] = "Benutzer", ["acls"] = "OU-ACLs", ["gpos"] = "GPOs", ["admx"] = "ADMX",
-        ["msa"] = "MSA", ["gmsa"] = "gMSA", ["dmsa"] = "dMSA", ["winlaps"] = "Windows LAPS", ["authsilos"] = "Authentication Silos",
+        "ous" => "OUs", "groups" => L.T("Gruppen"), "users" => L.TC("section", "Benutzer"), "acls" => "OU-ACLs", "gpos" => "GPOs", "admx" => "ADMX",
+        "msa" => "MSA", "gmsa" => "gMSA", "dmsa" => "dMSA", "winlaps" => "Windows LAPS", "authsilos" => L.TC("section", "Authentication Silos"),
+        _ => null,
     };
 
-    private static readonly IReadOnlyDictionary<string, string> FindingTypes = new Dictionary<string, string>
+    private static string? FindingType(string type) => type switch
     {
-        ["Missing"] = "Fehlend", ["Unexpected"] = "Unerwartet", ["Mismatch"] = "Abweichung", ["Error"] = "Fehler",
+        "Missing" => L.T("Fehlend"), "Unexpected" => L.T("Unerwartet"), "Mismatch" => L.T("Abweichung"), "Error" => L.T("Fehler"),
+        _ => null,
     };
 
-    public static readonly IReadOnlyDictionary<RunStatus, string> StatusLabels = new Dictionary<RunStatus, string>
+    public static string? StatusText(RunStatus s) => s switch
     {
-        [RunStatus.Queued] = "In Warteschlange", [RunStatus.Running] = "Läuft", [RunStatus.Succeeded] = "Erfolgreich",
-        [RunStatus.Failed] = "Fehlgeschlagen", [RunStatus.Cancelled] = "Abgebrochen", [RunStatus.AwaitingApproval] = "Wartet auf Freigabe",
-        [RunStatus.Rejected] = "Abgelehnt",
+        RunStatus.Queued => L.T("In Warteschlange"), RunStatus.Running => L.T("Läuft"), RunStatus.Succeeded => L.T("Erfolgreich"),
+        RunStatus.Failed => L.T("Fehlgeschlagen"), RunStatus.Cancelled => L.T("Abgebrochen"), RunStatus.AwaitingApproval => L.T("Wartet auf Freigabe"),
+        RunStatus.Rejected => L.T("Abgelehnt"),
+        _ => null,
     };
 
-    public static string Severity(string? s) => ComplianceCalculator.NormalizeSeverity(s) switch { "High" => "Hoch", "Low" => "Niedrig", _ => "Mittel" };
+    public static string Severity(string? s) => ComplianceCalculator.NormalizeSeverity(s) switch { "High" => L.T("Hoch"), "Low" => L.T("Niedrig"), _ => L.T("Mittel") };
 
     public static Tone SeverityTone(string? s) => ComplianceCalculator.NormalizeSeverity(s) switch { "High" => Tone.Danger, "Low" => Tone.Muted, _ => Tone.Warning };
 
@@ -49,7 +57,7 @@ public class ReportBuilder(AppDbContext db, SettingsService settings, Domains.Do
 
     public static Tone ScoreTone(int? score) => score switch { null => Tone.Muted, >= 90 => Tone.Success, >= 70 => Tone.Warning, _ => Tone.Danger };
 
-    public static string StatusLabel(RunStatus s) => StatusLabels.GetValueOrDefault(s) ?? (s.ToString() == "Scheduled" ? "Geplant" : s.ToString());
+    public static string StatusLabel(RunStatus s) => StatusText(s) ?? (s.ToString() == "Scheduled" ? L.T("Geplant") : s.ToString());
 
     private static Tone StatusTone(RunStatus s) => s switch
     {
@@ -81,13 +89,13 @@ public class ReportBuilder(AppDbContext db, SettingsService settings, Domains.Do
         var s = await settings.GetAsync(ct);
         var instance = string.IsNullOrWhiteSpace(s.PublicBaseUrl) ? Environment.MachineName : s.PublicBaseUrl;
         // Several domains: the report names the one it covers.
-        if (domains.Multiple) instance = $"{instance} · Domäne {domain.Label}";
+        if (domains.Multiple) instance = L.F("{0} · Domäne {1}", instance, domain.Label);
         var compliance = await PrivilegedEndpoints.ComplianceAsync(db, now, DomainId, ct);
         var scores = ComplianceCalculator.Tiers.Select(tier =>
         {
             var c = compliance.Current?.FirstOrDefault(x => x.Tier == tier);
             return new ReportScore($"Tier {tier}", c?.Score,
-                c is null ? "keine Daten" : c.Deductions.Count == 0 ? "keine Abzüge" : $"{c.Deductions.Sum(d => d.Points)} Punkte Abzug");
+                c is null ? L.T("keine Daten") : c.Deductions.Count == 0 ? L.T("keine Abzüge") : L.F("{0} Punkte Abzug", c.Deductions.Sum(d => d.Points)));
         }).ToList();
 
         var doc = type switch
@@ -95,7 +103,7 @@ public class ReportBuilder(AppDbContext db, SettingsService settings, Domains.Do
             ReportTypes.SollIst => await SollIstAsync(end, ct),
             ReportTypes.Changes => await ChangesAsync(start, end, ct),
             ReportTypes.Privileged => await PrivilegedAsync(start, end, compliance, ct),
-            _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unbekannter Berichtstyp."),
+            _ => throw new ArgumentOutOfRangeException(nameof(type), type, L.T("Unbekannter Berichtstyp.")),
         };
         return doc with
         {
@@ -115,10 +123,10 @@ public class ReportBuilder(AppDbContext db, SettingsService settings, Domains.Do
         var audit = await db.Runs.AsNoTracking()
             .Where(r => r.DomainId == domainId && r.Kind == RunKind.Audit && r.Status == RunStatus.Succeeded && r.CreatedAt < end)
             .OrderByDescending(r => r.Id).FirstOrDefaultAsync(ct);
-        const string subtitle = "Abgleich der Soll-Konfiguration mit dem Active Directory (letztes Audit)";
+        var subtitle = L.T("Abgleich der Soll-Konfiguration mit dem Active Directory (letztes Audit)");
         if (audit is null)
-            return Empty(subtitle, "Kein erfolgreiches Audit vorhanden", [],
-                [new ReportSection("Zusammenfassung", null, [new ReportParagraph("Bis zum Enddatum wurde kein Audit erfolgreich abgeschlossen. Bitte zuerst ein Audit starten.", Tone.Warning)])]);
+            return Empty(subtitle, L.T("Kein erfolgreiches Audit vorhanden"), [],
+                [new ReportSection(L.T("Zusammenfassung"), null, [new ReportParagraph(L.T("Bis zum Enddatum wurde kein Audit erfolgreich abgeschlossen. Bitte zuerst ein Audit starten."), Tone.Warning)])]);
 
         var summary = audit.Summary is null ? null : JsonNode.Parse(audit.Summary) as JsonObject;
         var findings = (audit.Findings is null ? null : JsonNode.Parse(audit.Findings) as JsonArray)?.OfType<JsonObject>().ToList() ?? [];
@@ -130,53 +138,53 @@ public class ReportBuilder(AppDbContext db, SettingsService settings, Domains.Do
             JsonArray a => string.Join(", ", a.Select(x => x?.ToString())),
             _ => null,
         };
-        string Area(JsonObject f) => Str(f, "area") is { } a && AreaLabels.ContainsKey(a) ? a : "other";
+        string Area(JsonObject f) => Str(f, "area") is { } a && Areas.Contains(a) ? a : "other";
 
         var drift = audit.DriftCount ?? findings.Count;
         var highlights = new List<ReportStat>
         {
-            new("Geprüfte Objekte", Num("totalChecked")?.ToString(De) ?? "–"),
-            new("Abweichungen", drift.ToString(De), drift > 0 ? Tone.Danger : Tone.Success),
-            new("Hoch", findings.Count(f => SeverityRank(Str(f, "severity")) == 0).ToString(De), Tone.Danger),
-            new("Mittel", findings.Count(f => SeverityRank(Str(f, "severity")) == 1).ToString(De), Tone.Warning),
-            new("Niedrig", findings.Count(f => SeverityRank(Str(f, "severity")) == 2).ToString(De), Tone.Muted),
+            new(L.T("Geprüfte Objekte"), Num("totalChecked")?.ToString(De) ?? "–"),
+            new(L.T("Abweichungen"), drift.ToString(De), drift > 0 ? Tone.Danger : Tone.Success),
+            new(L.T("Hoch"), findings.Count(f => SeverityRank(Str(f, "severity")) == 0).ToString(De), Tone.Danger),
+            new(L.T("Mittel"), findings.Count(f => SeverityRank(Str(f, "severity")) == 1).ToString(De), Tone.Warning),
+            new(L.T("Niedrig"), findings.Count(f => SeverityRank(Str(f, "severity")) == 2).ToString(De), Tone.Muted),
         };
 
         var sections = new List<ReportSection>
         {
-            new("Zusammenfassung", null,
+            new(L.T("Zusammenfassung"), null,
             [
                 new ReportKeyValues(
                 [
-                    new("Audit", $"#{audit.Id} vom {DateTime(audit.FinishedAt ?? audit.CreatedAt)}"),
-                    new("Bereich", ScopeLabel(audit)),
-                    new("Domänencontroller", audit.PreferredDc),
-                    new("Angefordert von", audit.RequestedBy + (audit.Trigger == RunTrigger.Schedule ? " (Zeitplan)" : "")),
+                    new("Audit", L.F("#{0} vom {1}", audit.Id, DateTime(audit.FinishedAt ?? audit.CreatedAt))),
+                    new(L.T("Bereich"), ScopeLabel(audit)),
+                    new(L.T("Domänencontroller"), audit.PreferredDc),
+                    new(L.T("Angefordert von"), audit.RequestedBy + (audit.Trigger == RunTrigger.Schedule ? L.T(" (Zeitplan)") : "")),
                 ]),
                 new ReportStats(
                 [
-                    new("Fehlend", (Num("missingCount") ?? 0).ToString(De), Num("missingCount") > 0 ? Tone.Warning : Tone.Default),
-                    new("Unerwartet", (Num("unexpectedCount") ?? 0).ToString(De), Num("unexpectedCount") > 0 ? Tone.Warning : Tone.Default),
-                    new("Abweichend", (Num("mismatchCount") ?? 0).ToString(De), Num("mismatchCount") > 0 ? Tone.Warning : Tone.Default),
-                    new("Verwaiste GPO-Links", (Num("orphanedGpoLinkCount") ?? 0).ToString(De)),
-                    new("Sicherheitsabweichungen", (Num("securityDeltaCount") ?? 0).ToString(De)),
+                    new(L.T("Fehlend"), (Num("missingCount") ?? 0).ToString(De), Num("missingCount") > 0 ? Tone.Warning : Tone.Default),
+                    new(L.T("Unerwartet"), (Num("unexpectedCount") ?? 0).ToString(De), Num("unexpectedCount") > 0 ? Tone.Warning : Tone.Default),
+                    new(L.T("Abweichend"), (Num("mismatchCount") ?? 0).ToString(De), Num("mismatchCount") > 0 ? Tone.Warning : Tone.Default),
+                    new(L.T("Verwaiste GPO-Links"), (Num("orphanedGpoLinkCount") ?? 0).ToString(De)),
+                    new(L.T("Sicherheitsabweichungen"), (Num("securityDeltaCount") ?? 0).ToString(De)),
                 ]),
                 drift == 0
-                    ? new ReportParagraph("Das Active Directory entspricht der Soll-Konfiguration – es wurden keine Abweichungen gefunden.", Tone.Success)
-                    : new ReportParagraph($"Das Audit hat {drift} Abweichung(en) gefunden. Die folgenden Abschnitte listen sie nach Bereich und Schweregrad.", Tone.Warning),
+                    ? new ReportParagraph(L.T("Das Active Directory entspricht der Soll-Konfiguration – es wurden keine Abweichungen gefunden."), Tone.Success)
+                    : new ReportParagraph(L.F("Das Audit hat {0} Abweichung(en) gefunden. Die folgenden Abschnitte listen sie nach Bereich und Schweregrad.", drift), Tone.Warning),
             ]),
         };
 
         if (findings.Count > 0)
         {
             var byArea = findings.GroupBy(Area).OrderBy(g => g.Min(f => SeverityRank(Str(f, "severity")))).ThenByDescending(g => g.Count()).ToList();
-            sections.Add(new ReportSection("Befunde nach Bereich und Schweregrad", null,
+            sections.Add(new ReportSection(L.T("Befunde nach Bereich und Schweregrad"), null,
             [
                 new ReportTable(
-                    [new("Bereich", 3), new("Hoch", 1), new("Mittel", 1), new("Niedrig", 1), new("Gesamt", 1)],
+                    [new(L.T("Bereich"), 3), new(L.T("Hoch"), 1), new(L.T("Mittel"), 1), new(L.T("Niedrig"), 1), new(L.T("Gesamt"), 1)],
                     byArea.Select(g => new List<ReportCell>
                     {
-                        AreaLabels.GetValueOrDefault(g.Key) ?? "Sonstige",
+                        AreaLabel(g.Key) ?? L.T("Sonstige"),
                         Count(g.Count(f => SeverityRank(Str(f, "severity")) == 0), Tone.Danger),
                         Count(g.Count(f => SeverityRank(Str(f, "severity")) == 1), Tone.Warning),
                         Count(g.Count(f => SeverityRank(Str(f, "severity")) == 2), Tone.Muted),
@@ -192,20 +200,20 @@ public class ReportBuilder(AppDbContext db, SettingsService settings, Domains.Do
                     return new List<ReportCell>
                     {
                         new(Severity(Str(f, "severity")), SeverityTone(Str(f, "severity")), Badge: true),
-                        FindingTypes.GetValueOrDefault(Str(f, "type") ?? "") ?? Str(f, "type") ?? "–",
+                        FindingType(Str(f, "type") ?? "") ?? Str(f, "type") ?? "–",
                         new(Str(f, "identifier") ?? "–", Sub: Str(f, "resourceType")),
                         new(Str(f, "details") ?? Str(f, "property") ?? "–",
-                            Sub: expected is null && actual is null ? null : $"Soll: {expected ?? "–"} · Ist: {actual ?? "–"}"),
+                            Sub: expected is null && actual is null ? null : L.F("Soll: {0} · Ist: {1}", expected ?? "–", actual ?? "–")),
                     };
                 }).ToList();
-                sections.Add(new ReportSection($"{AreaLabels.GetValueOrDefault(g.Key) ?? "Sonstige"} ({g.Count()})", null,
+                sections.Add(new ReportSection($"{AreaLabel(g.Key) ?? L.T("Sonstige")} ({g.Count()})", null,
                 [
-                    new ReportTable([new("Schwere", 1.1), new("Art", 1.2), new("Objekt", 4, Mono: true), new("Befund", 4.5)], rows,
-                        Note: g.Count() > MaxRows ? $"Nur die ersten {MaxRows} von {g.Count()} Befunden." : null),
+                    new ReportTable([new(L.T("Schwere"), 1.1), new(L.T("Art"), 1.2), new(L.T("Objekt"), 4, Mono: true), new(L.T("Befund"), 4.5)], rows,
+                        Note: g.Count() > MaxRows ? L.F("Nur die ersten {0} von {1} Befunden.", MaxRows, g.Count()) : null),
                 ]));
             }
         }
-        return Empty(subtitle, $"Audit #{audit.Id} vom {DateTime(audit.FinishedAt ?? audit.CreatedAt)}", highlights, sections);
+        return Empty(subtitle, L.F("Audit #{0} vom {1}", audit.Id, DateTime(audit.FinishedAt ?? audit.CreatedAt)), highlights, sections);
     }
 
     private static ReportCell Count(int n, Tone tone) => n == 0 ? new ReportCell("–", Tone.Muted) : new ReportCell(n.ToString(De), tone);
@@ -214,15 +222,15 @@ public class ReportBuilder(AppDbContext db, SettingsService settings, Domains.Do
     {
         var scope = r.Scope switch
         {
-            DeployScope.FullDeployment => "Vollständig",
-            DeployScope.OuOnly => "Nur OUs",
-            DeployScope.GroupOnly => "Nur Gruppen",
-            DeployScope.UserOnly => "Nur Benutzer",
-            DeployScope.GposOnly => "Nur GPOs",
-            DeployScope.OuAclsOnly => "Nur OU-ACLs",
-            DeployScope.AdmxOnly => "Nur ADMX",
-            DeployScope.AuthSilosOnly => "Nur Authentication Silos",
-            _ => r.Kind == RunKind.Monitor ? "Privilegierte Gruppen" : "–",
+            DeployScope.FullDeployment => L.T("Vollständig"),
+            DeployScope.OuOnly => L.T("Nur OUs"),
+            DeployScope.GroupOnly => L.T("Nur Gruppen"),
+            DeployScope.UserOnly => L.T("Nur Benutzer"),
+            DeployScope.GposOnly => L.T("Nur GPOs"),
+            DeployScope.OuAclsOnly => L.T("Nur OU-ACLs"),
+            DeployScope.AdmxOnly => L.T("Nur ADMX"),
+            DeployScope.AuthSilosOnly => L.T("Nur Authentication Silos"),
+            _ => r.Kind == RunKind.Monitor ? L.T("Privilegierte Gruppen") : "–",
         };
         var includes = RunSummaryDto.IncludeList(r.IncludeMsa, r.IncludeGmsa, r.IncludeDmsa, r.IncludeWinLaps);
         return includes.Length == 0 ? scope : $"{scope} + {string.Join(", ", includes.Select(i => i switch { "Msa" => "MSA", "Gmsa" => "gMSA", "Dmsa" => "dMSA", "WinLaps" => "Windows LAPS", _ => i }))}";
@@ -246,87 +254,87 @@ public class ReportBuilder(AppDbContext db, SettingsService settings, Domains.Do
         var failed = runs.Count(r => r.Status == RunStatus.Failed);
         var highlights = new List<ReportStat>
         {
-            new("Konfigurationsversionen", versions.Count.ToString(De), versions.Count > 0 ? Tone.Info : Tone.Default),
-            new("Läufe", runs.Count.ToString(De)),
-            new("Anwendungen", applies.ToString(De), applies > 0 ? Tone.Warning : Tone.Default),
-            new("Freigabeentscheidungen", approvals.Count.ToString(De)),
-            new("Protokolleinträge", changeCount.ToString(De)),
+            new(L.T("Konfigurationsversionen"), versions.Count.ToString(De), versions.Count > 0 ? Tone.Info : Tone.Default),
+            new(L.T("Läufe"), runs.Count.ToString(De)),
+            new(L.T("Anwendungen"), applies.ToString(De), applies > 0 ? Tone.Warning : Tone.Default),
+            new(L.T("Freigabeentscheidungen"), approvals.Count.ToString(De)),
+            new(L.T("Protokolleinträge"), changeCount.ToString(De)),
         };
 
         var sections = new List<ReportSection>
         {
-            new("Übersicht", null,
+            new(L.T("Übersicht"), null,
             [
                 new ReportStats(
                 [
                     new("Audits", runs.Count(r => r.Kind == RunKind.Audit).ToString(De)),
-                    new("Planungen", runs.Count(r => r.Kind == RunKind.Deploy && r.Mode != RunMode.Apply).ToString(De)),
-                    new("Anwendungen", applies.ToString(De)),
-                    new("Überwachungen", runs.Count(r => r.Kind == RunKind.Monitor).ToString(De)),
-                    new("Fehlgeschlagen", failed.ToString(De), failed > 0 ? Tone.Danger : Tone.Default),
+                    new(L.T("Planungen"), runs.Count(r => r.Kind == RunKind.Deploy && r.Mode != RunMode.Apply).ToString(De)),
+                    new(L.T("Anwendungen"), applies.ToString(De)),
+                    new(L.T("Überwachungen"), runs.Count(r => r.Kind == RunKind.Monitor).ToString(De)),
+                    new(L.T("Fehlgeschlagen"), failed.ToString(De), failed > 0 ? Tone.Danger : Tone.Default),
                 ]),
             ]),
-            new("Konfigurationsänderungen", "Jede gespeicherte Version der Soll-Konfiguration mit dem Kommentar der Person, die sie gespeichert hat.",
+            new(L.T("Konfigurationsänderungen"), L.T("Jede gespeicherte Version der Soll-Konfiguration mit dem Kommentar der Person, die sie gespeichert hat."),
             [
-                new ReportTable([new("Zeitpunkt", 1.6), new("Bereich", 2), new("Version", 0.9), new("Von", 1.6), new("Kommentar", 4)],
+                new ReportTable([new(L.T("Zeitpunkt"), 1.6), new(L.T("Bereich"), 2), new(L.T("Version"), 0.9), new(L.T("Von"), 1.6), new(L.T("Kommentar"), 4)],
                     versions.Take(MaxRows).Select(v => new List<ReportCell>
                     {
                         DateTime(v.CreatedAt), ConfigCatalog.Find(v.SectionKey)?.Title ?? v.SectionKey, $"v{v.Version}", v.CreatedBy,
-                        string.IsNullOrWhiteSpace(v.Comment) ? new ReportCell("ohne Kommentar", Tone.Muted) : new ReportCell(v.Comment!),
-                    }).ToList(), "Im Zeitraum wurde die Konfiguration nicht geändert."),
+                        string.IsNullOrWhiteSpace(v.Comment) ? new ReportCell(L.T("ohne Kommentar"), Tone.Muted) : new ReportCell(v.Comment!),
+                    }).ToList(), L.T("Im Zeitraum wurde die Konfiguration nicht geändert.")),
             ]),
-            new("Läufe", null,
+            new(L.T("Läufe"), null,
             [
-                new ReportTable([new("Lauf", 0.8), new("Art", 1.6), new("Status", 1.4), new("Angefordert", 2.2), new("Ergebnis", 4)],
+                new ReportTable([new(L.T("Lauf"), 0.8), new(L.T("Art"), 1.6), new("Status", 1.4), new(L.T("Angefordert"), 2.2), new(L.T("Ergebnis"), 4)],
                     runs.Take(MaxRows).Select(r => new List<ReportCell>
                     {
                         $"#{r.Id}", new(RunService.RunTitle(r), Sub: ScopeLabel(r)),
                         new(StatusLabel(r.Status), StatusTone(r.Status), Badge: true),
-                        new(r.RequestedBy + (r.Trigger == RunTrigger.Schedule ? " (Zeitplan)" : ""), Sub: DateTime(r.CreatedAt)),
+                        new(r.RequestedBy + (r.Trigger == RunTrigger.Schedule ? L.T(" (Zeitplan)") : ""), Sub: DateTime(r.CreatedAt)),
                         r.Message ?? "–",
-                    }).ToList(), "Im Zeitraum gab es keine Läufe.", runs.Count > MaxRows ? $"Nur die neuesten {MaxRows} von {runs.Count} Läufen." : null),
+                    }).ToList(), L.T("Im Zeitraum gab es keine Läufe."), runs.Count > MaxRows ? L.F("Nur die neuesten {0} von {1} Läufen.", MaxRows, runs.Count) : null),
             ]),
-            new("Freigaben", "Entscheidungen im Vier-Augen-Verfahren für das Anwenden von Änderungen.",
+            new(L.T("Freigaben"), L.T("Entscheidungen im Vier-Augen-Verfahren für das Anwenden von Änderungen."),
             [
-                new ReportTable([new("Deploy", 0.9), new("Beantragt von", 1.8), new("Entscheidung", 1.5), new("Durch", 1.8), new("Zeitpunkt", 1.6), new("Kommentar", 3)],
+                new ReportTable([new("Deploy", 0.9), new(L.T("Beantragt von"), 1.8), new(L.T("Entscheidung"), 1.5), new(L.T("Durch"), 1.8), new(L.T("Zeitpunkt"), 1.6), new(L.T("Kommentar"), 3)],
                     approvals.Select(r => new List<ReportCell>
                     {
                         $"#{r.Id}", r.RequestedBy,
-                        r.Status == RunStatus.Rejected ? new ReportCell("Abgelehnt", Tone.Danger, Badge: true) : new ReportCell("Freigegeben", Tone.Success, Badge: true),
+                        r.Status == RunStatus.Rejected ? new ReportCell(L.T("Abgelehnt"), Tone.Danger, Badge: true) : new ReportCell(L.T("Freigegeben"), Tone.Success, Badge: true),
                         r.ApprovedBy ?? "–", DateTime(r.ApprovedAt),
                         string.IsNullOrWhiteSpace(r.ApprovalComment) ? new ReportCell("–", Tone.Muted) : new ReportCell(r.ApprovalComment!),
-                    }).ToList(), "Im Zeitraum wurde nichts freigegeben oder abgelehnt."),
+                    }).ToList(), L.T("Im Zeitraum wurde nichts freigegeben oder abgelehnt.")),
             ]),
-            new("Änderungsprotokoll", "Alle protokollierten Aktionen im Zeitraum (Anmeldungen, Benutzer, Einstellungen, Läufe, Konfiguration).",
+            new(L.T("Änderungsprotokoll"), L.T("Alle protokollierten Aktionen im Zeitraum (Anmeldungen, Benutzer, Einstellungen, Läufe, Konfiguration)."),
             [
-                new ReportTable([new("Zeitpunkt", 1.5), new("Benutzer", 1.7), new("Aktion", 1.9), new("Beschreibung", 5)],
+                new ReportTable([new(L.T("Zeitpunkt"), 1.5), new(L.T("Benutzer"), 1.7), new(L.T("Aktion"), 1.9), new(L.T("Beschreibung"), 5)],
                     changes.Select(e => new List<ReportCell> { DateTime(e.At), e.Username, ActionLabel(e.Action), e.Summary }).ToList(),
-                    "Keine Einträge im Zeitraum.", changeCount > MaxRows ? $"Nur die neuesten {MaxRows} von {changeCount} Einträgen – der vollständige Verlauf steht im Änderungsprotokoll." : null),
+                    L.T("Keine Einträge im Zeitraum."), changeCount > MaxRows ? L.F("Nur die neuesten {0} von {1} Einträgen – der vollständige Verlauf steht im Änderungsprotokoll.", MaxRows, changeCount) : null),
             ]),
         };
-        return Empty("Konfiguration, Läufe, Freigaben und Änderungsprotokoll", $"{Date(start)} – {Date(end.AddTicks(-1))}", highlights, sections);
+        return Empty(L.T("Konfiguration, Läufe, Freigaben und Änderungsprotokoll"), $"{Date(start)} – {Date(end.AddTicks(-1))}", highlights, sections);
     }
 
     public static string ActionLabel(string action) => action switch
     {
-        "config.update" => "Konfiguration geändert",
-        "config.restore" => "Version wiederhergestellt",
-        "run.deploy" => "Deploy gestartet",
-        "run.audit" => "Audit gestartet",
-        "run.monitor" => "Überwachung gestartet",
-        "run.cancel" => "Lauf abgebrochen",
-        "run.approve" => "Deploy freigegeben",
-        "run.reject" => "Deploy abgelehnt",
-        "user.create" => "Benutzer angelegt",
-        "user.update" => "Benutzer geändert",
-        "user.delete" => "Benutzer gelöscht",
-        "auth.login" => "Anmeldung",
-        "auth.login-failed" => "Fehlgeschlagene Anmeldung",
-        "auth.windows-login" => "Windows-Anmeldung",
-        "auth.entra-login" => "Entra-Anmeldung",
-        "auth.entra-denied" => "Entra-Anmeldung abgelehnt",
-        "settings.update" => "Einstellungen geändert",
-        "notification.failed" => "Benachrichtigung fehlgeschlagen",
+        "config.update" => L.T("Konfiguration geändert"),
+        "config.restore" => L.T("Version wiederhergestellt"),
+        "run.deploy" => L.T("Deploy gestartet"),
+        "run.audit" => L.T("Audit gestartet"),
+        "run.monitor" => L.T("Überwachung gestartet"),
+        "run.cancel" => L.T("Lauf abgebrochen"),
+        "run.approve" => L.T("Deploy freigegeben"),
+        "run.reject" => L.T("Deploy abgelehnt"),
+        "user.create" => L.T("Benutzer angelegt"),
+        "user.update" => L.T("Benutzer geändert"),
+        "user.delete" => L.T("Benutzer gelöscht"),
+        "auth.login" => L.T("Anmeldung"),
+        "auth.login-failed" => L.T("Fehlgeschlagene Anmeldung"),
+        "auth.windows-login" => L.T("Windows-Anmeldung"),
+        "auth.entra-login" => L.T("Entra-Anmeldung"),
+        "auth.entra-denied" => L.T("Entra-Anmeldung abgelehnt"),
+        "settings.update" => L.T("Einstellungen geändert"),
+        "notification.failed" => L.T("Benachrichtigung fehlgeschlagen"),
         _ => action,
     };
 
@@ -335,70 +343,70 @@ public class ReportBuilder(AppDbContext db, SettingsService settings, Domains.Do
     private async Task<ReportDocument> PrivilegedAsync(DateTimeOffset start, DateTimeOffset end, ComplianceDto compliance, CancellationToken ct)
     {
         var latest = await db.PrivilegedSnapshots.AsNoTracking().Where(x => x.DomainId == DomainId && x.TakenAt < end).OrderByDescending(x => x.Id).FirstOrDefaultAsync(ct);
-        const string subtitle = "Mitglieder privilegierter Gruppen, Hygiene, Angriffspfade und Compliance-Wert";
+        var subtitle = L.T("Mitglieder privilegierter Gruppen, Hygiene, Angriffspfade und Compliance-Wert");
         if (latest is null || PrivilegedSnapshotReader.Deserialize(latest.Data) is not { } data)
-            return Empty(subtitle, "Keine Überwachung vorhanden", [],
-                [new ReportSection("Zusammenfassung", null, [new ReportParagraph("Bis zum Enddatum gibt es keine Überwachung privilegierter Gruppen. Bitte zuerst eine Überwachung starten.", Tone.Warning)])]);
+            return Empty(subtitle, L.T("Keine Überwachung vorhanden"), [],
+                [new ReportSection(L.T("Zusammenfassung"), null, [new ReportParagraph(L.T("Bis zum Enddatum gibt es keine Überwachung privilegierter Gruppen. Bitte zuerst eine Überwachung starten."), Tone.Warning)])]);
 
         var evaluation = PrivilegedEvaluation.Deserialize(latest.Evaluation) ?? new PrivilegedEvaluation(true, [], [], [], [], [], HygieneThresholds.Default);
         var unexpected = evaluation.Unexpected.Select(u => (u.GroupSid, u.MemberSid)).ToHashSet();
         var high = evaluation.Hygiene.Count(h => h.Severity == PrivilegedEvaluator.High);
         var highlights = new List<ReportStat>
         {
-            new("Gruppen", data.Groups.Count.ToString(De)),
-            new("Mitgliedschaften", data.MemberCount.ToString(De)),
-            new("Nicht erwartet", evaluation.Unexpected.Count.ToString(De), evaluation.Unexpected.Count > 0 ? Tone.Danger : Tone.Success),
-            new("Hygiene (hoch)", high.ToString(De), high > 0 ? Tone.Danger : Tone.Success),
-            new("Angriffspfade", evaluation.AttackPaths.Count.ToString(De), evaluation.AttackPaths.Count > 0 ? Tone.Danger : Tone.Success),
+            new(L.T("Gruppen"), data.Groups.Count.ToString(De)),
+            new(L.T("Mitgliedschaften"), data.MemberCount.ToString(De)),
+            new(L.T("Nicht erwartet"), evaluation.Unexpected.Count.ToString(De), evaluation.Unexpected.Count > 0 ? Tone.Danger : Tone.Success),
+            new(L.T("Hygiene (hoch)"), high.ToString(De), high > 0 ? Tone.Danger : Tone.Success),
+            new(L.T("Angriffspfade"), evaluation.AttackPaths.Count.ToString(De), evaluation.AttackPaths.Count > 0 ? Tone.Danger : Tone.Success),
         };
 
         var sections = new List<ReportSection>
         {
-            new("Compliance-Wert", "Jede Ebene startet bei 100 Punkten; Befunde ziehen Punkte ab (Audit-Abweichungen, nicht erwartete Mitglieder, Hygiene, Angriffspfade).",
+            new(L.T("Compliance-Wert"), L.T("Jede Ebene startet bei 100 Punkten; Befunde ziehen Punkte ab (Audit-Abweichungen, nicht erwartete Mitglieder, Hygiene, Angriffspfade)."),
             [
-                new ReportTable([new("Ebene", 1), new("Wert", 1), new("Abzüge", 6)],
+                new ReportTable([new(L.T("Ebene"), 1), new(L.T("Wert"), 1), new(L.T("Abzüge"), 6)],
                     (compliance.Current ?? []).Select(t => new List<ReportCell>
                     {
                         $"Tier {t.Tier}", new(t.Score.ToString(De), ScoreTone(t.Score), Badge: true),
-                        t.Deductions.Count == 0 ? new ReportCell("keine", Tone.Muted)
+                        t.Deductions.Count == 0 ? new ReportCell(L.T("keine"), Tone.Muted)
                             : new ReportCell(string.Join("; ", t.Deductions.Select(d => $"{d.Label}: {d.Count} × {d.PointsEach} = {d.Points}"))),
-                    }).ToList(), "Noch keine Daten für den Compliance-Wert."),
+                    }).ToList(), L.T("Noch keine Daten für den Compliance-Wert.")),
                 new ReportKeyValues(
                 [
-                    new("Überwachung", $"#{latest.RunId} vom {DateTime(latest.TakenAt)}"),
-                    new("Domäne", data.Metadata.Domain ?? "–"),
-                    new("Domänencontroller", data.Metadata.PreferredDc ?? "–"),
+                    new(L.T("Überwachung"), L.F("#{0} vom {1}", latest.RunId, DateTime(latest.TakenAt))),
+                    new(L.T("Domäne"), data.Metadata.Domain ?? "–"),
+                    new(L.T("Domänencontroller"), data.Metadata.PreferredDc ?? "–"),
                 ]),
             ]),
-            new("Nicht erwartete Mitglieder", "Mitglieder geschützter oder Tier-0-Gruppen, die weder zur Standard-Verschachtelung noch zur Tier-0-Konfiguration gehören.",
+            new(L.T("Nicht erwartete Mitglieder"), L.T("Mitglieder geschützter oder Tier-0-Gruppen, die weder zur Standard-Verschachtelung noch zur Tier-0-Konfiguration gehören."),
             [
-                new ReportTable([new("Gruppe", 2), new("Mitglied", 2.4), new("Typ", 1), new("Mitgliedschaft", 2.6), new("Status", 1)],
+                new ReportTable([new(L.T("Gruppe"), 2), new(L.T("Mitglied"), 2.4), new(L.T("Typ"), 1), new(L.T("Mitgliedschaft"), 2.6), new("Status", 1)],
                     evaluation.Unexpected.Select(u => new List<ReportCell>
                     {
                         u.GroupName, new(u.MemberName, Sub: u.MemberSam), ClassLabel(u.ObjectClass),
-                        u.Direct ? "direkt" : "über " + string.Join(" › ", u.Via),
-                        u.Enabled == false ? new ReportCell("deaktiviert", Tone.Muted) : new ReportCell("aktiv"),
-                    }).ToList(), "Keine nicht erwarteten Mitglieder."),
+                        u.Direct ? L.T("direkt") : L.T("über ") + string.Join(" › ", u.Via),
+                        u.Enabled == false ? new ReportCell(L.T("deaktiviert"), Tone.Muted) : new ReportCell(L.T("aktiv")),
+                    }).ToList(), L.T("Keine nicht erwarteten Mitglieder.")),
             ]),
-            new("Angriffspfade zu Tier 0", "Berechtigungen auf Tier-0-Objekten für Konten und Gruppen außerhalb von Tier 0.",
+            new(L.T("Angriffspfade zu Tier 0"), L.T("Berechtigungen auf Tier-0-Objekten für Konten und Gruppen außerhalb von Tier 0."),
             [
-                new ReportTable([new("Berechtigter", 2.2), new("Rechte", 2.2), new("Objekt", 3.2), new("Hinweis", 2.4)],
+                new ReportTable([new(L.T("Berechtigter"), 2.2), new(L.T("Rechte"), 2.2), new(L.T("Objekt"), 3.2), new(L.T("Hinweis"), 2.4)],
                     evaluation.AttackPaths.Take(MaxRows).Select(p => new List<ReportCell>
                     {
                         new(p.PrincipalName, Sub: PrivilegedEvaluator.PrincipalDescription(p.PrincipalClass, p.MemberCount)),
                         string.Join(", ", p.Rights),
-                        new(p.ObjectName, Sub: PrivilegedEvaluator.ObjectTypeLabel(p.ObjectType) + (p.Inherited ? " · geerbt" : "")),
+                        new(p.ObjectName, Sub: PrivilegedEvaluator.ObjectTypeLabel(p.ObjectType) + (p.Inherited ? L.T(" · geerbt") : "")),
                         p.MembershipPath ?? "–",
-                    }).ToList(), "Keine Angriffspfade gefunden."),
+                    }).ToList(), L.T("Keine Angriffspfade gefunden.")),
             ]),
-            new("Hygiene-Befunde", $"Prüfung der Konten in Tier 0 und Tier 1 (Schwellwerte: {evaluation.Thresholds.StaleDays} Tage ohne Anmeldung, Passwort älter als {evaluation.Thresholds.PasswordMaxAgeDays} Tage).",
+            new(L.T("Hygiene-Befunde"), L.F("Prüfung der Konten in Tier 0 und Tier 1 (Schwellwerte: {0} Tage ohne Anmeldung, Passwort älter als {1} Tage).", evaluation.Thresholds.StaleDays, evaluation.Thresholds.PasswordMaxAgeDays),
             [
-                new ReportTable([new("Schwere", 1), new("Konto", 2), new("Tier", 0.7), new("Regel", 2.2), new("Details", 4)],
+                new ReportTable([new(L.T("Schwere"), 1), new(L.T("Konto"), 2), new("Tier", 0.7), new(L.T("Regel"), 2.2), new("Details", 4)],
                     evaluation.Hygiene.OrderBy(h => SeverityRank(h.Severity)).ThenBy(h => h.Account, StringComparer.CurrentCultureIgnoreCase).Take(MaxRows)
                         .Select(h => new List<ReportCell>
                         {
-                            new(Severity(h.Severity), SeverityTone(h.Severity), Badge: true), h.Account, h.Tier is { } t ? t.ToString(De) : "–", h.Title, h.Value,
-                        }).ToList(), "Keine Hygiene-Befunde."),
+                            new(Severity(h.Severity), SeverityTone(h.Severity), Badge: true), h.Account, h.Tier is { } t ? t.ToString(De) : "–", PrivilegedEvaluator.RuleTitle(h.Rule), h.Value,
+                        }).ToList(), L.T("Keine Hygiene-Befunde.")),
             ]),
         };
 
@@ -407,15 +415,15 @@ public class ReportBuilder(AppDbContext db, SettingsService settings, Domains.Do
             .Where(x => x.DomainId == DomainId && x.ChangeCount > 0 && x.TakenAt >= start && x.TakenAt < end)
             .OrderByDescending(x => x.Id).Take(200).Select(x => new { x.TakenAt, x.Evaluation }).ToListAsync(ct);
         var changes = changeRows.SelectMany(r => (PrivilegedEvaluation.Deserialize(r.Evaluation)?.Changes ?? []).Select(c => (r.TakenAt, c))).Take(MaxRows).ToList();
-        sections.Add(new ReportSection("Änderungen an Mitgliedschaften im Zeitraum", null,
+        sections.Add(new ReportSection(L.T("Änderungen an Mitgliedschaften im Zeitraum"), null,
         [
-            new ReportTable([new("Erkannt", 1.6), new("Änderung", 1.3), new("Gruppe", 2.2), new("Mitglied", 2.6), new("Mitgliedschaft", 2.2)],
+            new ReportTable([new(L.T("Erkannt"), 1.6), new(L.T("Änderung"), 1.3), new(L.T("Gruppe"), 2.2), new(L.T("Mitglied"), 2.6), new(L.T("Mitgliedschaft"), 2.2)],
                 changes.Select(x => new List<ReportCell>
                 {
                     DateTime(x.TakenAt),
-                    x.c.Change == "Added" ? new ReportCell("hinzugefügt", Tone.Warning, Badge: true) : new ReportCell("entfernt", Tone.Muted, Badge: true),
-                    x.c.GroupName, new(x.c.MemberName, Sub: x.c.MemberSam), x.c.Direct ? "direkt" : "über " + string.Join(" › ", x.c.Via),
-                }).ToList(), "Im Zeitraum wurden keine Änderungen erkannt."),
+                    x.c.Change == "Added" ? new ReportCell(L.T("hinzugefügt"), Tone.Warning, Badge: true) : new ReportCell(L.T("entfernt"), Tone.Muted, Badge: true),
+                    x.c.GroupName, new(x.c.MemberName, Sub: x.c.MemberSam), x.c.Direct ? L.T("direkt") : L.T("über ") + string.Join(" › ", x.c.Via),
+                }).ToList(), L.T("Im Zeitraum wurden keine Änderungen erkannt.")),
         ]));
 
         var blocks = new List<ReportBlock>();
@@ -423,32 +431,32 @@ public class ReportBuilder(AppDbContext db, SettingsService settings, Domains.Do
                      .ThenBy(g => g.Source == "builtin" ? 0 : 1).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase))
         {
             var n = g.Members.Count(m => unexpected.Contains((g.Sid, m.Sid)));
-            blocks.Add(new ReportSubheading(g.Name, $"{g.Members.Count} Mitglied{(g.Members.Count == 1 ? "" : "er")}"
-                + (g.Tier is { } tier ? $" · Tier {tier}" : "") + (n > 0 ? $" · {n} nicht erwartet" : "")));
-            blocks.Add(new ReportTable([new("Mitglied", 2.6), new("Konto", 2), new("Typ", 1), new("Mitgliedschaft", 2.6), new("Bewertung", 1.4)],
+            blocks.Add(new ReportSubheading(g.Name, (g.Members.Count == 1 ? L.T("1 Mitglied") : L.F("{0} Mitglieder", g.Members.Count))
+                + (g.Tier is { } tier ? $" · Tier {tier}" : "") + (n > 0 ? L.F(" · {0} nicht erwartet", n) : "")));
+            blocks.Add(new ReportTable([new(L.T("Mitglied"), 2.6), new(L.T("Konto"), 2), new(L.T("Typ"), 1), new(L.T("Mitgliedschaft"), 2.6), new(L.T("Bewertung"), 1.4)],
                 g.Members.OrderByDescending(m => unexpected.Contains((g.Sid, m.Sid))).ThenByDescending(m => m.IsDirect)
                     .ThenBy(m => m.DisplayName, StringComparer.CurrentCultureIgnoreCase).Take(MaxRows)
                     .Select(m => new List<ReportCell>
                     {
                         m.DisplayName, new(m.SamAccountName ?? "–"), ClassLabel(m.ObjectClass),
-                        m.IsDirect ? "direkt" : "über " + string.Join(" › ", m.Via),
-                        unexpected.Contains((g.Sid, m.Sid)) ? new ReportCell("nicht erwartet", Tone.Danger, Badge: true)
-                            : m.Enabled == false ? new ReportCell("deaktiviert", Tone.Muted) : new ReportCell("erwartet", Tone.Success),
-                    }).ToList(), "Keine Mitglieder."));
+                        m.IsDirect ? L.T("direkt") : L.T("über ") + string.Join(" › ", m.Via),
+                        unexpected.Contains((g.Sid, m.Sid)) ? new ReportCell(L.T("nicht erwartet"), Tone.Danger, Badge: true)
+                            : m.Enabled == false ? new ReportCell(L.T("deaktiviert"), Tone.Muted) : new ReportCell(L.T("erwartet"), Tone.Success),
+                    }).ToList(), L.T("Keine Mitglieder.")));
         }
-        sections.Add(new ReportSection("Mitglieder privilegierter Gruppen", "Stand der letzten Überwachung; Gruppen mit Befunden zuerst.", blocks));
+        sections.Add(new ReportSection(L.T("Mitglieder privilegierter Gruppen"), L.T("Stand der letzten Überwachung; Gruppen mit Befunden zuerst."), blocks));
 
-        return Empty(subtitle, $"Überwachung #{latest.RunId} vom {DateTime(latest.TakenAt)}", highlights, sections);
+        return Empty(subtitle, L.F("Überwachung #{0} vom {1}", latest.RunId, DateTime(latest.TakenAt)), highlights, sections);
     }
 
     private static string ClassLabel(string objectClass) => objectClass.ToLowerInvariant() switch
     {
-        "user" or "inetorgperson" => "Benutzer",
-        "group" => "Gruppe",
+        "user" or "inetorgperson" => L.T("Benutzer"),
+        "group" => L.T("Gruppe"),
         "computer" => "Computer",
         "msds-groupmanagedserviceaccount" => "gMSA",
         "msds-managedserviceaccount" => "MSA",
-        "foreignsecurityprincipal" => "Fremd",
+        "foreignsecurityprincipal" => L.T("Fremd"),
         _ => objectClass,
     };
 }

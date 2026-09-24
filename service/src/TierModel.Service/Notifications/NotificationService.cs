@@ -9,6 +9,7 @@ using TierModel.Service.Data;
 using TierModel.Service.Monitoring;
 using TierModel.Service.Notifications.Siem;
 using TierModel.Service.Runs;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Notifications;
 
@@ -63,12 +64,12 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
     {
         var s = plan.Summary;
         var parts = new List<string>();
-        if (s.Create > 0) parts.Add($"{s.Create} anlegen");
-        if (s.Update > 0) parts.Add($"{s.Update} ändern");
-        if (s.Link > 0) parts.Add($"{s.Link} verknüpfen");
-        if (s.Configure > 0) parts.Add($"{s.Configure} konfigurieren");
+        if (s.Create > 0) parts.Add(L.PF("{0} anlegen", s.Create));
+        if (s.Update > 0) parts.Add(L.PF("{0} ändern", s.Update));
+        if (s.Link > 0) parts.Add(L.PF("{0} verknüpfen", s.Link));
+        if (s.Configure > 0) parts.Add(L.PF("{0} konfigurieren", s.Configure));
         var total = DeployPlanReader.TotalChanges(plan);
-        if (parts.Count == 0 && total > 0) parts.Add($"{total} Änderung(en)");
+        if (parts.Count == 0 && total > 0) parts.Add(L.PF("{0} Änderung(en)", total));
         return parts.Count == 0 ? null : string.Join(", ", parts);
     }
 
@@ -76,43 +77,43 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
     public static NotificationMessage BuildMessage(NotificationEvent e, Run run, string publicBaseUrl, DeployPlan? plan = null,
         PrivilegedEvaluation? evaluation = null, Domain? domain = null, bool multipleDomains = false)
     {
-        var what = RunService.RunTitle(run);
-        var scope = run.Kind == RunKind.Monitor ? "Privilegierte Gruppen" : run.Scope?.ToString() ?? "–";
+        var what = RunService.RunTitle(run, persisted: true);
+        var scope = run.Kind == RunKind.Monitor ? L.P("Privilegierte Gruppen") : run.Scope?.ToString() ?? "–";
         var includes = RunSummaryDto.IncludeList(run.IncludeMsa, run.IncludeGmsa, run.IncludeDmsa, run.IncludeWinLaps);
         if (includes.Length > 0) scope += " + " + string.Join(", ", includes);
         var facts = new List<(string, string)>
         {
-            ("Lauf", $"#{run.Id} · {what}"),
+            (L.P("Lauf"), $"#{run.Id} · {what}"),
         };
-        if (domain is not null) facts.Add(("Domäne", Domains.DomainRules.Label(domain)));
+        if (domain is not null) facts.Add((L.P("Domäne"), Domains.DomainRules.Label(domain)));
         facts.AddRange(new (string, string)[]
         {
-            ("Bereich", scope),
-            ("Domänencontroller", run.PreferredDc),
-            ("Angefordert von", run.RequestedBy),
+            (L.P("Bereich"), scope),
+            (L.P("Domänencontroller"), run.PreferredDc),
+            (L.P("Angefordert von"), run.RequestedBy),
         });
         var (title, text, color) = e switch
         {
-            NotificationEvent.Drift => ($"Drift erkannt: {run.DriftCount} Abweichung(en)",
-                $"Das Audit #{run.Id} hat {run.DriftCount} Abweichung(en) zwischen Soll-Konfiguration und Active Directory gefunden.", "warning"),
-            NotificationEvent.Failure => ($"{what} #{run.Id} fehlgeschlagen",
-                run.Message ?? "Der Lauf ist fehlgeschlagen.", "attention"),
-            NotificationEvent.Apply => ($"Deploy #{run.Id} angewendet",
-                "Änderungen wurden im Active Directory angewendet." + (run.ApprovedBy is null ? "" : $" Freigegeben von {run.ApprovedBy}."), "good"),
-            NotificationEvent.ApprovalRequested => ($"Freigabe angefordert: Deploy #{run.Id}",
-                $"{run.RequestedBy} möchte Änderungen im Active Directory anwenden. Eine zweite Person mit der Rolle Operator muss freigeben"
-                + (run.ApprovalExpiresAt is { } exp ? $" (bis {exp.ToLocalTime():dd.MM.yyyy HH:mm})." : "."), "accent"),
+            NotificationEvent.Drift => (L.PF("Drift erkannt: {0} Abweichung(en)", run.DriftCount),
+                L.PF("Das Audit #{0} hat {1} Abweichung(en) zwischen Soll-Konfiguration und Active Directory gefunden.", run.Id, run.DriftCount), "warning"),
+            NotificationEvent.Failure => (L.PF("{0} #{1} fehlgeschlagen", what, run.Id),
+                run.Message ?? L.P("Der Lauf ist fehlgeschlagen."), "attention"),
+            NotificationEvent.Apply => (L.PF("Deploy #{0} angewendet", run.Id),
+                L.P("Änderungen wurden im Active Directory angewendet.") + (run.ApprovedBy is null ? "" : L.PF(" Freigegeben von {0}.", run.ApprovedBy)), "good"),
+            NotificationEvent.ApprovalRequested => (L.PF("Freigabe angefordert: Deploy #{0}", run.Id),
+                L.PF("{0} möchte Änderungen im Active Directory anwenden. Eine zweite Person mit der Rolle Operator muss freigeben", run.RequestedBy)
+                + (run.ApprovalExpiresAt is { } exp ? L.PF(" (bis {0:dd.MM.yyyy HH:mm}).", exp.ToLocalTime()) : "."), "accent"),
             NotificationEvent.PrivilegedChange => (PrivilegedTitle(evaluation),
-                evaluation is null ? "Die Überwachung hat Änderungen an privilegierten Gruppen festgestellt."
+                evaluation is null ? L.P("Die Überwachung hat Änderungen an privilegierten Gruppen festgestellt.")
                     : string.Join("\n", PrivilegedEvaluator.NotificationLines(evaluation)), "attention"),
             _ => ("TierModel Service", "", "default"),
         };
         if (e == NotificationEvent.ApprovalRequested && run.PlanRunId is { } planId)
         {
             var counts = plan is null ? null : PlanCountsText(plan);
-            facts.Add(("Geplante Änderungen", plan is null ? $"siehe Planung #{planId}"
-                : counts is null ? $"keine (Planung #{planId})" : $"{counts} (Planung #{planId})"));
-            if (plan is { Errors.Count: > 0 }) facts.Add(("Fehler in der Planung", plan.Errors.Count.ToString()));
+            facts.Add((L.P("Geplante Änderungen"), plan is null ? L.PF("siehe Planung #{0}", planId)
+                : counts is null ? L.PF("keine (Planung #{0})", planId) : L.PF("{0} (Planung #{1})", counts, planId)));
+            if (plan is { Errors.Count: > 0 }) facts.Add((L.P("Fehler in der Planung"), plan.Errors.Count.ToString()));
         }
         if (run.FinishedAt is { } f) facts.Add(("Beendet", f.ToLocalTime().ToString("dd.MM.yyyy HH:mm")));
         var url = string.IsNullOrWhiteSpace(publicBaseUrl) ? null
@@ -123,27 +124,27 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
 
     private static string PrivilegedTitle(PrivilegedEvaluation? e)
     {
-        if (e is null) return "Änderung an privilegierten Gruppen";
+        if (e is null) return L.P("Änderung an privilegierten Gruppen");
         var parts = new List<string>();
         var added = e.Changes.Count(c => c.Change == "Added");
         var removed = e.Changes.Count - added;
-        if (added > 0) parts.Add($"{added} hinzugefügt");
-        if (removed > 0) parts.Add($"{removed} entfernt");
-        if (e.NewFindings.Count > 0) parts.Add($"{e.NewFindings.Count} neue{(e.NewFindings.Count == 1 ? "r" : "")} Befund{(e.NewFindings.Count == 1 ? "" : "e")}");
-        return "Privilegierte Gruppen: " + (parts.Count == 0 ? "Änderung erkannt" : string.Join(", ", parts));
+        if (added > 0) parts.Add(L.PF("{0} hinzugefügt", added));
+        if (removed > 0) parts.Add(L.PF("{0} entfernt", removed));
+        if (e.NewFindings.Count > 0) parts.Add(e.NewFindings.Count == 1 ? L.P("1 neuer Befund") : L.PF("{0} neue Befunde", e.NewFindings.Count));
+        return L.P("Privilegierte Gruppen: ") + (parts.Count == 0 ? L.P("Änderung erkannt") : string.Join(", ", parts));
     }
 
-    public static NotificationMessage TestMessage(string publicBaseUrl) => new(null, "Testnachricht vom TierModel Service",
-        "Dieser Kanal ist richtig eingerichtet.", [("Gesendet", DateTimeOffset.Now.ToString("dd.MM.yyyy HH:mm"))],
+    public static NotificationMessage TestMessage(string publicBaseUrl) => new(null, L.P("Testnachricht vom TierModel Service"),
+        L.P("Dieser Kanal ist richtig eingerichtet."), [(L.P("Gesendet"), DateTimeOffset.Now.ToString("dd.MM.yyyy HH:mm"))],
         string.IsNullOrWhiteSpace(publicBaseUrl) ? null : publicBaseUrl.TrimEnd('/') + "/", "good");
 
     public static NotificationMessage CertificateMessage(string subject, string thumbprint, DateTimeOffset notAfter, int daysLeft, string publicBaseUrl) => new(
         NotificationEvent.CertificateExpiring,
-        daysLeft < 0 ? "HTTPS-Zertifikat ist abgelaufen" : $"HTTPS-Zertifikat läuft in {daysLeft} Tag(en) ab",
+        daysLeft < 0 ? L.P("HTTPS-Zertifikat ist abgelaufen") : L.PF("HTTPS-Zertifikat läuft in {0} Tag(en) ab", daysLeft),
         daysLeft < 0
-            ? "Das Zertifikat des TierModel Service ist abgelaufen. Browser verweigern die Verbindung, bis ein neues Zertifikat eingerichtet ist."
-            : "Das Zertifikat des TierModel Service läuft bald ab. Bitte rechtzeitig erneuern und den Fingerabdruck in appsettings.json aktualisieren.",
-        [("Zertifikat", subject), ("Fingerabdruck", thumbprint), ("Gültig bis", notAfter.ToLocalTime().ToString("dd.MM.yyyy HH:mm"))],
+            ? L.P("Das Zertifikat des TierModel Service ist abgelaufen. Browser verweigern die Verbindung, bis ein neues Zertifikat eingerichtet ist.")
+            : L.P("Das Zertifikat des TierModel Service läuft bald ab. Bitte rechtzeitig erneuern und den Fingerabdruck in appsettings.json aktualisieren."),
+        [(L.P("Zertifikat"), subject), (L.P("Fingerabdruck"), thumbprint), (L.P("Gültig bis"), notAfter.ToLocalTime().ToString("dd.MM.yyyy HH:mm"))],
         string.IsNullOrWhiteSpace(publicBaseUrl) ? null : $"{publicBaseUrl.TrimEnd('/')}/admin/systemzustand",
         daysLeft < 7 ? "attention" : "warning");
 
@@ -213,7 +214,7 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
             {
                 logger.LogWarning("Notification channel {Channel} failed: {Error}", channel.Name, error);
                 changeLog.Add("system", "notification.failed", "notification", channel.Id.ToString(),
-                    $"Benachrichtigung über '{channel.Name}' fehlgeschlagen: {error}");
+                    L.PF("Benachrichtigung über '{0}' fehlgeschlagen: {1}", channel.Name, error));
             }
         }
         await db.SaveChangesAsync(ct);
@@ -271,7 +272,7 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
                         new { type = "TextBlock", text = m.Text.Replace("\n", "\n\n"), wrap = true },
                         new { type = "FactSet", facts = m.Facts.Select(f => new { title = f.Label, value = f.Value }).ToArray() },
                     },
-                    ["actions"] = m.Url is null ? Array.Empty<object>() : new object[] { new { type = "Action.OpenUrl", title = "Im TierModel Service öffnen", url = m.Url } },
+                    ["actions"] = m.Url is null ? Array.Empty<object>() : new object[] { new { type = "Action.OpenUrl", title = L.P("Im TierModel Service öffnen"), url = m.Url } },
                 },
             },
         },
@@ -305,7 +306,7 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
     {
         var smtp = await settings.GetSmtpAsync(ct);
         if (string.IsNullOrWhiteSpace(smtp.Host) || string.IsNullOrWhiteSpace(smtp.From))
-            throw new InvalidOperationException("SMTP ist nicht eingerichtet (Server und Absender fehlen).");
+            throw new InvalidOperationException(L.P("SMTP ist nicht eingerichtet (Server und Absender fehlen)."));
 
         var mail = new MimeMessage();
         mail.From.Add(MailboxAddress.Parse(smtp.From));
@@ -364,7 +365,7 @@ public class NotificationWorker(NotificationQueue queue, IServiceScopeFactory sc
             }
             while (queue.Reader.TryRead(out var item))
             {
-                heartbeats.Busy(HeartbeatName, "Versendet Benachrichtigungen");
+                heartbeats.Busy(HeartbeatName, L.T("Versendet Benachrichtigungen"));
                 try
                 {
                     await using var scope = scopes.CreateAsyncScope();

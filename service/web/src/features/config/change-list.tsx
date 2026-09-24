@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { formatValue, pathText, type ChangeGroup, type FieldChange, type SectionDiff } from '@/lib/structured-diff'
 import { fieldLabel } from '@/lib/field-labels'
 import { cn, formatNumber } from '@/lib/utils'
+import { t } from '@/i18n'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = any
@@ -13,9 +14,9 @@ type Json = any
 const isObj = (v: unknown): v is Record<string, Json> => !!v && typeof v === 'object' && !Array.isArray(v)
 
 const kindMeta = {
-  added: { icon: <Plus />, tone: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300', verb: 'hinzugefügt' },
+  added: { icon: <Plus />, tone: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300', verb: t('config.changeList.added') },
   removed: { icon: <Minus />, tone: 'bg-rose-500/12 text-rose-700 dark:text-rose-300', verb: 'entfernt' },
-  changed: { icon: <Pencil />, tone: 'bg-amber-500/12 text-amber-700 dark:text-amber-300', verb: 'geändert' },
+  changed: { icon: <Pencil />, tone: 'bg-amber-500/12 text-amber-700 dark:text-amber-300', verb: t('config.changeList.changed') },
 } as const
 
 function KindIcon({ kind, small }: { kind: keyof typeof kindMeta; small?: boolean }) {
@@ -76,8 +77,8 @@ function FieldLine({ f }: { f: FieldChange }) {
       kind = 'added'
       body = (
         <>
-          <span className="font-medium">{label || 'Eintrag'}</span>
-          {scalar(f.after) ? <> = <Quote tone="new">{formatValue(f.after)}</Quote></> : <> hinzugefügt</>}
+          <span className="font-medium">{label || t('config.changeList.entry')}</span>
+          {scalar(f.after) ? <> = <Quote tone="new">{formatValue(f.after)}</Quote></> : <> {t('config.changeList.added')}</>}
           {!scalar(f.after) && <ObjectFacts value={f.after} />}
         </>
       )
@@ -86,8 +87,8 @@ function FieldLine({ f }: { f: FieldChange }) {
       kind = 'removed'
       body = (
         <>
-          <span className="font-medium">{label || 'Eintrag'}</span> entfernt
-          {scalar(f.before) && f.before !== '' && <> (war <Quote tone="old">{formatValue(f.before)}</Quote>)</>}
+          <span className="font-medium">{label || t('config.changeList.entry')}</span> {t('config.changeList.removed')}
+          {scalar(f.before) && f.before !== '' && <> {t('config.changeList.was')} <Quote tone="old">{formatValue(f.before)}</Quote>)</>}
           {!scalar(f.before) && <ObjectFacts value={f.before} />}
         </>
       )
@@ -98,14 +99,14 @@ function FieldLine({ f }: { f: FieldChange }) {
           {label && <span className="font-medium">{label}: </span>}
           {f.added.length > 0 && (
             <>
-              <span className="text-muted-foreground">hinzugefügt: </span>
+              <span className="text-muted-foreground">{t('config.changeList.added2')} </span>
               <span className="text-emerald-700 dark:text-emerald-300">{f.added.join(', ')}</span>
             </>
           )}
           {f.added.length > 0 && f.removed.length > 0 && <span className="text-muted-foreground"> · </span>}
           {f.removed.length > 0 && (
             <>
-              <span className="text-muted-foreground">entfernt: </span>
+              <span className="text-muted-foreground">{t('config.changeList.removed2')} </span>
               <span className="text-rose-700 line-through decoration-rose-500/40 dark:text-rose-300">{f.removed.join(', ')}</span>
             </>
           )}
@@ -116,7 +117,7 @@ function FieldLine({ f }: { f: FieldChange }) {
       body = (
         <span className="inline-flex items-center gap-1.5">
           <ArrowDownUp className="size-3.5 text-muted-foreground" />
-          {label ? <><span className="font-medium">{label}</span>: Reihenfolge geändert</> : 'Reihenfolge geändert'}
+          {label ? <><span className="font-medium">{label}</span>{t('config.changeList.orderChanged')}</> : t('config.changeList.orderChanged2')}
         </span>
       )
       break
@@ -149,7 +150,7 @@ function GroupRow({ g, open, onToggle }: { g: ChangeGroup; open: boolean; onTogg
         </span>
         {g.fields.length > 0 && (
           <Badge variant="muted" className="tabular">
-            {g.fields.length} {g.fields.length === 1 ? 'Änderung' : 'Änderungen'}
+            {t('config.changeList.changesCount', { count: g.fields.length })}
           </Badge>
         )}
       </button>
@@ -167,7 +168,7 @@ function GroupRow({ g, open, onToggle }: { g: ChangeGroup; open: boolean; onTogg
           {g.fields.length > 0 && (
             <ul>
               {g.fields.slice(0, 200).map((f, i) => <FieldLine key={i} f={f} />)}
-              {g.fields.length > 200 && <li className="py-1 text-xs text-muted-foreground">… und {formatNumber(g.fields.length - 200)} weitere</li>}
+              {g.fields.length > 200 && <li className="py-1 text-xs text-muted-foreground">{t('config.changeList.andMore', { count: formatNumber(g.fields.length - 200) })}</li>}
             </ul>
           )}
         </div>
@@ -177,7 +178,7 @@ function GroupRow({ g, open, onToggle }: { g: ChangeGroup; open: boolean; onTogg
 }
 
 export function DiffCounts({ diff, className }: { diff: SectionDiff; className?: string }) {
-  if (!diff.total) return <span className={cn('text-xs text-muted-foreground', className)}>keine Änderungen</span>
+  if (!diff.total) return <span className={cn('text-xs text-muted-foreground', className)}>{t('config.changeList.noChanges')}</span>
   return (
     <span className={cn('inline-flex items-center gap-1.5 text-xs tabular', className)}>
       {diff.added > 0 && <span className="text-emerald-700 dark:text-emerald-400">+{diff.added}</span>}
@@ -218,7 +219,7 @@ export function ChangeList({ diff, maxHeight = '50vh', className }: { diff: Sect
   )
 
   if (!diff.total) {
-    return <div className={cn('rounded-lg border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground', className)}>Keine Unterschiede</div>
+    return <div className={cn('rounded-lg border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground', className)}>{t('config.changeList.noDifferences')}</div>
   }
 
   const isOpen = (key: string) => (toggled.has(key) ? !openAll : openAll)
@@ -234,15 +235,15 @@ export function ChangeList({ diff, maxHeight = '50vh', className }: { diff: Sect
     <div className={cn('flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card', className)}>
       <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-2">
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          {diff.added > 0 && <Badge variant="success"><Plus /> {formatNumber(diff.added)} hinzugefügt</Badge>}
-          {diff.removed > 0 && <Badge variant="danger"><Minus /> {formatNumber(diff.removed)} entfernt</Badge>}
-          {diff.changed > 0 && <Badge variant="warning"><Pencil /> {formatNumber(diff.changed)} geändert</Badge>}
+          {diff.added > 0 && <Badge variant="success"><Plus /> {formatNumber(diff.added)} {t('config.changeList.added')}</Badge>}
+          {diff.removed > 0 && <Badge variant="danger"><Minus /> {formatNumber(diff.removed)} {t('config.changeList.removed')}</Badge>}
+          {diff.changed > 0 && <Badge variant="warning"><Pencil /> {formatNumber(diff.changed)} {t('config.changeList.changed')}</Badge>}
         </div>
         <div className="ml-auto flex items-center gap-1.5">
           {diff.groups.length > 8 && (
             <div className="relative">
               <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Änderungen filtern …" className="h-7 w-48 pl-7 text-xs" aria-label="Änderungen filtern" />
+              <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('config.changeList.filterChanges')} className="h-7 w-48 pl-7 text-xs" aria-label={t('config.changeList.filterChanges2')} />
             </div>
           )}
           <Button
@@ -254,7 +255,7 @@ export function ChangeList({ diff, maxHeight = '50vh', className }: { diff: Sect
               setToggled(new Set())
             }}
           >
-            {openAll ? <><ChevronsDownUp /> Alle zuklappen</> : <><ChevronsUpDown /> Alle aufklappen</>}
+            {openAll ? <><ChevronsDownUp /> {t('config.changeList.collapseAll')}</> : <><ChevronsUpDown /> {t('config.changeList.expandAll')}</>}
           </Button>
         </div>
       </div>
@@ -262,11 +263,11 @@ export function ChangeList({ diff, maxHeight = '50vh', className }: { diff: Sect
         {groups.slice(0, limit).map((g) => (
           <GroupRow key={g.key} g={g} open={isOpen(g.key)} onToggle={() => toggle(g.key)} />
         ))}
-        {groups.length === 0 && <li className="px-3 py-4 text-center text-xs text-muted-foreground">Keine Treffer</li>}
+        {groups.length === 0 && <li className="px-3 py-4 text-center text-xs text-muted-foreground">{t('common.noMatches')}</li>}
         {groups.length > limit && (
           <li className="px-2 py-1.5">
             <Button type="button" variant="ghost" size="xs" onClick={() => setLimit((l) => l + PAGE)}>
-              {formatNumber(groups.length - limit)} weitere anzeigen
+              {t('config.changeList.showMore', { count: formatNumber(groups.length - limit) })}
             </Button>
           </li>
         )}

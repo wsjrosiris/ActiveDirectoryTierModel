@@ -126,7 +126,7 @@ export function Component() {
             <Tile
               label={t('privileged.privileged.groups')}
               value={snapshot.groupCount}
-              sub={t('privileged.privileged.memberships', { count: formatNumber(snapshot.memberCount) })}
+              sub={t('privileged.privileged.memberships', { count: snapshot.memberCount, value: formatNumber(snapshot.memberCount) })}
               icon={<Users />}
               tone="text-sky-600 bg-sky-500/10 dark:text-sky-300"
               onClick={() => navigate('/privilegiert/gruppen')}

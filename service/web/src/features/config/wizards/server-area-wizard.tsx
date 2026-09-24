@@ -36,6 +36,7 @@ import {
 } from './wizard-model'
 import { AclTemplateLine, Callout, Contained, DnPreview, RadioCards, shortDn, TierPicker } from './wizard-fields'
 import { blockedReason, PlanSummary, useApplyPlan, useWizardContents, useWizardState, WizardDialog, type WizardStep } from './wizard-shell'
+import { t } from '@/i18n'
 
 export function ServerAreaWizard({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { contents, ready } = useWizardContents(open)
@@ -109,7 +110,7 @@ export function ServerAreaWizard({ open, onClose }: { open: boolean; onClose: ()
   )
   const catalog = React.useMemo(() => gpoNameCatalog(sources), [sources])
   const gpoOptions: ComboOption[] = React.useMemo(
-    () => [...catalog.values()].map(({ link, source }) => ({ value: link.name, label: link.name, hint: `${kindLabels[link.kind]} · verknüpft mit ${source.title}` })),
+    () => [...catalog.values()].map(({ link, source }) => ({ value: link.name, label: link.name, hint: t('config.wizards.serverAreaWizard.valueLinkedToTitle', { value: kindLabels[link.kind], title: source.title }) })),
     [catalog],
   )
 
@@ -133,13 +134,13 @@ export function ServerAreaWizard({ open, onClose }: { open: boolean; onClose: ()
   const errArea: Record<string, string> = {}
   const nameErr = ouNameError(name)
   if (nameErr) errArea.name = nameErr
-  if (!parentPath) errArea.parent = `Keine OU aus Tier ${tier} vorhanden – bitte zuerst eine anlegen.`
-  else if (name && ous.some((o) => ouFullDn(o).toLowerCase() === dn.toLowerCase())) errArea.name = 'Eine OU mit diesem Namen existiert an dieser Stelle bereits.'
+  if (!parentPath) errArea.parent = t('config.wizards.serverAreaWizard.noOuFromTierTier', { tier })
+  else if (name && ous.some((o) => ouFullDn(o).toLowerCase() === dn.toLowerCase())) errArea.name = t('config.wizards.serverAreaWizard.anOuWithThisName')
   const errGroup: Record<string, string> = {}
-  if (!effGroupName.trim()) errGroup.groupName = 'Name ist erforderlich.'
+  if (!effGroupName.trim()) errGroup.groupName = t('config.wizards.serverAreaWizard.nameIsRequired')
   const samErr = groupSamError(effGroupSam, groups)
   if (samErr) errGroup.groupSam = samErr
-  if (!effGroupOu) errGroup.groupOu = 'Ziel-OU ist erforderlich.'
+  if (!effGroupOu) errGroup.groupOu = t('config.wizards.serverAreaWizard.targetOuIsRequired')
   const show = w.attempted
 
   const presetObj = SERVER_RIGHTS_PRESETS.find((p) => p.id === preset)!
@@ -149,57 +150,56 @@ export function ServerAreaWizard({ open, onClose }: { open: boolean; onClose: ()
   const steps: WizardStep[] = [
     {
       id: 'area',
-      label: 'Bereich',
+      label: t('config.wizards.serverAreaWizard.area'),
       errors: errArea,
       content: (
         <>
-          <FormSection title="Tier und Name" description="Wo im Tier-Modell liegen die neuen Server?">
-            <Field label="Tier" htmlFor="sa-tier">
+          <FormSection title={t('config.wizards.serverAreaWizard.tierAndName')} description={t('config.wizards.serverAreaWizard.whereInTheTierModel')}>
+            <Field label={t('config.wizards.serverAreaWizard.tier')} htmlFor="sa-tier">
               <TierPicker id="sa-tier" value={tier} onChange={setTier} />
             </Field>
             {tier === 0 && (
               <Callout>
-                <strong className="font-semibold">Tier 0 ist die höchste Schutzstufe.</strong> Server in Tier 0 können die gesamte Domäne kontrollieren – nur Systeme wie
-                PKI, ADFS oder Identitätssynchronisation gehören hierher. Server-Bereiche entstehen üblicherweise in Tier 1 oder Tier 2.
+                <strong className="font-semibold">{t('config.wizards.serverAreaWizard.tier0IsTheHighest')}</strong> {t('config.wizards.serverAreaWizard.serversInTier0Can')}
               </Callout>
             )}
-            <Field label="Name des Bereichs" htmlFor="sa-name" required error={show ? errArea.name : undefined} hint="Wird als OU-Name verwendet, z. B. „SQL Server“ oder „Webserver“.">
-              <Input id="sa-name" value={name} onChange={(e) => setName(e.target.value)} aria-invalid={show && !!errArea.name} placeholder="z. B. SQL Server" autoComplete="off" />
+            <Field label={t('config.wizards.serverAreaWizard.nameOfTheArea')} htmlFor="sa-name" required error={show ? errArea.name : undefined} hint={t('config.wizards.serverAreaWizard.usedAsTheOuName')}>
+              <Input id="sa-name" value={name} onChange={(e) => setName(e.target.value)} aria-invalid={show && !!errArea.name} placeholder={t('config.wizards.serverAreaWizard.eGSqlServer')} autoComplete="off" />
             </Field>
-            <Field label="Übergeordnete OU" htmlFor="sa-parent" required error={show ? errArea.parent : undefined} hint={`OUs aus Tier ${tier}. Vorgeschlagen: die Member-Server-OU des Tiers.`}>
-              <Combobox id="sa-parent" value={parentPath} onChange={(v) => setParent(v)} options={parentOptions} allowCustom={false} placeholder="OU wählen" searchPlaceholder="OU suchen …" invalid={show && !!errArea.parent} />
+            <Field label={t('config.wizards.serverAreaWizard.parentOu')} htmlFor="sa-parent" required error={show ? errArea.parent : undefined} hint={t('config.wizards.serverAreaWizard.ousFromTierTierSuggested', { tier })}>
+              <Combobox id="sa-parent" value={parentPath} onChange={(v) => setParent(v)} options={parentOptions} allowCustom={false} placeholder={t('config.wizards.serverAreaWizard.selectOu')} searchPlaceholder={t('config.wizards.serverAreaWizard.searchOu')} invalid={show && !!errArea.parent} />
             </Field>
           </FormSection>
-          <FormSection title="Struktur">
-            <SwitchRow id="sa-staging" label="Staging-Unter-OU anlegen" description={`„${stagingName(name || 'Bereich')}“ nimmt neue Server auf, bevor sie in den Bereich verschoben werden.`} checked={staging} onCheckedChange={setStaging} />
-            <DnPreview label="Neue OU" dn={name ? shortDn(dn) : ''} badge={name ? <TierBadgeFor text={dn} /> : undefined} />
-            {staging && name && <DnPreview label="Staging-OU" dn={shortDn(stagingDn)} />}
+          <FormSection title={t('config.wizards.serverAreaWizard.structure')}>
+            <SwitchRow id="sa-staging" label={t('config.wizards.serverAreaWizard.createStagingSubOu')} description={t('config.wizards.serverAreaWizard.valueReceivesNewServersBefore', { value: stagingName(name || t('config.wizards.serverAreaWizard.area')) })} checked={staging} onCheckedChange={setStaging} />
+            <DnPreview label={t('config.wizards.serverAreaWizard.newOu')} dn={name ? shortDn(dn) : ''} badge={name ? <TierBadgeFor text={dn} /> : undefined} />
+            {staging && name && <DnPreview label={t('config.wizards.serverAreaWizard.stagingOu')} dn={shortDn(stagingDn)} />}
           </FormSection>
         </>
       ),
     },
     {
       id: 'group',
-      label: 'Gruppe',
+      label: t('config.wizards.serverAreaWizard.group'),
       errors: errGroup,
       content: (
-        <FormSection title="Admin-Gruppe für den Bereich" description="Mitglieder dieser Gruppe verwalten die Computerobjekte des neuen Bereichs.">
+        <FormSection title={t('config.wizards.serverAreaWizard.adminGroupForTheArea')} description={t('config.wizards.serverAreaWizard.membersOfThisGroupManage')}>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Name" htmlFor="sa-gname" required error={show ? errGroup.groupName : undefined}>
+            <Field label={t('common.name')} htmlFor="sa-gname" required error={show ? errGroup.groupName : undefined}>
               <Input id="sa-gname" value={effGroupName} onChange={(e) => setGroupName(e.target.value)} aria-invalid={show && !!errGroup.groupName} autoComplete="off" />
             </Field>
             <Field
-              label="sAMAccountName"
+              label={t('config.wizards.serverAreaWizard.samaccountname')}
               htmlFor="sa-gsam"
               required
               error={errGroup.groupSam && (show || groupSam !== null) ? errGroup.groupSam : undefined}
-              hint="Vorschlag aus Tier und Name – eindeutig in der Konfiguration."
+              hint={t('config.wizards.serverAreaWizard.suggestionFromTierAndName')}
             >
               <div className="flex gap-2">
                 <Input id="sa-gsam" className="font-mono" value={effGroupSam} onChange={(e) => setGroupSam(e.target.value)} aria-invalid={!!errGroup.groupSam && (show || groupSam !== null)} autoComplete="off" />
                 {groupSam !== null && groupSam !== suggestedSam && (
-                  <Tooltip content={`Vorschlag „${suggestedSam}“ verwenden`}>
-                    <Button type="button" variant="outline" size="icon" aria-label={`Vorschlag „${suggestedSam}“ verwenden`} onClick={() => setGroupSam(null)}>
+                  <Tooltip content={t('config.wizards.serverAreaWizard.useSuggestionSuggestedsam', { suggestedSam })}>
+                    <Button type="button" variant="outline" size="icon" aria-label={t('config.wizards.serverAreaWizard.useSuggestionSuggestedsam', { suggestedSam })} onClick={() => setGroupSam(null)}>
                       <RotateCcw />
                     </Button>
                   </Tooltip>
@@ -207,27 +207,27 @@ export function ServerAreaWizard({ open, onClose }: { open: boolean; onClose: ()
               </div>
             </Field>
           </div>
-          <Field label="Beschreibung" htmlFor="sa-gdesc" hint="Optional – sonst wird eine Standardbeschreibung verwendet.">
+          <Field label={t('config.wizards.serverAreaWizard.description')} htmlFor="sa-gdesc" hint={t('config.wizards.serverAreaWizard.optionalOtherwiseADefaultDescription')}>
             <Textarea id="sa-gdesc" rows={2} value={groupDesc} onChange={(e) => setGroupDesc(e.target.value)} placeholder={`Members of this group administer the Tier ${tier} ${name || '…'} servers`} />
           </Field>
-          <Field label="Ziel-OU der Gruppe" htmlFor="sa-gou" required error={show ? errGroup.groupOu : undefined} hint={`Vorgeschlagen: die Gruppen-OU von Tier ${tier}.`}>
-            <Combobox id="sa-gou" mono value={effGroupOu} onChange={(v) => setGroupOu(v)} options={groupOuOptions} allowCustom={false} placeholder="OU wählen" searchPlaceholder="OU suchen …" invalid={show && !!errGroup.groupOu} />
+          <Field label={t('config.wizards.serverAreaWizard.targetOuOfTheGroup')} htmlFor="sa-gou" required error={show ? errGroup.groupOu : undefined} hint={t('config.wizards.serverAreaWizard.suggestedTheGroupsOuOf', { tier })}>
+            <Combobox id="sa-gou" mono value={effGroupOu} onChange={(v) => setGroupOu(v)} options={groupOuOptions} allowCustom={false} placeholder={t('config.wizards.serverAreaWizard.selectOu')} searchPlaceholder={t('config.wizards.serverAreaWizard.searchOu')} invalid={show && !!errGroup.groupOu} />
           </Field>
           <div className="flex flex-wrap gap-1.5 text-xs text-muted-foreground">
-            <Badge variant="outline">Global</Badge>
-            <Badge variant="outline">Sicherheitsgruppe</Badge>
+            <Badge variant="outline">{t('config.wizards.serverAreaWizard.global')}</Badge>
+            <Badge variant="outline">{t('config.wizards.serverAreaWizard.securityGroup')}</Badge>
           </div>
         </FormSection>
       ),
     },
     {
       id: 'rights',
-      label: 'Rechte',
+      label: t('config.wizards.serverAreaWizard.rights'),
       errors: {},
       content: (
-        <FormSection title="Delegierte Rechte" description={`„${effGroupSam || 'Gruppe'}“ erhält diese Rechte auf „${name || 'die neue OU'}“ und alle Unter-OUs.`}>
+        <FormSection title={t('config.wizards.serverAreaWizard.delegatedRights')} description={t('config.wizards.serverAreaWizard.valueGetsTheseRightsOn', { value: effGroupSam || t('config.wizards.serverAreaWizard.group'), value2: name || t('config.wizards.serverAreaWizard.theNewOu') })}>
           <RadioCards
-            label="Rechte-Vorlage"
+            label={t('config.wizards.serverAreaWizard.rightsTemplate')}
             value={preset}
             onChange={setPreset}
             options={SERVER_RIGHTS_PRESETS.map((p) => ({
@@ -238,23 +238,22 @@ export function ServerAreaWizard({ open, onClose }: { open: boolean; onClose: ()
             }))}
           />
           <p className="text-xs text-muted-foreground">
-            {presetObj.entries.length === 1 ? 'Es wird eine ACL-Delegation angelegt.' : `Es werden ${presetObj.entries.length} ACL-Delegationen angelegt.`} Feinere Rechte lassen sich später im Bereich
-            „ACL-Delegationen“ oder mit dem Assistenten „Neue Delegation“ ergänzen.
+            {presetObj.entries.length === 1 ? t('config.wizards.serverAreaWizard.oneAclDelegationIsCreated') : t('config.wizards.serverAreaWizard.lengthAclDelegationsAreCreated', { length: presetObj.entries.length })} {t('config.wizards.serverAreaWizard.finerRightsCanBeAdded')}
           </p>
         </FormSection>
       ),
     },
     {
       id: 'gpos',
-      label: 'GPOs',
+      label: t('config.wizards.serverAreaWizard.gpos'),
       errors: {},
       content: (
-        <FormSection title="GPO-Verknüpfungen" description={`GPOs, die bereits mit OUs aus Tier ${tier} verknüpft sind. Die Reihenfolge der Auswahl ist die Verknüpfungsreihenfolge.`}>
+        <FormSection title={t('config.wizards.serverAreaWizard.gpoLinks')} description={t('config.wizards.serverAreaWizard.gposAlreadyLinkedToOus', { tier })}>
           {sources.length === 0 ? (
-            <Callout tone="info">In Tier {tier} sind noch keine GPOs verknüpft – der Bereich wird ohne eigene GPO-Verknüpfungen angelegt.</Callout>
+            <Callout tone="info">{t('config.wizards.serverAreaWizard.inTier')} {tier} {t('config.wizards.serverAreaWizard.noGposAreLinkedYet')}</Callout>
           ) : (
             <>
-              <Field label="Vorlage übernehmen von" htmlFor="sa-gsrc" hint="Übernimmt die Verknüpfungen dieser OU – danach frei anpassbar.">
+              <Field label={t('config.wizards.serverAreaWizard.takeOverTemplateFrom')} htmlFor="sa-gsrc" hint={t('config.wizards.serverAreaWizard.takesOverTheLinksOf')}>
                 <Select
                   id="sa-gsrc"
                   value={effSource}
@@ -262,34 +261,34 @@ export function ServerAreaWizard({ open, onClose }: { open: boolean; onClose: ()
                     setGpoSource(v)
                     setGpoNames(null)
                   }}
-                  options={sources.map((s) => ({ value: s.key, label: s.title, description: `${s.links.length} GPO${s.links.length === 1 ? '' : 's'} · ${shortDn(s.key)}` }))}
+                  options={sources.map((s) => ({ value: s.key, label: s.title, description: `${t('config.wizards.serverAreaWizard.gpoCount', { count: s.links.length })} · ${shortDn(s.key)}` }))}
                 />
               </Field>
-              <Field label="Zu verknüpfende GPOs" htmlFor="sa-gpos">
-                <Contained><MultiCombobox id="sa-gpos" values={effGpoNames} onChange={setGpoNames} options={gpoOptions} allowCustom={false} placeholder="GPO suchen und hinzufügen …" /></Contained>
+              <Field label={t('config.wizards.serverAreaWizard.gposToLink')} htmlFor="sa-gpos">
+                <Contained><MultiCombobox id="sa-gpos" values={effGpoNames} onChange={setGpoNames} options={gpoOptions} allowCustom={false} placeholder={t('config.wizards.serverAreaWizard.searchAndAddGpo')} /></Contained>
               </Field>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" size="xs" onClick={() => setGpoNames(null)} disabled={gpoNames === null}>
-                  <RotateCcw /> Vorlage wiederherstellen
+                  <RotateCcw /> {t('config.wizards.serverAreaWizard.restoreTemplate')}
                 </Button>
                 <Button type="button" variant="ghost" size="xs" onClick={() => setGpoNames([])} disabled={effGpoNames.length === 0}>
-                  Keine GPOs verknüpfen
+                  {t('config.wizards.serverAreaWizard.doNotLinkGpos')}
                 </Button>
               </div>
               {previewLinks.length > 0 && (
-                <ol className="grid grid-cols-[minmax(0,1fr)] gap-1 rounded-lg border bg-card p-1.5" aria-label="Verknüpfungsreihenfolge">
+                <ol className="grid grid-cols-[minmax(0,1fr)] gap-1 rounded-lg border bg-card p-1.5" aria-label={t('config.wizards.serverAreaWizard.linkOrder')}>
                   {previewLinks.map((l) => (
                     <li key={l.name} className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[12.5px]">
                       <span className="grid size-5 shrink-0 place-content-center rounded bg-muted text-[11px] font-semibold tabular-nums">{l.linkOrder}</span>
                       <span className="min-w-0 flex-1 truncate" title={l.name}>{l.name}</span>
                       <Badge variant={l.kind === 'PostConfigureGpo' ? 'info' : 'muted'} className="hidden sm:inline-flex">{kindLabels[l.kind]}</Badge>
-                      {!l.linkEnabled && <Badge variant="outline">Link aus</Badge>}
+                      {!l.linkEnabled && <Badge variant="outline">{t('config.wizards.serverAreaWizard.linkOff')}</Badge>}
                     </li>
                   ))}
                 </ol>
               )}
               <TierRuleAlerts issues={linkIssues} />
-              {effGpoNames.length > 0 && <p className="text-xs text-muted-foreground">Die neue OU blockiert die GPO-Vererbung, damit nur diese Verknüpfungen gelten.</p>}
+              {effGpoNames.length > 0 && <p className="text-xs text-muted-foreground">{t('config.wizards.serverAreaWizard.theNewOuBlocksGpo')}</p>}
             </>
           )}
         </FormSection>
@@ -297,7 +296,7 @@ export function ServerAreaWizard({ open, onClose }: { open: boolean; onClose: ()
     },
     {
       id: 'summary',
-      label: 'Zusammenfassung',
+      label: t('config.wizards.serverAreaWizard.summary'),
       errors: {},
       content: plan ? <PlanSummary plan={plan} /> : null,
     },
@@ -307,8 +306,8 @@ export function ServerAreaWizard({ open, onClose }: { open: boolean; onClose: ()
     <WizardDialog
       open={open}
       onClose={close}
-      title="Neuen Server-Bereich aufnehmen"
-      description="OU, Admin-Gruppe, Rechte und GPO-Verknüpfungen in einem Schritt."
+      title={t('config.wizards.serverAreaWizard.addNewServerArea')}
+      description={t('config.wizards.serverAreaWizard.ouAdminGroupRightsAnd')}
       icon={<Server />}
       steps={steps}
       step={w.step}
@@ -320,7 +319,7 @@ export function ServerAreaWizard({ open, onClose }: { open: boolean; onClose: ()
       finishBlocked={blockedReason(plan)}
       onFinish={() => {
         if (!plan) return
-        apply(plan, `Server-Bereich „${name.trim()}“ angelegt`, 'ous')
+        apply(plan, t('config.wizards.serverAreaWizard.serverAreaTrimCreated', { trim: name.trim() }), 'ous')
         close()
       }}
     />

@@ -6,6 +6,7 @@ using TierModel.Service.Auth;
 using TierModel.Service.Config;
 using TierModel.Service.Data;
 using TierModel.Service.Runs;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Endpoints;
 
@@ -67,31 +68,34 @@ public static class MiscEndpoints
             r = r with { DefaultPreferredDc = r.DefaultPreferredDc?.Trim() ?? "", AdmlLanguage = r.AdmlLanguage?.Trim() ?? "" };
             if (!string.IsNullOrWhiteSpace(r.DefaultPreferredDc)
                 && RunValidation.Validate(new RunRequest(r.DefaultPreferredDc.Trim(), DeployScope.FullDeployment, false, false, false, false, null)).ContainsKey("preferredDc"))
-                errors["defaultPreferredDc"] = ["Ungültiger Hostname."];
+                errors["defaultPreferredDc"] = [L.T("Ungültiger Hostname.")];
             // An empty language would be passed as -AdmlLanguage "" and fail every run at parameter binding.
             if (r.AdmlLanguage.Length == 0 || RunValidation.Validate(new RunRequest("dc", DeployScope.FullDeployment, false, false, false, false, r.AdmlLanguage)).ContainsKey("admlLanguage"))
-                errors["admlLanguage"] = ["Sprache im Format xx-XX angeben."];
-            if (r.RunRetentionDays is < 0 or > 3650) errors["runRetentionDays"] = ["0 bis 3650 Tage (0 = unbegrenzt)."];
-            if (r.ApprovalTimeoutHours is < 1 or > 720) errors["approvalTimeoutHours"] = ["1 bis 720 Stunden."];
-            if (r.PlanMaxAgeHours is < 1 or > 720) errors["planMaxAgeHours"] = ["1 bis 720 Stunden."];
-            if (r.StaleDays is < 1 or > 3650) errors["staleDays"] = ["1 bis 3650 Tage."];
-            if (r.PasswordMaxAgeDays is < 1 or > 3650) errors["passwordMaxAgeDays"] = ["1 bis 3650 Tage."];
+                errors["admlLanguage"] = [L.T("Sprache im Format xx-XX angeben.")];
+            if (r.RunRetentionDays is < 0 or > 3650) errors["runRetentionDays"] = [L.T("0 bis 3650 Tage (0 = unbegrenzt).")];
+            if (r.ApprovalTimeoutHours is < 1 or > 720) errors["approvalTimeoutHours"] = [L.T("1 bis 720 Stunden.")];
+            if (r.PlanMaxAgeHours is < 1 or > 720) errors["planMaxAgeHours"] = [L.T("1 bis 720 Stunden.")];
+            if (r.StaleDays is < 1 or > 3650) errors["staleDays"] = [L.T("1 bis 3650 Tage.")];
+            if (r.PasswordMaxAgeDays is < 1 or > 3650) errors["passwordMaxAgeDays"] = [L.T("1 bis 3650 Tage.")];
             if (!string.IsNullOrWhiteSpace(r.PublicBaseUrl)
                 && !(Uri.TryCreate(r.PublicBaseUrl.Trim(), UriKind.Absolute, out var url) && url.Scheme is "https" or "http"))
-                errors["publicBaseUrl"] = ["Vollständige Adresse angeben, z. B. https://tiermodel01.contoso.com:8443"];
+                errors["publicBaseUrl"] = [L.T("Vollständige Adresse angeben, z. B. https://tiermodel01.contoso.com:8443")];
+            if (r.DefaultLanguage is not null && L.Normalize(r.DefaultLanguage) is null)
+                errors["defaultLanguage"] = [L.T("Unterstützt werden „de“ und „en“.")];
             if (errors.Count > 0) return Results.ValidationProblem(errors);
 
             var before = await s.GetAsync();
             await s.UpdateAsync(r);
             var approvalText = r.RequireApproval is { } ra && ra != before.RequireApproval
-                ? ra ? ", Vier-Augen-Prinzip EIN" : ", Vier-Augen-Prinzip AUS" : "";
+                ? ra ? L.P(", Vier-Augen-Prinzip EIN") : L.P(", Vier-Augen-Prinzip AUS") : "";
             if (r.RequirePlanBeforeApply is { } rp && rp != before.RequirePlanBeforeApply)
-                approvalText += rp ? ", Anwenden nur nach Planung EIN" : ", Anwenden nur nach Planung AUS";
-            if (r.PlanMaxAgeHours is { } ph && ph != before.PlanMaxAgeHours) approvalText += $", Planung gültig {ph} Stunden";
-            if (r.StaleDays is { } sd && sd != before.StaleDays) approvalText += $", inaktive Konten ab {sd} Tagen";
-            if (r.PasswordMaxAgeDays is { } pa && pa != before.PasswordMaxAgeDays) approvalText += $", maximales Passwortalter {pa} Tage";
+                approvalText += rp ? L.P(", Anwenden nur nach Planung EIN") : L.P(", Anwenden nur nach Planung AUS");
+            if (r.PlanMaxAgeHours is { } ph && ph != before.PlanMaxAgeHours) approvalText += L.PF(", Planung gültig {0} Stunden", ph);
+            if (r.StaleDays is { } sd && sd != before.StaleDays) approvalText += L.PF(", inaktive Konten ab {0} Tagen", sd);
+            if (r.PasswordMaxAgeDays is { } pa && pa != before.PasswordMaxAgeDays) approvalText += L.PF(", maximales Passwortalter {0} Tage", pa);
+            if (L.Normalize(r.DefaultLanguage) is { } dl && dl != before.DefaultLanguage) approvalText += L.PF(", Standardsprache {0}", dl);
             log.Add(ctx.User.UserName(), "settings.update", "settings", null,
-                $"Einstellungen geändert: DC '{r.DefaultPreferredDc}', ADML {r.AdmlLanguage} (Domäne {domain.Key}), Aufbewahrung {r.RunRetentionDays} Tage{approvalText}",
+                L.PF("Einstellungen geändert: DC '{0}', ADML {1} (Domäne {2}), Aufbewahrung {3} Tage{4}", r.DefaultPreferredDc, r.AdmlLanguage, domain.Key, r.RunRetentionDays, approvalText),
                 new { domain = domain.Key });
             await db.SaveChangesAsync();
             await registry.ReloadAsync(db);

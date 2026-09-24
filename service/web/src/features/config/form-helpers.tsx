@@ -11,6 +11,7 @@ import { TierDot } from '@/components/shared/badges'
 import { sectionQuery } from './queries'
 import { useSectionContent } from './draft-store'
 import type { Item } from './list-editor'
+import { t } from '@/i18n'
 
 /** Set a field while preserving all other (possibly unknown) keys.
  *  Optional fields are removed when cleared, so we never introduce empty keys. */
@@ -131,7 +132,7 @@ export function ChipsInput({
                 type="button"
                 onClick={() => onChange(value.filter((x) => x !== v))}
                 className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                aria-label={`${v} entfernen`}
+                aria-label={t('config.formHelpers.removeV', { v })}
               >
                 <X className="size-3" />
               </button>
@@ -189,7 +190,7 @@ export function useGroupOptions(by: 'samaccountname' | 'name' = 'samaccountname'
       hint: by === 'samaccountname' ? g.name : g.samaccountname,
       icon: <TierDot tier={tierOf(g.name ?? g.samaccountname)} />,
     }))
-    for (const b of builtinPrincipals) if (!opts.some((o) => o.value === b)) opts.push({ value: b, label: b, hint: 'Integriert' })
+    for (const b of builtinPrincipals) if (!opts.some((o) => o.value === b)) opts.push({ value: b, label: b, hint: t('config.formHelpers.builtIn') })
     return opts.filter((o) => o.value)
   }, [content, by])
 }

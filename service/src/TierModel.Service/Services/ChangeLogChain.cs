@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service;
 
@@ -246,10 +247,10 @@ public static class ChangeLogChain
             {
                 count++;
                 string? problem = null;
-                if (e.Hash is null) problem = "Eintrag ohne Prüfsumme";
-                else if ((e.PrevHash ?? "") != prev) problem = "Verweis auf den vorherigen Eintrag passt nicht (Eintrag gelöscht oder eingefügt)";
+                if (e.Hash is null) problem = L.T("Eintrag ohne Prüfsumme");
+                else if ((e.PrevHash ?? "") != prev) problem = L.T("Verweis auf den vorherigen Eintrag passt nicht (Eintrag gelöscht oder eingefügt)");
                 else if (!CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(Compute(prev, e)), Encoding.ASCII.GetBytes(e.Hash)))
-                    problem = "Inhalt passt nicht zur Prüfsumme (Eintrag verändert)";
+                    problem = L.T("Inhalt passt nicht zur Prüfsumme (Eintrag verändert)");
                 if (problem is not null)
                     return new ChainVerificationDto(false, count, lastId, prev == "" ? null : prev, e.Id, problem, DateTimeOffset.UtcNow);
                 prev = e.Hash!;

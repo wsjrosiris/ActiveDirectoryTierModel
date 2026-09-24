@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using TierModel.Service.Data;
 using TierModel.Service.Endpoints;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Auth;
 
@@ -98,13 +99,13 @@ public static partial class EntraAuth
     {
         var value = (e.Value ?? "").Trim();
         var name = string.IsNullOrWhiteSpace(e.DisplayName) ? null : e.DisplayName.Trim();
-        if (name is { Length: > 128 }) return (null, $"Anzeigename von '{value}' ist zu lang (max. 128 Zeichen).");
+        if (name is { Length: > 128 }) return (null, L.F("Anzeigename von '{0}' ist zu lang (max. 128 Zeichen).", value));
         if (e.Kind == EntraRoleEntry.AppRole)
             return AppRolePattern().IsMatch(value) ? (new EntraRoleEntry(EntraRoleEntry.AppRole, value, name), null)
-                : (null, $"'{value}' ist kein gültiger Wert einer App-Rolle (Buchstaben, Ziffern, . _ : -).");
-        if (e.Kind != EntraRoleEntry.Group) return (null, $"Unbekannte Art '{e.Kind}'.");
+                : (null, L.F("'{0}' ist kein gültiger Wert einer App-Rolle (Buchstaben, Ziffern, . _ : -).", value));
+        if (e.Kind != EntraRoleEntry.Group) return (null, L.F("Unbekannte Art '{0}'.", e.Kind));
         return Guid.TryParse(value, out var id) ? (new EntraRoleEntry(EntraRoleEntry.Group, id.ToString("D"), name), null)
-            : (null, $"'{value}' ist keine gültige Objekt-ID (GUID) einer Gruppe.");
+            : (null, L.F("'{0}' ist keine gültige Objekt-ID (GUID) einer Gruppe.", value));
     }
 
     /// <summary>Applies the stored configuration to the OpenID Connect handler's options.</summary>
@@ -170,7 +171,7 @@ public static partial class EntraAuth
         if (role is null)
         {
             log.Add(account, "auth.entra-denied", "auth", user?.Id.ToString(),
-                $"Entra-Anmeldung von '{account}' abgelehnt: keiner Rolle zugeordnet" + (overage ? " (zu viele Gruppen im Token – App-Rollen verwenden)" : ""));
+                L.PF("Entra-Anmeldung von '{0}' abgelehnt: keiner Rolle zugeordnet", account) + (overage ? L.P(" (zu viele Gruppen im Token – App-Rollen verwenden)") : ""));
             await db.SaveChangesAsync(ct);
             return new(null, overage ? EntraSignInError.Overage : EntraSignInError.NoRole);
         }
@@ -186,24 +187,24 @@ public static partial class EntraAuth
             if (await db.Users.AnyAsync(u => u.NormalizedUsername == user.NormalizedUsername, ct))
                 user.NormalizedUsername = UserService.Normalize(account + "@entra:" + oid);
             db.Users.Add(user);
-            log.Add(account, "user.create", "user", user.Id.ToString(), $"Entra-Konto '{account}' bei der ersten Anmeldung angelegt ({role})");
+            log.Add(account, "user.create", "user", user.Id.ToString(), L.PF("Entra-Konto '{0}' bei der ersten Anmeldung angelegt ({1})", account, role));
         }
         else if (user.Role != role || user.Username != account)
         {
-            log.Add(account, "user.update", "user", user.Id.ToString(), $"Rolle von '{account}' aus Entra ID: {user.Role} → {role}");
+            log.Add(account, "user.update", "user", user.Id.ToString(), L.PF("Rolle von '{0}' aus Entra ID: {1} → {2}", account, user.Role, role));
             user.Role = role.Value;
             user.Username = account;
             user.SecurityStamp = Guid.NewGuid().ToString("N");
         }
         if (!user.IsActive)
         {
-            log.Add(account, "auth.entra-denied", "auth", user.Id.ToString(), $"Entra-Anmeldung von '{account}' abgelehnt: Konto deaktiviert");
+            log.Add(account, "auth.entra-denied", "auth", user.Id.ToString(), L.PF("Entra-Anmeldung von '{0}' abgelehnt: Konto deaktiviert", account));
             await db.SaveChangesAsync(ct);
             return new(null, EntraSignInError.Inactive);
         }
 
         user.LastLoginAt = DateTimeOffset.UtcNow;
-        log.Add(account, "auth.entra-login", "auth", user.Id.ToString(), $"{account} hat sich mit Entra ID angemeldet ({user.Role})");
+        log.Add(account, "auth.entra-login", "auth", user.Id.ToString(), L.PF("{0} hat sich mit Entra ID angemeldet ({1})", account, user.Role));
         await db.SaveChangesAsync(ct);
         return new(user, EntraSignInError.None);
     }
@@ -279,7 +280,7 @@ public static partial class EntraAuth
     public static async Task<MetadataCheck> CheckMetadataAsync(HttpClient http, string tenantId, CancellationToken ct, string authorityHost = AuthorityHost)
     {
         if (!Guid.TryParse(tenantId, out var tenant))
-            return new(false, "Die Mandanten-ID muss eine GUID sein.", null, null, null);
+            return new(false, L.T("Die Mandanten-ID muss eine GUID sein."), null, null, null);
         var url = $"{authorityHost.TrimEnd('/')}/{tenant:D}/v2.0/.well-known/openid-configuration";
         try
         {
@@ -288,19 +289,19 @@ public static partial class EntraAuth
             JsonNode? json = null;
             try { json = JsonNode.Parse(text); } catch (JsonException) { /* below */ }
             if (!response.IsSuccessStatusCode)
-                return new(false, $"Der Mandant wurde nicht gefunden (HTTP {(int)response.StatusCode}): {json?["error_description"]?.GetValue<string>()?.Split('\n')[0] ?? "keine Details"}", null, null, null);
+                return new(false, L.F("Der Mandant wurde nicht gefunden (HTTP {0}): {1}", (int)response.StatusCode, json?["error_description"]?.GetValue<string>()?.Split('\n')[0] ?? L.T("keine Details")), null, null, null);
             var issuer = json?["issuer"]?.GetValue<string>();
             var auth = json?["authorization_endpoint"]?.GetValue<string>();
             var token = json?["token_endpoint"]?.GetValue<string>();
             if (issuer is null || auth is null || token is null)
-                return new(false, "Das Metadatendokument ist unvollständig.", issuer, auth, token);
+                return new(false, L.T("Das Metadatendokument ist unvollständig."), issuer, auth, token);
             if (!issuer.Contains(tenant.ToString("D"), StringComparison.OrdinalIgnoreCase))
-                return new(false, $"Der Aussteller '{issuer}' passt nicht zur Mandanten-ID.", issuer, auth, token);
-            return new(true, "Metadaten gefunden – der Mandant ist erreichbar.", issuer, auth, token);
+                return new(false, L.F("Der Aussteller '{0}' passt nicht zur Mandanten-ID.", issuer), issuer, auth, token);
+            return new(true, L.T("Metadaten gefunden – der Mandant ist erreichbar."), issuer, auth, token);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            return new(false, $"{AuthorityHost} ist nicht erreichbar: {ex.GetBaseException().Message}", null, null, null);
+            return new(false, L.F("{0} ist nicht erreichbar: {1}", AuthorityHost, ex.GetBaseException().Message), null, null, null);
         }
     }
 
@@ -344,13 +345,13 @@ public static partial class EntraAuth
             var errors = new Dictionary<string, string[]>();
             var tenant = (r.TenantId ?? "").Trim();
             var client = (r.ClientId ?? "").Trim();
-            if (tenant.Length > 0 && !Guid.TryParse(tenant, out _)) errors["tenantId"] = ["Die Mandanten-ID (Verzeichnis-ID) ist eine GUID."];
-            if (client.Length > 0 && !Guid.TryParse(client, out _)) errors["clientId"] = ["Die Anwendungs-ID (Client-ID) ist eine GUID."];
-            if (r.Enabled && tenant.Length == 0) errors["tenantId"] = ["Mandanten-ID angeben."];
-            if (r.Enabled && client.Length == 0) errors["clientId"] = ["Anwendungs-ID angeben."];
-            if (r.ClientSecret is { Length: > 512 }) errors["clientSecret"] = ["Der geheime Clientschlüssel ist zu lang."];
+            if (tenant.Length > 0 && !Guid.TryParse(tenant, out _)) errors["tenantId"] = [L.T("Die Mandanten-ID (Verzeichnis-ID) ist eine GUID.")];
+            if (client.Length > 0 && !Guid.TryParse(client, out _)) errors["clientId"] = [L.T("Die Anwendungs-ID (Client-ID) ist eine GUID.")];
+            if (r.Enabled && tenant.Length == 0) errors["tenantId"] = [L.T("Mandanten-ID angeben.")];
+            if (r.Enabled && client.Length == 0) errors["clientId"] = [L.T("Anwendungs-ID angeben.")];
+            if (r.ClientSecret is { Length: > 512 }) errors["clientSecret"] = [L.T("Der geheime Clientschlüssel ist zu lang.")];
             var secret = string.IsNullOrEmpty(r.ClientSecret) ? current.ClientSecretProtected : settings.Secrets.Protect(r.ClientSecret.Trim());
-            if (r.Enabled && secret is null) errors["clientSecret"] = ["Geheimen Clientschlüssel angeben."];
+            if (r.Enabled && secret is null) errors["clientSecret"] = [L.T("Geheimen Clientschlüssel angeben.")];
 
             var mappings = Enum.GetValues<Role>().ToDictionary(role => role, _ => new List<EntraRoleEntry>());
             foreach (var (role, entries) in r.RoleMappings ?? [])
@@ -367,14 +368,14 @@ public static partial class EntraAuth
                 if (messages.Count > 0) errors[$"roleMappings.{role}"] = [.. messages];
             }
             if (r.Enabled && mappings.Values.All(v => v.Count == 0))
-                errors["roleMappings"] = ["Mindestens einer Rolle eine Gruppe oder App-Rolle zuordnen."];
+                errors["roleMappings"] = [L.T("Mindestens einer Rolle eine Gruppe oder App-Rolle zuordnen.")];
             if (errors.Count > 0) return Results.ValidationProblem(errors);
 
             var config = new EntraAuthConfig(r.Enabled,
                 Guid.TryParse(tenant, out var t) ? t.ToString("D") : "", Guid.TryParse(client, out var c) ? c.ToString("D") : "", secret, mappings);
             log.Add(ctx.User.UserName(), "settings.entra-auth", "settings", null,
-                $"Entra-Anmeldung {(r.Enabled ? "aktiviert" : "deaktiviert")}"
-                + (string.IsNullOrEmpty(r.ClientSecret) ? "" : ", geheimer Clientschlüssel geändert") + ": "
+                L.PF("Entra-Anmeldung {0}", (r.Enabled ? L.P("aktiviert") : L.P("deaktiviert")))
+                + (string.IsNullOrEmpty(r.ClientSecret) ? "" : L.P(", geheimer Clientschlüssel geändert")) + ": "
                 + string.Join(", ", mappings.Where(kv => kv.Value.Count > 0).Select(kv => $"{kv.Key} = {string.Join(" / ", kv.Value.Select(x => x.DisplayName ?? x.Value))}")),
                 new { enabled = r.Enabled, tenantId = config.TenantId, clientId = config.ClientId, roleMappings = mappings });
             await SaveAsync(settings, config);

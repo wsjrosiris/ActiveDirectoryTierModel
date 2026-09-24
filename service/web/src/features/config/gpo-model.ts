@@ -4,6 +4,7 @@
  * spread from the original, never rebuilt. Kept free of React and path aliases so the
  * round-trip checks can run it directly in Node. */
 
+import { t } from '../../i18n/index.ts'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Obj = Record<string, any>
 
@@ -15,32 +16,32 @@ export const DC_OU = `OU=Domain Controllers,${DOMAIN_DN}`
 export const TEMPLATE_KEY = 'TemplateGpos'
 
 export const kindLabels: Record<GpoKind, string> = {
-  ImportOnlyGpo: 'Nur importieren',
-  PostConfigureGpo: 'Importieren & konfigurieren',
+  ImportOnlyGpo: t('config.gpoModel.importOnly'),
+  PostConfigureGpo: t('config.gpoModel.importConfigure'),
 }
 export const kindDescriptions: Record<GpoKind, string> = {
-  ImportOnlyGpo: 'GPOs, deren Einstellungen unverändert aus einem Backup übernommen (oder leer angelegt) werden.',
-  PostConfigureGpo: 'GPOs, die nach dem Import zusätzlich mit Benutzerrechten, eingeschränkten Gruppen und Filtern konfiguriert werden.',
+  ImportOnlyGpo: t('config.gpoModel.gposWhoseSettingsAreTaken'),
+  PostConfigureGpo: t('config.gpoModel.gposThatAreAdditionallyConfigured'),
 }
 
 // ------------------------------------------------------------------ modes & status
 
 export const GPO_MODES = [
-  { value: 'create', label: 'Nur anlegen', short: 'Anlegen', description: 'Leere GPO als Platzhalter anlegen – es werden keine Einstellungen importiert.' },
-  { value: 'createAndImport', label: 'Anlegen & importieren', short: 'Import', description: 'GPO anlegen und die Einstellungen aus dem angegebenen Backup importieren.' },
+  { value: 'create', label: t('config.gpoModel.createOnly'), short: t('config.gpoModel.create'), description: t('config.gpoModel.createAnEmptyGpoAs') },
+  { value: 'createAndImport', label: t('config.gpoModel.createImport'), short: t('config.gpoModel.import'), description: t('config.gpoModel.createTheGpoAndImport') },
   {
     value: 'createImportAndConfigure',
-    label: 'Anlegen, importieren & konfigurieren',
-    short: 'Konfiguriert',
-    description: 'Wie „Anlegen & importieren“, danach zusätzlich Benutzerrechte, eingeschränkte Gruppen und Filter setzen.',
+    label: t('config.gpoModel.createImportConfigure'),
+    short: t('config.gpoModel.configured'),
+    description: t('config.gpoModel.likeCreateImportThenAdditionally'),
   },
 ] as const
 
 export const GPO_STATUSES = [
-  { value: 'AllSettingsEnabled', label: 'Alle Einstellungen aktiviert', short: 'Alle aktiv' },
-  { value: 'UserSettingsDisabled', label: 'Benutzereinstellungen deaktiviert', short: 'Benutzer aus' },
-  { value: 'ComputerSettingsDisabled', label: 'Computereinstellungen deaktiviert', short: 'Computer aus' },
-  { value: 'AllSettingsDisabled', label: 'Alle Einstellungen deaktiviert', short: 'Alle aus' },
+  { value: 'AllSettingsEnabled', label: t('config.gpoModel.allSettingsEnabled'), short: t('config.gpoModel.allOn') },
+  { value: 'UserSettingsDisabled', label: t('config.gpoModel.userSettingsDisabled'), short: t('config.gpoModel.userOff') },
+  { value: 'ComputerSettingsDisabled', label: t('config.gpoModel.computerSettingsDisabled'), short: t('config.gpoModel.computerOff') },
+  { value: 'AllSettingsDisabled', label: t('config.gpoModel.allSettingsDisabled'), short: t('config.gpoModel.allOff') },
 ] as const
 
 export const modeMeta = (m: unknown) => GPO_MODES.find((x) => x.value === m)
@@ -49,51 +50,51 @@ export const statusMeta = (s: unknown) => GPO_STATUSES.find((x) => x.value === s
 // ------------------------------------------------------------------ user rights
 
 export const USER_RIGHTS: { value: string; label: string }[] = [
-  { value: 'SeNetworkLogonRight', label: 'Auf diesen Computer vom Netzwerk aus zugreifen' },
-  { value: 'SeDenyNetworkLogonRight', label: 'Zugriff vom Netzwerk auf diesen Computer verweigern' },
-  { value: 'SeInteractiveLogonRight', label: 'Lokal anmelden zulassen' },
-  { value: 'SeDenyInteractiveLogonRight', label: 'Lokale Anmeldung verweigern' },
-  { value: 'SeRemoteInteractiveLogonRight', label: 'Anmelden über Remotedesktopdienste zulassen' },
-  { value: 'SeDenyRemoteInteractiveLogonRight', label: 'Anmelden über Remotedesktopdienste verweigern' },
-  { value: 'SeBatchLogonRight', label: 'Anmelden als Stapelverarbeitungsauftrag' },
-  { value: 'SeDenyBatchLogonRight', label: 'Anmelden als Stapelverarbeitungsauftrag verweigern' },
-  { value: 'SeServiceLogonRight', label: 'Anmelden als Dienst' },
-  { value: 'SeDenyServiceLogonRight', label: 'Anmelden als Dienst verweigern' },
-  { value: 'SeImpersonatePrivilege', label: 'Annehmen der Clientidentität nach Authentifizierung' },
-  { value: 'SeAssignPrimaryTokenPrivilege', label: 'Ersetzen eines Tokens auf Prozessebene' },
-  { value: 'SeIncreaseQuotaPrivilege', label: 'Anpassen von Speicherkontingenten für einen Prozess' },
-  { value: 'SeAuditPrivilege', label: 'Generieren von Sicherheitsüberwachungen' },
-  { value: 'SeChangeNotifyPrivilege', label: 'Auslassen der durchsuchenden Überprüfung' },
-  { value: 'SeBackupPrivilege', label: 'Sichern von Dateien und Verzeichnissen' },
-  { value: 'SeRestorePrivilege', label: 'Wiederherstellen von Dateien und Verzeichnissen' },
-  { value: 'SeDebugPrivilege', label: 'Debuggen von Programmen' },
-  { value: 'SeTcbPrivilege', label: 'Einsetzen als Teil des Betriebssystems' },
-  { value: 'SeTakeOwnershipPrivilege', label: 'Übernehmen des Besitzes von Dateien und Objekten' },
-  { value: 'SeLoadDriverPrivilege', label: 'Laden und Entfernen von Gerätetreibern' },
-  { value: 'SeSecurityPrivilege', label: 'Verwalten von Überwachungs- und Sicherheitsprotokollen' },
-  { value: 'SeSystemtimePrivilege', label: 'Ändern der Systemzeit' },
-  { value: 'SeTimeZonePrivilege', label: 'Ändern der Zeitzone' },
-  { value: 'SeShutdownPrivilege', label: 'Herunterfahren des Systems' },
-  { value: 'SeRemoteShutdownPrivilege', label: 'Erzwingen des Herunterfahrens von einem Remotesystem aus' },
-  { value: 'SeMachineAccountPrivilege', label: 'Hinzufügen von Arbeitsstationen zur Domäne' },
-  { value: 'SeEnableDelegationPrivilege', label: 'Ermöglichen, dass Computer- und Benutzerkonten für Delegierungszwecke vertraut wird' },
-  { value: 'SeCreateTokenPrivilege', label: 'Erstellen eines Tokenobjekts' },
-  { value: 'SeCreateGlobalPrivilege', label: 'Erstellen globaler Objekte' },
-  { value: 'SeCreatePagefilePrivilege', label: 'Erstellen einer Auslagerungsdatei' },
-  { value: 'SeCreatePermanentPrivilege', label: 'Erstellen dauerhaft freigegebener Objekte' },
-  { value: 'SeCreateSymbolicLinkPrivilege', label: 'Erstellen symbolischer Verknüpfungen' },
-  { value: 'SeIncreaseBasePriorityPrivilege', label: 'Anheben der Zeitplanungspriorität' },
-  { value: 'SeIncreaseWorkingSetPrivilege', label: 'Arbeitssatz eines Prozesses vergrößern' },
-  { value: 'SeLockMemoryPrivilege', label: 'Sperren von Seiten im Speicher' },
-  { value: 'SeManageVolumePrivilege', label: 'Durchführen von Volumewartungsaufgaben' },
-  { value: 'SeProfileSingleProcessPrivilege', label: 'Erstellen eines Profils für einen Einzelprozess' },
-  { value: 'SeSystemProfilePrivilege', label: 'Erstellen eines Profils der Systemleistung' },
-  { value: 'SeSystemEnvironmentPrivilege', label: 'Verändern der Firmwareumgebungsvariablen' },
-  { value: 'SeUndockPrivilege', label: 'Entfernen des Computers von der Dockingstation' },
-  { value: 'SeSyncAgentPrivilege', label: 'Synchronisieren von Verzeichnisdienstdaten' },
-  { value: 'SeTrustedCredManAccessPrivilege', label: 'Auf Anmeldeinformations-Manager als vertrauenswürdigem Aufrufer zugreifen' },
-  { value: 'SeRelabelPrivilege', label: 'Bezeichnung eines Objekts ändern' },
-  { value: 'SeDelegateSessionUserImpersonatePrivilege', label: 'Identitätswechsel-Token für anderen Benutzer in derselben Sitzung abrufen' },
+  { value: 'SeNetworkLogonRight', label: t('config.gpoModel.accessThisComputerFromThe') },
+  { value: 'SeDenyNetworkLogonRight', label: t('config.gpoModel.denyAccessToThisComputer') },
+  { value: 'SeInteractiveLogonRight', label: t('config.gpoModel.allowLogOnLocally') },
+  { value: 'SeDenyInteractiveLogonRight', label: t('config.gpoModel.denyLogOnLocally') },
+  { value: 'SeRemoteInteractiveLogonRight', label: t('config.gpoModel.allowLogOnThroughRemote') },
+  { value: 'SeDenyRemoteInteractiveLogonRight', label: t('config.gpoModel.denyLogOnThroughRemote') },
+  { value: 'SeBatchLogonRight', label: t('config.gpoModel.logOnAsABatch') },
+  { value: 'SeDenyBatchLogonRight', label: t('config.gpoModel.denyLogOnAsA') },
+  { value: 'SeServiceLogonRight', label: t('config.gpoModel.logOnAsAService') },
+  { value: 'SeDenyServiceLogonRight', label: t('config.gpoModel.denyLogOnAsA2') },
+  { value: 'SeImpersonatePrivilege', label: t('config.gpoModel.impersonateAClientAfterAuthentication') },
+  { value: 'SeAssignPrimaryTokenPrivilege', label: t('config.gpoModel.replaceAProcessLevelToken') },
+  { value: 'SeIncreaseQuotaPrivilege', label: t('config.gpoModel.adjustMemoryQuotasForA') },
+  { value: 'SeAuditPrivilege', label: t('config.gpoModel.generateSecurityAudits') },
+  { value: 'SeChangeNotifyPrivilege', label: t('config.gpoModel.bypassTraverseChecking') },
+  { value: 'SeBackupPrivilege', label: t('config.gpoModel.backUpFilesAndDirectories') },
+  { value: 'SeRestorePrivilege', label: t('config.gpoModel.restoreFilesAndDirectories') },
+  { value: 'SeDebugPrivilege', label: t('config.gpoModel.debugPrograms') },
+  { value: 'SeTcbPrivilege', label: t('config.gpoModel.actAsPartOfThe') },
+  { value: 'SeTakeOwnershipPrivilege', label: t('config.gpoModel.takeOwnershipOfFilesOr') },
+  { value: 'SeLoadDriverPrivilege', label: t('config.gpoModel.loadAndUnloadDeviceDrivers') },
+  { value: 'SeSecurityPrivilege', label: t('config.gpoModel.manageAuditingAndSecurityLog') },
+  { value: 'SeSystemtimePrivilege', label: t('config.gpoModel.changeTheSystemTime') },
+  { value: 'SeTimeZonePrivilege', label: t('config.gpoModel.changeTheTimeZone') },
+  { value: 'SeShutdownPrivilege', label: t('config.gpoModel.shutDownTheSystem') },
+  { value: 'SeRemoteShutdownPrivilege', label: t('config.gpoModel.forceShutdownFromARemote') },
+  { value: 'SeMachineAccountPrivilege', label: t('config.gpoModel.addWorkstationsToDomain') },
+  { value: 'SeEnableDelegationPrivilege', label: t('config.gpoModel.enableComputerAndUserAccounts') },
+  { value: 'SeCreateTokenPrivilege', label: t('config.gpoModel.createATokenObject') },
+  { value: 'SeCreateGlobalPrivilege', label: t('config.gpoModel.createGlobalObjects') },
+  { value: 'SeCreatePagefilePrivilege', label: t('config.gpoModel.createAPagefile') },
+  { value: 'SeCreatePermanentPrivilege', label: t('config.gpoModel.createPermanentSharedObjects') },
+  { value: 'SeCreateSymbolicLinkPrivilege', label: t('config.gpoModel.createSymbolicLinks') },
+  { value: 'SeIncreaseBasePriorityPrivilege', label: t('config.gpoModel.increaseSchedulingPriority') },
+  { value: 'SeIncreaseWorkingSetPrivilege', label: t('config.gpoModel.increaseAProcessWorkingSet') },
+  { value: 'SeLockMemoryPrivilege', label: t('config.gpoModel.lockPagesInMemory') },
+  { value: 'SeManageVolumePrivilege', label: t('config.gpoModel.performVolumeMaintenanceTasks') },
+  { value: 'SeProfileSingleProcessPrivilege', label: t('config.gpoModel.profileSingleProcess') },
+  { value: 'SeSystemProfilePrivilege', label: t('config.gpoModel.profileSystemPerformance') },
+  { value: 'SeSystemEnvironmentPrivilege', label: t('config.gpoModel.modifyFirmwareEnvironmentValues') },
+  { value: 'SeUndockPrivilege', label: t('config.gpoModel.removeComputerFromDockingStation') },
+  { value: 'SeSyncAgentPrivilege', label: t('config.gpoModel.synchronizeDirectoryServiceData') },
+  { value: 'SeTrustedCredManAccessPrivilege', label: t('config.gpoModel.accessCredentialManagerAsA') },
+  { value: 'SeRelabelPrivilege', label: t('config.gpoModel.modifyAnObjectLabel') },
+  { value: 'SeDelegateSessionUserImpersonatePrivilege', label: t('config.gpoModel.obtainAnImpersonationTokenFor') },
 ]
 export const rightLabel = (r: string) => USER_RIGHTS.find((x) => x.value === r)?.label
 
@@ -101,30 +102,30 @@ export const rightLabel = (r: string) => USER_RIGHTS.find((x) => x.value === r)?
 
 /** Well-known literal entries for user rights (written verbatim, not resolved). */
 export const LITERAL_SUGGESTIONS: { value: string; label: string }[] = [
-  { value: '*S-1-5-32-544', label: 'Administratoren' },
-  { value: '*S-1-5-32-545', label: 'Benutzer' },
-  { value: '*S-1-5-32-546', label: 'Gäste' },
-  { value: '*S-1-5-32-551', label: 'Sicherungs-Operatoren' },
-  { value: '*S-1-5-32-555', label: 'Remotedesktopbenutzer' },
+  { value: '*S-1-5-32-544', label: t('config.gpoModel.administrators') },
+  { value: '*S-1-5-32-545', label: t('config.gpoModel.users') },
+  { value: '*S-1-5-32-546', label: t('config.gpoModel.guests') },
+  { value: '*S-1-5-32-551', label: t('config.gpoModel.backupOperators') },
+  { value: '*S-1-5-32-555', label: t('config.gpoModel.remoteDesktopUsers') },
   { value: '*S-1-5-32-568', label: 'IIS_IUSRS' },
-  { value: '*S-1-5-19', label: 'Lokaler Dienst' },
-  { value: '*S-1-5-20', label: 'Netzwerkdienst' },
-  { value: '*S-1-5-18', label: 'Lokales System' },
-  { value: '*S-1-5-6', label: 'Dienst' },
-  { value: '*S-1-5-11', label: 'Authentifizierte Benutzer' },
-  { value: '*S-1-1-0', label: 'Jeder' },
-  { value: '*S-1-5-113', label: 'Lokales Konto' },
-  { value: '*S-1-5-114', label: 'Lokales Konto und Mitglied der Gruppe „Administratoren“' },
-  { value: '*S-1-5-9', label: 'Domänencontroller der Organisation' },
-  { value: 'NT SERVICE\\ALL SERVICES', label: 'Alle Dienste (NT SERVICE)' },
-  { value: 'NT SERVICE\\WdiServiceHost', label: 'Diagnosesystemhost (NT SERVICE)' },
+  { value: '*S-1-5-19', label: t('config.gpoModel.localService') },
+  { value: '*S-1-5-20', label: t('config.gpoModel.networkService') },
+  { value: '*S-1-5-18', label: t('config.gpoModel.localSystem') },
+  { value: '*S-1-5-6', label: t('config.gpoModel.service') },
+  { value: '*S-1-5-11', label: t('config.gpoModel.authenticatedUsers') },
+  { value: '*S-1-1-0', label: t('config.gpoModel.everyone') },
+  { value: '*S-1-5-113', label: t('config.gpoModel.localAccount') },
+  { value: '*S-1-5-114', label: t('config.gpoModel.localAccountAndMemberOf') },
+  { value: '*S-1-5-9', label: t('config.gpoModel.enterpriseDomainControllers') },
+  { value: 'NT SERVICE\\ALL SERVICES', label: t('config.gpoModel.allServicesNtService') },
+  { value: 'NT SERVICE\\WdiServiceHost', label: t('config.gpoModel.diagnosticSystemHostNtService') },
 ]
 
 export const FOREST_ROOT_SUGGESTIONS: { value: string; label: string }[] = [
-  { value: 'Enterprise Admins', label: 'Organisations-Admins (Enterprise Admins)' },
-  { value: 'Schema Admins', label: 'Schema-Admins (Schema Admins)' },
-  { value: 'Enterprise Key Admins', label: 'Organisationsschlüsseladministratoren (Enterprise Key Admins)' },
-  { value: 'Enterprise Read-only Domain Controllers', label: 'Schreibgeschützte Domänencontroller der Organisation' },
+  { value: 'Enterprise Admins', label: t('config.gpoModel.enterpriseAdmins') },
+  { value: 'Schema Admins', label: t('config.gpoModel.schemaAdmins') },
+  { value: 'Enterprise Key Admins', label: t('config.gpoModel.enterpriseKeyAdmins') },
+  { value: 'Enterprise Read-only Domain Controllers', label: t('config.gpoModel.enterpriseReadOnlyDomainControllers') },
 ]
 
 /** Additional principals used by GPO user rights/memberships (resolved by name). */
@@ -136,32 +137,32 @@ export const GPO_BUILTIN_PRINCIPALS = [
   'Allowed RODC Password Replication Group', 'DnsAdmins', 'DnsUpdateProxy',
 ]
 
-export const CONDITIONS = [{ type: 'groupExists', operator: 'exists', label: 'Gruppe existiert' }]
+export const CONDITIONS = [{ type: 'groupExists', operator: 'exists', label: t('config.gpoModel.groupExists') }]
 
 // ------------------------------------------------------------------ restricted groups
 
 export const BUILTIN_GROUPS: { value: string; label: string; hint: string }[] = [
-  ['544', 'Administratoren'], ['545', 'Benutzer'], ['546', 'Gäste'], ['547', 'Hauptbenutzer'],
-  ['548', 'Konten-Operatoren'], ['549', 'Server-Operatoren'], ['550', 'Druck-Operatoren'],
-  ['551', 'Sicherungs-Operatoren'], ['552', 'Replikations-Operator'], ['555', 'Remotedesktopbenutzer'],
-  ['556', 'Netzwerkkonfigurations-Operatoren'], ['558', 'Leistungsüberwachungsbenutzer'],
-  ['559', 'Leistungsprotokollbenutzer'], ['562', 'DCOM-Benutzer'], ['568', 'IIS_IUSRS'],
-  ['569', 'Kryptografie-Operatoren'], ['573', 'Ereignisprotokollleser'], ['574', 'Zertifikatdienst-DCOM-Zugriff'],
-  ['575', 'RDS-Remotezugriffsserver'], ['576', 'RDS-Endpunktserver'], ['577', 'RDS-Verwaltungsserver'],
-  ['578', 'Hyper-V-Administratoren'], ['579', 'Zugriffssteuerungsunterstützungs-Operatoren'],
-  ['580', 'Remoteverwaltungsbenutzer'], ['582', 'Speicherreplikatadministratoren'], ['583', 'Geräteeigentümer'],
+  ['544', t('config.gpoModel.administrators')], ['545', t('config.gpoModel.users')], ['546', t('config.gpoModel.guests')], ['547', t('config.gpoModel.powerUsers')],
+  ['548', t('config.gpoModel.accountOperators')], ['549', t('config.gpoModel.serverOperators')], ['550', t('config.gpoModel.printOperators')],
+  ['551', t('config.gpoModel.backupOperators')], ['552', t('config.gpoModel.replicator')], ['555', t('config.gpoModel.remoteDesktopUsers')],
+  ['556', t('config.gpoModel.networkConfigurationOperators')], ['558', t('config.gpoModel.performanceMonitorUsers')],
+  ['559', t('config.gpoModel.performanceLogUsers')], ['562', t('config.gpoModel.distributedComUsers')], ['568', 'IIS_IUSRS'],
+  ['569', t('config.gpoModel.cryptographicOperators')], ['573', t('config.gpoModel.eventLogReaders')], ['574', t('config.gpoModel.certificateServiceDcomAccess')],
+  ['575', t('config.gpoModel.rdsRemoteAccessServers')], ['576', t('config.gpoModel.rdsEndpointServers')], ['577', t('config.gpoModel.rdsManagementServers')],
+  ['578', t('config.gpoModel.hyperVAdministrators')], ['579', t('config.gpoModel.accessControlAssistanceOperators')],
+  ['580', t('config.gpoModel.remoteManagementUsers')], ['582', t('config.gpoModel.storageReplicaAdministrators')], ['583', t('config.gpoModel.deviceOwners')],
   ['585', 'OpenSSH Users'],
 ]
   .map(([rid, label]) => ({ value: `*S-1-5-32-${rid}`, label, hint: `S-1-5-32-${rid}` }))
   .concat([
-    { value: 'Power Users', label: 'Power Users', hint: 'Gruppenname (ohne SID)' },
-    { value: 'User Mode Hardware Operators', label: 'User Mode Hardware Operators', hint: 'Gruppenname (ohne SID)' },
+    { value: 'Power Users', label: 'Power Users', hint: t('config.gpoModel.groupNameWithoutSid') },
+    { value: 'User Mode Hardware Operators', label: 'User Mode Hardware Operators', hint: t('config.gpoModel.groupNameWithoutSid') },
   ])
 
 export const builtinGroupLabel = (g: string) => BUILTIN_GROUPS.find((b) => b.value.toLowerCase() === g.toLowerCase())?.label ?? g
 
 export type RelationSuffix = 'Members' | 'Memberof'
-export const relationLabels: Record<RelationSuffix, string> = { Members: 'Mitglieder', Memberof: 'Mitglied von' }
+export const relationLabels: Record<RelationSuffix, string> = { Members: t('config.gpoModel.members'), Memberof: t('config.gpoModel.memberOf') }
 
 /** Splits `*S-1-5-32-544__Memberof` into group and relation. Unknown suffixes are kept as raw text. */
 export function parseGroupRelation(v: string): { group: string; relation: string } {
@@ -179,15 +180,15 @@ export function describeGroupRelation(v: string) {
 // ------------------------------------------------------------------ targets
 
 export function targetTitle(key: string, tt?: Obj): string {
-  if (key === TEMPLATE_KEY) return 'Vorlagen (nicht verknüpft)'
-  if (key === DOMAIN_DN) return 'Domänenstamm'
+  if (key === TEMPLATE_KEY) return t('config.gpoModel.templatesNotLinked')
+  if (key === DOMAIN_DN) return t('config.gpoModel.domainRoot')
   const first = key.split(',')[0] ?? key
   const rdn = first.replace(/^(OU|CN)=/i, '')
   return rdn || (typeof tt?.displayName === 'string' && tt.displayName) || key
 }
 
 export function targetHint(key: string): string {
-  if (key === TEMPLATE_KEY) return 'Werden angelegt, aber nicht verknüpft'
+  if (key === TEMPLATE_KEY) return t('config.gpoModel.createdButNotLinked')
   if (key === DOMAIN_DN) return DOMAIN_DN
   return key.replace(/,\{\{DOMAIN_DN\}\}$/, '')
 }
@@ -325,30 +326,30 @@ export function newRight(right: string): Obj {
 export function validateGpo(g: Obj, targetKey: string, target: Obj | undefined, kind: GpoKind, index: number | null): Record<string, string> {
   const e: Record<string, string> = {}
   const name = String(g.name ?? '').trim()
-  if (!name) e.name = 'Name ist erforderlich.'
+  if (!name) e.name = t('config.gpoModel.nameIsRequired')
   else {
     const dup = GPO_KINDS.some((k) =>
       gpoList(target, k).some((x, i) => !(k === kind && i === index) && String(x?.name ?? '').trim().toLowerCase() === name.toLowerCase()),
     )
-    if (dup) e.name = 'Eine GPO mit diesem Namen ist bereits mit diesem Ziel verknüpft.'
+    if (dup) e.name = t('config.gpoModel.aGpoWithThisName')
   }
-  if (!g.mode) e.mode = 'Modus ist erforderlich.'
-  if (g.mode !== 'create' && !String(g.importPath ?? '').trim()) e.importPath = 'Import-Pfad ist erforderlich (außer im Modus „Nur anlegen“).'
+  if (!g.mode) e.mode = t('config.gpoModel.modeIsRequired')
+  if (g.mode !== 'create' && !String(g.importPath ?? '').trim()) e.importPath = t('config.gpoModel.importPathIsRequiredExcept')
   if (isLinked(targetKey) || 'linkOrder' in g) {
-    if (!Number.isInteger(g.linkOrder) || g.linkOrder < 1) e.linkOrder = 'Ganze Zahl ≥ 1 erforderlich.'
+    if (!Number.isInteger(g.linkOrder) || g.linkOrder < 1) e.linkOrder = t('config.gpoModel.wholeNumber1Required')
   }
   const rights = Array.isArray(g.userRightsAssignments) ? g.userRightsAssignments : []
   const seen = new Set<string>()
   for (const r of rights) {
-    if (!r?.right) e.userRightsAssignments = 'Jedes Benutzerrecht braucht eine Auswahl.'
-    else if (seen.has(r.right)) e.userRightsAssignments = `Das Recht ${r.right} ist doppelt vorhanden.`
+    if (!r?.right) e.userRightsAssignments = t('config.gpoModel.everyUserRightNeedsA')
+    else if (seen.has(r.right)) e.userRightsAssignments = t('config.gpoModel.theRightRightIsPresent', { right: r.right })
     seen.add(r?.right)
     const cg = r?.principals?.conditionalGroups
     if (Array.isArray(cg) && cg.some((c: Obj) => !Array.isArray(c?.names) || c.names.length === 0))
-      e.userRightsAssignments = `${r.right}: Jede bedingte Gruppe braucht mindestens einen Gruppennamen.`
+      e.userRightsAssignments = t('config.gpoModel.rightEveryConditionalGroupNeeds', { right: r.right })
   }
   const mg = restrictedAsObject(g.restrictedGroups).membershipGroups
   if (Array.isArray(mg) && mg.some((m: Obj) => !String(m?.groupSidOrName ?? '').trim() || !parseGroupRelation(m.groupSidOrName).group))
-    e.restrictedGroups = 'Jede Mitgliedschaft braucht eine Gruppe.'
+    e.restrictedGroups = t('config.gpoModel.everyMembershipNeedsAGroup')
   return e
 }

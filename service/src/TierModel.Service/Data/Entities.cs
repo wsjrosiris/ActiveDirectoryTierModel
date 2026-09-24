@@ -44,6 +44,8 @@ public class AppUser
     public string SecurityStamp { get; set; } = Guid.NewGuid().ToString("N");
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? LastLoginAt { get; set; }
+    /// <summary>UI language chosen by the user ("de"/"en"); null = browser default (roadmap 25).</summary>
+    public string? Language { get; set; }
 }
 
 public class ConfigSection : IDomainScoped

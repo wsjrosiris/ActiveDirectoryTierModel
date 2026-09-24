@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Runs;
 
@@ -39,7 +40,7 @@ public static class DeployPlanReader
     public static DeployPlan Parse(string json, int maxActions = MaxActions)
     {
         var root = JsonCase.CamelCaseKeys(JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip }))
-            as JsonObject ?? throw new JsonException("Die Plandatei enthält kein JSON-Objekt.");
+            as JsonObject ?? throw new JsonException(L.P("Die Plandatei enthält kein JSON-Objekt."));
 
         var meta = root["metadata"] as JsonObject;
         var metadata = new PlanMetadataDto(Str(meta?["version"]), Str(meta?["scope"]), Str(meta?["preferredDc"]), Str(meta?["timestamp"]), Strings(meta?["includes"]));
@@ -158,31 +159,31 @@ public static class PlanGate
     /// <summary>Whether the planning run has the same parameters (scope, add-ons, DC, language) as the apply run.</summary>
     public static string? ParameterMismatch(Run plan, Target t)
     {
-        if (plan.Scope != t.Scope) return $"Planung #{plan.Id} wurde für einen anderen Bereich erstellt.";
+        if (plan.Scope != t.Scope) return L.F("Planung #{0} wurde für einen anderen Bereich erstellt.", plan.Id);
         if (plan.IncludeMsa != t.IncludeMsa || plan.IncludeGmsa != t.IncludeGmsa || plan.IncludeDmsa != t.IncludeDmsa || plan.IncludeWinLaps != t.IncludeWinLaps)
-            return $"Planung #{plan.Id} wurde mit anderen Add-ons (MSA, gMSA, dMSA, Windows LAPS) erstellt.";
+            return L.F("Planung #{0} wurde mit anderen Add-ons (MSA, gMSA, dMSA, Windows LAPS) erstellt.", plan.Id);
         if (!string.Equals(plan.PreferredDc.Trim(), t.PreferredDc, StringComparison.OrdinalIgnoreCase))
-            return $"Planung #{plan.Id} wurde gegen einen anderen Domain Controller ({plan.PreferredDc}) erstellt.";
+            return L.F("Planung #{0} wurde gegen einen anderen Domain Controller ({1}) erstellt.", plan.Id, plan.PreferredDc);
         if (!string.Equals(plan.AdmlLanguage, t.AdmlLanguage, StringComparison.OrdinalIgnoreCase))
-            return $"Planung #{plan.Id} wurde mit einer anderen ADML-Sprache ({plan.AdmlLanguage}) erstellt.";
+            return L.F("Planung #{0} wurde mit einer anderen ADML-Sprache ({1}) erstellt.", plan.Id, plan.AdmlLanguage);
         return null;
     }
 
     /// <summary>Returns a German reason why <paramref name="plan"/> cannot be applied, or null if it can.</summary>
     public static string? Check(Run? plan, Target t, IReadOnlyDictionary<string, int> currentVersions, DateTimeOffset now, int maxAgeHours)
     {
-        if (plan is null) return "Der angegebene Planungslauf existiert nicht.";
-        if (plan.Kind != RunKind.Deploy || plan.Mode != RunMode.Plan) return $"Lauf #{plan.Id} ist kein Planungslauf.";
-        if (plan.Status != RunStatus.Succeeded) return $"Planung #{plan.Id} ist nicht erfolgreich abgeschlossen.";
+        if (plan is null) return L.T("Der angegebene Planungslauf existiert nicht.");
+        if (plan.Kind != RunKind.Deploy || plan.Mode != RunMode.Plan) return L.F("Lauf #{0} ist kein Planungslauf.", plan.Id);
+        if (plan.Status != RunStatus.Succeeded) return L.F("Planung #{0} ist nicht erfolgreich abgeschlossen.", plan.Id);
         if (ParameterMismatch(plan, t) is { } mismatch) return mismatch;
         if (ExpiresAt(plan, maxAgeHours) <= now)
-            return $"Planung #{plan.Id} ist älter als {(maxAgeHours == 1 ? "eine Stunde" : $"{maxAgeHours} Stunden")}. Bitte eine neue Planung starten.";
+            return L.F("Planung #{0} ist älter als {1}. Bitte eine neue Planung starten.", plan.Id, (maxAgeHours == 1 ? L.T("eine Stunde") : L.F("{0} Stunden", maxAgeHours)));
         var planned = ParseVersions(plan.ConfigVersions);
-        if (planned is null) return $"Für Planung #{plan.Id} sind keine Konfigurationsversionen gespeichert.";
+        if (planned is null) return L.F("Für Planung #{0} sind keine Konfigurationsversionen gespeichert.", plan.Id);
         var changed = currentVersions.Where(kv => !planned.TryGetValue(kv.Key, out var v) || v != kv.Value).Select(kv => kv.Key)
             .Concat(planned.Keys.Where(k => !currentVersions.ContainsKey(k))).Distinct().OrderBy(k => k).ToList();
         if (changed.Count > 0)
-            return $"Die Konfiguration wurde seit Planung #{plan.Id} geändert ({string.Join(", ", changed.Select(SectionTitle))}). Bitte neu planen.";
+            return L.F("Die Konfiguration wurde seit Planung #{0} geändert ({1}). Bitte neu planen.", plan.Id, string.Join(", ", changed.Select(SectionTitle)));
         return null;
     }
 

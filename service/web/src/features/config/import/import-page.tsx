@@ -36,6 +36,7 @@ import { diffSection, type SectionDiff } from '@/lib/structured-diff'
 import { cn, formatDateTime } from '@/lib/utils'
 import { ChangeList, DiffCounts } from '../change-list'
 import { RemoteInstancePicker } from './remote-instances'
+import { currentLocale, t } from '@/i18n'
 
 export function Component() {
   return (
@@ -48,11 +49,11 @@ export function Component() {
 type Source = 'file' | 'remote'
 
 const statusMeta: Record<ImportPreviewSection['status'], { label: string; variant: 'warning' | 'info' | 'muted' | 'danger' | 'outline' }> = {
-  changed: { label: 'Geändert', variant: 'warning' },
-  new: { label: 'Neu', variant: 'info' },
-  unchanged: { label: 'Unverändert', variant: 'muted' },
-  invalid: { label: 'Ungültig', variant: 'danger' },
-  unknown: { label: 'Unbekannt', variant: 'outline' },
+  changed: { label: t('config.import.import.changed'), variant: 'warning' },
+  new: { label: t('config.import.import.new'), variant: 'info' },
+  unchanged: { label: t('config.import.import.unchanged'), variant: 'muted' },
+  invalid: { label: t('config.import.import.invalid'), variant: 'danger' },
+  unknown: { label: t('config.import.import.unknown'), variant: 'outline' },
 }
 
 function ImportPage() {
@@ -82,7 +83,7 @@ function ImportPage() {
       requestAnimationFrame(() => topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
     },
     onError: (e) =>
-      toast.error(source === 'file' ? 'Datei konnte nicht gelesen werden' : 'Abruf fehlgeschlagen', {
+      toast.error(source === 'file' ? t('config.import.import.fileCouldNotBeRead') : t('config.import.import.retrievalFailed'), {
         description: e instanceof ApiError ? e.detail || e.title : errorMessage(e),
         duration: 10000,
       }),
@@ -98,15 +99,15 @@ function ImportPage() {
       qc.invalidateQueries({ queryKey: ['config'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
       qc.invalidateQueries({ queryKey: ['changelog'] })
-      toast.success(r.applied.length === 1 ? '1 Bereich übernommen' : `${r.applied.length} Bereiche übernommen`)
+      toast.success(t('config.import.import.areasApplied', { count: r.applied.length }))
       window.scrollTo({ top: 0, behavior: 'smooth' })
     },
     onError: (e) => {
       if (e instanceof ApiError && e.status === 409) setConflict(e.detail || e.title)
       else if (e instanceof ApiError && e.status === 404) {
-        toast.error('Vorschau abgelaufen', { description: 'Bitte die Quelle erneut laden.' })
+        toast.error(t('config.import.import.previewExpired'), { description: t('config.import.import.pleaseLoadTheSourceAgain') })
         setPreview(null)
-      } else toast.error('Übernahme fehlgeschlagen', { description: errorMessage(e) })
+      } else toast.error(t('config.import.import.importFailed'), { description: errorMessage(e) })
     },
   })
 
@@ -119,7 +120,7 @@ function ImportPage() {
       // Keep the user's choice where it still applies.
       setSelected(new Set(p.sections.filter((s) => (s.status === 'changed' || s.status === 'new') && (keep.has(s.key) || !preview?.sections.some((o) => o.key === s.key && (o.status === 'changed' || o.status === 'new')))).map((s) => s.key)))
     },
-    onError: (e) => toast.error('Vorschau konnte nicht aktualisiert werden', { description: errorMessage(e) }),
+    onError: (e) => toast.error(t('config.import.import.previewCouldNotBeRefreshed'), { description: errorMessage(e) }),
   })
 
   const reset = () => {
@@ -134,12 +135,12 @@ function ImportPage() {
   return (
     <Page className="max-w-5xl">
       <Button variant="ghost" size="sm" asChild className="mb-3 -ml-2 text-muted-foreground">
-        <Link to="/konfiguration"><ArrowLeft /> Konfiguration</Link>
+        <Link to="/konfiguration"><ArrowLeft /> {t('config.import.import.configuration')}</Link>
       </Button>
       <PageHeader
         icon={<Import />}
-        title="Import"
-        description="Konfiguration aus einer Export-Datei oder einer anderen TierModel-Instanz übernehmen – etwa von Test nach Produktion."
+        title={t('config.import.import.import')}
+        description={t('config.import.import.takeOverConfigurationFromAn')}
       />
       <div ref={topRef} className="scroll-mt-20" />
       <Stepper step={step} done={!!result} />
@@ -150,25 +151,25 @@ function ImportPage() {
         <Card>
           <CardHeader>
             <div>
-              <CardTitle>Quelle wählen</CardTitle>
-              <CardDescription>Es wird noch nichts geändert – zuerst folgt eine Vorschau aller Unterschiede.</CardDescription>
+              <CardTitle>{t('config.import.import.selectSource')}</CardTitle>
+              <CardDescription>{t('config.import.import.nothingIsChangedYetFirst')}</CardDescription>
             </div>
           </CardHeader>
           <CardContent className="grid gap-5">
             <Segmented
-              aria-label="Quelle"
+              aria-label={t('config.import.import.source')}
               value={source}
               onValueChange={setSource}
               className="w-full sm:w-auto"
               options={[
-                { value: 'file', label: 'Datei hochladen', icon: <Upload /> },
-                { value: 'remote', label: 'Andere Instanz', icon: <Server /> },
+                { value: 'file', label: t('config.import.import.uploadFile'), icon: <Upload /> },
+                { value: 'remote', label: t('config.import.import.otherInstance'), icon: <Server /> },
               ]}
             />
             {source === 'file' ? <DropZone file={file} onFile={setFile} /> : <RemoteInstancePicker value={instanceId} onChange={(id) => { setInstanceId(id); setRemoteDomain('') }} remoteDomain={remoteDomain} onRemoteDomainChange={setRemoteDomain} />}
             <div className="flex justify-end">
               <Button onClick={() => load.mutate()} loading={load.isPending} disabled={source === 'file' ? !file : !instanceId}>
-                Vorschau erstellen {!load.isPending && <ArrowRight />}
+                {t('config.import.import.createPreview')} {!load.isPending && <ArrowRight />}
               </Button>
             </div>
           </CardContent>
@@ -193,9 +194,9 @@ function ImportPage() {
 }
 
 function Stepper({ step, done }: { step: number; done: boolean }) {
-  const steps = ['Quelle', 'Vorschau', 'Übernehmen']
+  const steps = [t('config.import.import.source'), t('config.import.import.preview'), t('config.import.import.apply')]
   return (
-    <ol className="mb-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]" aria-label="Schritte">
+    <ol className="mb-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]" aria-label={t('config.import.import.steps')}>
       {steps.map((s, i) => {
         const n = i + 1
         const state = done || n < step ? 'done' : n === step ? 'current' : 'todo'
@@ -256,12 +257,12 @@ function DropZone({ file, onFile }: { file: File | null; onFile: (f: File | null
       {file ? (
         <>
           <p className="max-w-full truncate text-sm font-medium">{file.name}</p>
-          <p className="text-xs text-muted-foreground">{(file.size / 1024).toLocaleString('de-DE', { maximumFractionDigits: 0 })} KB · Klicken, um eine andere Datei zu wählen</p>
+          <p className="text-xs text-muted-foreground">{t('config.import.import.fileSize', { size: (file.size / 1024).toLocaleString(currentLocale(), { maximumFractionDigits: 0 }) })}</p>
         </>
       ) : (
         <>
-          <p className="text-sm font-medium">Export-Datei (ZIP) hierher ziehen oder klicken</p>
-          <p className="max-w-md text-xs text-muted-foreground">Die Datei aus „Konfiguration → Export“ einer TierModel-Instanz, höchstens 20 MB.</p>
+          <p className="text-sm font-medium">{t('config.import.import.dragTheExportFileZip')}</p>
+          <p className="max-w-md text-xs text-muted-foreground">{t('config.import.import.theFileFromConfigurationExport')}</p>
         </>
       )}
     </label>
@@ -322,19 +323,19 @@ function PreviewView({
               {preview.sourceKind === 'file' ? <FileArchive className="size-4 text-muted-foreground" /> : <Server className="size-4 text-muted-foreground" />}
               <span className="min-w-0 break-words">{preview.label}</span>
             </CardTitle>
-            <CardDescription>Vorschau vom {formatDateTime(preview.createdAt)}</CardDescription>
+            <CardDescription>{t('config.import.import.previewOf')} {formatDateTime(preview.createdAt)}</CardDescription>
           </div>
           <Button variant="ghost" size="sm" onClick={onBack} className="text-muted-foreground">
-            Andere Quelle
+            {t('config.import.import.otherSource')}
           </Button>
         </CardHeader>
         <CardContent className="grid gap-3">
           <div className="flex flex-wrap gap-1.5">
-            <Badge variant="warning">{importable.filter((s) => s.status === 'changed').length} geändert</Badge>
-            {importable.some((s) => s.status === 'new') && <Badge variant="info">{importable.filter((s) => s.status === 'new').length} neu</Badge>}
-            <Badge variant="muted">{unchanged.length} unverändert</Badge>
-            {invalid.length > 0 && <Badge variant="danger">{invalid.length} ungültig</Badge>}
-            {unknown.length > 0 && <Badge variant="outline">{unknown.length} unbekannt</Badge>}
+            <Badge variant="warning">{importable.filter((s) => s.status === 'changed').length} {t('config.import.import.changed2')}</Badge>
+            {importable.some((s) => s.status === 'new') && <Badge variant="info">{importable.filter((s) => s.status === 'new').length} {t('config.import.import.new2')}</Badge>}
+            <Badge variant="muted">{unchanged.length} {t('config.import.import.unchanged2')}</Badge>
+            {invalid.length > 0 && <Badge variant="danger">{invalid.length} {t('config.import.import.invalid2')}</Badge>}
+            {unknown.length > 0 && <Badge variant="outline">{unknown.length} {t('config.import.import.unknown2')}</Badge>}
           </div>
           {preview.notices.length > 0 && (
             <ul className="grid gap-1.5">
@@ -353,18 +354,18 @@ function PreviewView({
 
       {/* Sections */}
       <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
-        <h2 className="text-base font-semibold tracking-tight">Änderungen je Bereich</h2>
+        <h2 className="text-base font-semibold tracking-tight">{t('config.import.import.changesPerArea')}</h2>
         {importable.length > 1 && (
           <label className="flex items-center gap-2 text-[13px]">
-            <Checkbox checked={allOn ? true : selected.size ? 'indeterminate' : false} onCheckedChange={(c) => setSelected(new Set(c === true ? importable.map((s) => s.key) : []))} aria-label="Alle auswählen" />
-            Alle auswählen
+            <Checkbox checked={allOn ? true : selected.size ? 'indeterminate' : false} onCheckedChange={(c) => setSelected(new Set(c === true ? importable.map((s) => s.key) : []))} aria-label={t('config.import.import.selectAll')} />
+            {t('config.import.import.selectAll')}
           </label>
         )}
       </div>
       {importable.length === 0 ? (
         <Card className="flex items-center gap-3 px-5 py-6 text-sm text-muted-foreground">
           <CheckCircle2 className="size-5 shrink-0 text-emerald-500" />
-          Die Quelle stimmt mit der aktuellen Konfiguration überein – es gibt nichts zu übernehmen.
+          {t('config.import.import.theSourceMatchesTheCurrent')}
         </Card>
       ) : (
         importable.map((s) => <SectionCard key={s.key} section={s} diff={diffs[s.key]} checked={selected.has(s.key)} onChecked={(on) => toggle(s.key, on)} />)
@@ -373,14 +374,14 @@ function PreviewView({
         <Card key={s.key} className="flex items-start gap-3 border-rose-500/30 px-5 py-4">
           <XCircle className="mt-0.5 size-4 shrink-0 text-rose-500" />
           <div className="min-w-0">
-            <p className="text-sm font-medium">{s.title} <span className="font-normal text-muted-foreground">· wird nicht übernommen</span></p>
+            <p className="text-sm font-medium">{s.title} <span className="font-normal text-muted-foreground">{t('config.import.import.willNotBeTakenOver')}</span></p>
             <p className="mt-0.5 text-[13px] break-words text-muted-foreground">{s.error}</p>
           </div>
         </Card>
       ))}
       {unchanged.length > 0 && (
         <p className="px-1 text-[13px] text-muted-foreground">
-          <span className="font-medium text-foreground">Unverändert:</span> {unchanged.map((s) => s.title).join(', ')}
+          <span className="font-medium text-foreground">{t('config.import.import.unchanged3')}</span> {unchanged.map((s) => s.title).join(', ')}
         </p>
       )}
 
@@ -390,9 +391,9 @@ function PreviewView({
       <Card className="border-primary/30">
         <CardHeader>
           <div>
-            <CardTitle>Übernehmen</CardTitle>
+            <CardTitle>{t('config.import.import.apply')}</CardTitle>
             <CardDescription>
-              Jeder ausgewählte Bereich wird als neue Version gespeichert – mit Kommentar und Quellenangabe in der Versionshistorie und im Änderungsprotokoll. Ältere Versionen bleiben wiederherstellbar.
+              {t('config.import.import.everySelectedAreaIsSaved')}
             </CardDescription>
           </div>
         </CardHeader>
@@ -404,24 +405,24 @@ function PreviewView({
               if (selected.size && comment.trim()) onApply()
             }}
           >
-            <Field label="Kommentar" htmlFor="imp-comment" required hint={`Wird gespeichert als „Import aus ${preview.label}: …“`}>
-              <Textarea id="imp-comment" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Warum wird übernommen? z. B. Freigabe CAB-1234" />
+            <Field label={t('config.import.import.comment')} htmlFor="imp-comment" required hint={t('config.import.import.savedAsImportFromLabel', { label: preview.label })}>
+              <Textarea id="imp-comment" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder={t('config.import.import.whyIsThisTakenOver')} />
             </Field>
             {conflict && (
               <div role="alert" className="flex flex-wrap items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[13px] text-amber-900 dark:text-amber-200">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                 <span className="min-w-0 flex-1 basis-60">{conflict}</span>
                 <Button type="button" size="xs" variant="outline" onClick={() => onReplacements(preview.replacements)} loading={refreshing}>
-                  {!refreshing && <RefreshCw />} Vorschau aktualisieren
+                  {!refreshing && <RefreshCw />} {t('config.import.import.refreshPreview')}
                 </Button>
               </div>
             )}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[13px] text-muted-foreground">
-                {selected.size === 0 ? 'Kein Bereich ausgewählt.' : selected.size === 1 ? '1 Bereich ausgewählt.' : `${selected.size} Bereiche ausgewählt.`}
+                {selected.size === 0 ? t('config.import.import.noAreaSelected') : selected.size === 1 ? t('config.import.import.n1AreaSelected') : t('config.import.import.sizeAreasSelected', { size: selected.size, count: selected.size })}
               </p>
               <Button type="submit" disabled={!selected.size || !comment.trim()} loading={applying}>
-                {!applying && <Import />} {selected.size > 1 ? `${selected.size} Bereiche übernehmen` : 'Übernehmen'}
+                {!applying && <Import />} {selected.size > 1 ? t('config.import.import.applySizeAreas', { size: selected.size, count: selected.size }) : t('config.import.import.apply')}
               </Button>
             </div>
           </form>
@@ -437,26 +438,26 @@ function SectionCard({ section: s, diff, checked, onChecked }: { section: Import
   return (
     <Card className={cn('overflow-hidden transition-colors', checked && 'border-primary/40')} data-section={s.key}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-5">
-        <Checkbox id={id} checked={checked} onCheckedChange={(c) => onChecked(c === true)} aria-label={`${s.title} übernehmen`} />
+        <Checkbox id={id} checked={checked} onCheckedChange={(c) => onChecked(c === true)} aria-label={t('config.import.import.applyTitle', { title: s.title })} />
         <label htmlFor={id} className="min-w-0 flex-1 basis-40 cursor-pointer">
           <span className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium">{s.title}</span>
             <Badge variant={statusMeta[s.status].variant}>{statusMeta[s.status].label}</Badge>
             {s.replacements > 0 && (
-              <Badge variant="outline"><Replace /> {s.replacements} {s.replacements === 1 ? 'Ersetzung' : 'Ersetzungen'}</Badge>
+              <Badge variant="outline"><Replace /> {t('config.import.import.replacementsCount', { count: s.replacements })}</Badge>
             )}
           </span>
           <span className="mt-0.5 block text-xs text-muted-foreground">
             <span className="font-mono">{s.fileName}</span>
             {' · '}
-            {s.baseVersion ? `aktuell v${s.baseVersion} → v${s.baseVersion + 1}` : 'wird neu angelegt (v1)'}
-            {s.sourceVersion ? ` · Quelle v${s.sourceVersion}` : ''}
+            {s.baseVersion ? t('config.import.import.currentVBaseversionVValue', { baseVersion: s.baseVersion, value: s.baseVersion + 1 }) : t('config.import.import.willBeCreatedV1')}
+            {s.sourceVersion ? t('config.import.import.sourceVSourceversion', { sourceVersion: s.sourceVersion }) : ''}
           </span>
         </label>
         <div className="flex items-center gap-2">
           <DiffCounts diff={diff} />
           <Button variant="ghost" size="xs" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls={`${id}-changes`}>
-            <ChevronRight className={cn('transition-transform', open && 'rotate-90')} /> {open ? 'Ausblenden' : 'Änderungen'}
+            <ChevronRight className={cn('transition-transform', open && 'rotate-90')} /> {open ? t('config.import.import.hide') : t('config.import.import.changes')}
           </Button>
         </div>
       </div>
@@ -481,22 +482,22 @@ function ReplacementsCard({ preview, busy, onApply }: { preview: ImportPreview; 
     <Card>
       <CardHeader className="flex-wrap">
         <div className="min-w-0">
-          <CardTitle className="flex items-center gap-2"><Replace className="size-4 text-muted-foreground" /> Ersetzungen</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Replace className="size-4 text-muted-foreground" /> {t('config.import.import.replacements')}</CardTitle>
           <CardDescription>
-            Optional: Texte der Quelle vor dem Vergleich ersetzen, etwa Namen von Domänencontrollern oder Präfixe der Testumgebung. {'{{DOMAIN_DN}}'} wird ohnehin je Umgebung eingesetzt.
+            {t('config.import.import.optionalReplaceTextsOfThe')} {'{{DOMAIN_DN}}'} {t('config.import.import.isInsertedPerEnvironmentAnyway')}
           </CardDescription>
         </div>
-        {preview.replacements.length > 0 && <Badge variant="default">{total} {total === 1 ? 'Treffer' : 'Treffer'}</Badge>}
+        {preview.replacements.length > 0 && <Badge variant="default">{t('config.import.import.hitsCount', { count: total })}</Badge>}
       </CardHeader>
       <CardContent className="grid gap-3">
         {rows.length > 0 && (
           <ul className="grid gap-2">
             {rows.map((r, i) => (
               <li key={i} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto]">
-                <Input aria-label={`Suchen ${i + 1}`} value={r.search} onChange={(e) => update(i, { search: e.target.value })} placeholder="Suchen, z. B. dc01.test.local" className="font-mono text-[13px]" />
+                <Input aria-label={t('config.import.import.searchValue', { value: i + 1 })} value={r.search} onChange={(e) => update(i, { search: e.target.value })} placeholder={t('config.import.import.searchEGDc01Test')} className="font-mono text-[13px]" />
                 <ArrowRight className="hidden size-4 text-muted-foreground sm:block" />
-                <Input aria-label={`Ersetzen ${i + 1}`} value={r.replace} onChange={(e) => update(i, { replace: e.target.value })} placeholder="Ersetzen durch" className="col-start-1 font-mono text-[13px] sm:col-start-auto" />
-                <Button variant="ghost" size="icon-sm" aria-label={`Ersetzung ${i + 1} entfernen`} onClick={() => setRows((x) => x.filter((_, j) => j !== i))} className="row-span-2 row-start-1 col-start-2 sm:row-span-1 sm:col-start-auto sm:row-start-auto">
+                <Input aria-label={t('config.import.import.replaceValue', { value: i + 1 })} value={r.replace} onChange={(e) => update(i, { replace: e.target.value })} placeholder={t('config.import.import.replaceWith')} className="col-start-1 font-mono text-[13px] sm:col-start-auto" />
+                <Button variant="ghost" size="icon-sm" aria-label={t('config.import.import.removeReplacementValue', { value: i + 1 })} onClick={() => setRows((x) => x.filter((_, j) => j !== i))} className="row-span-2 row-start-1 col-start-2 sm:row-span-1 sm:col-start-auto sm:row-start-auto">
                   <Trash2 />
                 </Button>
               </li>
@@ -505,11 +506,11 @@ function ReplacementsCard({ preview, busy, onApply }: { preview: ImportPreview; 
         )}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Button variant="outline" size="sm" onClick={() => setRows((r) => [...r, { search: '', replace: '' }])} disabled={rows.length >= 50}>
-            <Plus /> Ersetzung hinzufügen
+            <Plus /> {t('config.import.import.addReplacement')}
           </Button>
           {(changed || busy) && (
             <Button size="sm" onClick={() => onApply(clean)} loading={busy}>
-              {!busy && <RefreshCw />} Anwenden und Vorschau aktualisieren
+              {!busy && <RefreshCw />} {t('config.import.import.applyAndRefreshPreview')}
             </Button>
           )}
         </div>
@@ -557,17 +558,17 @@ function ValidationCard({ previewId, initial, selected }: { previewId: string; i
       <CardHeader className="flex-wrap">
         <div className="min-w-0">
           <CardTitle className="flex items-center gap-2">
-            Validierung des Ergebnisses {loading && <RefreshCw className="size-3.5 animate-spin text-muted-foreground" />}
+            {t('config.import.import.validationOfTheResult')} {loading && <RefreshCw className="size-3.5 animate-spin text-muted-foreground" />}
           </CardTitle>
-          <CardDescription>Prüfung der Konfiguration, wie sie nach der Übernahme der ausgewählten Bereiche wäre – einschließlich der Tier-Regeln.</CardDescription>
+          <CardDescription>{t('config.import.import.checkOfTheConfigurationAs')}</CardDescription>
         </div>
         <Segmented
-          aria-label="Anzeige"
+          aria-label={t('config.import.import.show')}
           value={onlyNew ? 'new' : 'all'}
           onValueChange={(v) => setOnlyNew(v === 'new')}
           options={[
-            { value: 'new', label: `Durch Import · ${issues.filter((i) => i.isNew).length}` },
-            { value: 'all', label: `Alle · ${issues.length}` },
+            { value: 'new', label: t('config.import.import.causedByImportLength', { length: issues.filter((i) => i.isNew).length }) },
+            { value: 'all', label: t('config.import.import.allLength', { length: issues.length }) },
           ]}
         />
       </CardHeader>
@@ -575,30 +576,30 @@ function ValidationCard({ previewId, initial, selected }: { previewId: string; i
         {newErrors > 0 && (
           <p className="mb-3 flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[13px] text-rose-900 dark:text-rose-200">
             <XCircle className="mt-0.5 size-4 shrink-0" />
-            Die Übernahme führt zu {newErrors} neuen Fehler(n){newWarnings ? ` und ${newWarnings} Warnung(en)` : ''}. Bitte prüfen, ob weitere Bereiche mit übernommen werden müssen.
+            {newWarnings ? t('config.import.import.newProblemsWarnings', { errors: newErrors, warnings: newWarnings }) : t('config.import.import.newProblems', { errors: newErrors })}
           </p>
         )}
         {shown.length === 0 ? (
           <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
-            <CheckCircle2 className="size-4 text-emerald-500" /> {onlyNew ? 'Keine neuen Probleme durch den Import.' : 'Keine Probleme.'}
+            <CheckCircle2 className="size-4 text-emerald-500" /> {onlyNew ? t('config.import.import.noNewProblemsCausedBy') : t('config.import.import.noProblems')}
           </p>
         ) : (
           <ul className="divide-y rounded-lg border">
             {shown.slice(0, 100).map((i, idx) => (
               <li key={idx} className="flex items-start gap-3 px-3 py-2.5">
                 {i.severity === 'Error' ? (
-                  <XCircle className="mt-0.5 size-4 shrink-0 text-rose-500" aria-label="Fehler" />
+                  <XCircle className="mt-0.5 size-4 shrink-0 text-rose-500" aria-label={t('config.import.import.error')} />
                 ) : (
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" aria-label="Warnung" />
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" aria-label={t('config.import.import.warning')} />
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] break-words">{i.message}</p>
                   {i.item && <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{i.item}</p>}
                 </div>
-                {i.isNew && !onlyNew && <Badge variant="info" className="shrink-0">neu</Badge>}
+                {i.isNew && !onlyNew && <Badge variant="info" className="shrink-0">{t('config.import.import.new2')}</Badge>}
               </li>
             ))}
-            {shown.length > 100 && <li className="px-3 py-2 text-xs text-muted-foreground">… und {shown.length - 100} weitere</li>}
+            {shown.length > 100 && <li className="px-3 py-2 text-xs text-muted-foreground">{t('config.import.import.andMore', { count: shown.length - 100 })}</li>}
           </ul>
         )}
       </CardContent>
@@ -615,8 +616,8 @@ function ResultCard({ result, onRestart }: { result: ImportApplyResult; onRestar
             <CheckCircle2 className="size-5" />
           </div>
           <div className="min-w-0">
-            <p className="text-base font-semibold">Import abgeschlossen</p>
-            <p className="text-[13px] text-muted-foreground">Die Bereiche wurden als neue Versionen gespeichert. Vor dem Anwenden im AD wie gewohnt planen.</p>
+            <p className="text-base font-semibold">{t('config.import.import.importCompleted')}</p>
+            <p className="text-[13px] text-muted-foreground">{t('config.import.import.theAreasWereSavedAs')}</p>
           </div>
         </div>
         <ul className="divide-y rounded-lg border">
@@ -624,18 +625,18 @@ function ResultCard({ result, onRestart }: { result: ImportApplyResult; onRestar
             <li key={a.key} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-[13px]">
               <span className="font-medium">{a.title}</span>
               <span className="flex items-center gap-3">
-                <span className="font-mono text-xs text-muted-foreground">{a.fromVersion ? `v${a.fromVersion} → v${a.toVersion}` : `v${a.toVersion} (neu)`}</span>
+                <span className="font-mono text-xs text-muted-foreground">{a.fromVersion ? `v${a.fromVersion} → v${a.toVersion}` : t('config.import.import.vToversionNew', { toVersion: a.toVersion })}</span>
                 <Button variant="ghost" size="xs" asChild>
-                  <Link to={`/konfiguration/${a.key}`}>Öffnen</Link>
+                  <Link to={`/konfiguration/${a.key}`}>{t('config.import.import.open')}</Link>
                 </Button>
               </span>
             </li>
           ))}
         </ul>
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="outline" onClick={onRestart}>Weiteren Import starten</Button>
+          <Button variant="outline" onClick={onRestart}>{t('config.import.import.startAnotherImport')}</Button>
           <Button asChild>
-            <Link to="/deploy">Zum Deploy</Link>
+            <Link to="/deploy">{t('config.import.import.toDeploy')}</Link>
           </Button>
         </div>
       </CardContent>

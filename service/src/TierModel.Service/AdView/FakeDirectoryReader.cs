@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Options;
 using TierModel.Service.Config;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.AdView;
 
@@ -42,7 +43,7 @@ public sealed class FakeDirectoryReader : IDirectoryReader
         _dn = Domains.DomainRules.DistinguishedName(_dns);
         _netbios = _dns.Split('.')[0].ToUpperInvariant();
         if (_dns.EndsWith(".invalid", StringComparison.Ordinal) || preferredDc?.Contains("unreachable", StringComparison.OrdinalIgnoreCase) == true)
-            _unreachable = $"Der Server {(string.IsNullOrWhiteSpace(preferredDc) ? _dns : preferredDc)} ist nicht erreichbar (Testdaten).";
+            _unreachable = L.F("Der Server {0} ist nicht erreichbar (Testdaten).", (string.IsNullOrWhiteSpace(preferredDc) ? _dns : preferredDc));
         _model = new Lazy<Model>(Build);
     }
 

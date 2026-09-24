@@ -1,6 +1,6 @@
-import { lazyRecord } from '../i18n/index.ts'
-/* German labels for configuration keys – shared by the structured object form, the change list
+/* Labels (German/English) for configuration keys – shared by the structured object form, the change list
  * (save dialog / versions) and the change log. Unknown keys are humanized from camelCase. */
+import { lazyRecord } from '../i18n/index.ts'
 
 export const fieldLabels: Record<string, string> = lazyRecord('lib.fieldLabels')
 

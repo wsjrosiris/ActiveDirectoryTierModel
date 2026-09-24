@@ -197,7 +197,7 @@ function KpiRow({ data, loading }: { data?: Dashboard; loading: boolean }) {
     {
       label: t('dashboard.dashboard.gpos'),
       value: data?.counts.gpos,
-      sub: data ? t('dashboard.dashboard.gpolinksLinks', { gpoLinks: formatNumber(data.counts.gpoLinks) }) : undefined,
+      sub: data ? t('dashboard.dashboard.gpolinksLinks', { count: data.counts.gpoLinks, gpoLinks: formatNumber(data.counts.gpoLinks) }) : undefined,
       icon: ScrollText,
       to: '/konfiguration/gpos',
       tone: 'text-fuchsia-600 bg-fuchsia-500/10 dark:text-fuchsia-300',
@@ -267,10 +267,10 @@ function AuditCard({ data, loading }: { data?: Dashboard; loading: boolean }) {
               </div>
               <div>
                 <p className={cn('text-lg font-semibold tracking-tight', ok && 'text-emerald-700 dark:text-emerald-400', bad && 'text-rose-700 dark:text-rose-400')}>
-                  {drift === null || drift === undefined ? statusText(a) : drift === 0 ? t('dashboard.dashboard.noDrift') : t('dashboard.dashboard.driftDeviations', { drift: formatNumber(drift) })}
+                  {drift === null || drift === undefined ? statusText(a) : drift === 0 ? t('dashboard.dashboard.noDrift') : t('dashboard.dashboard.driftDeviations', { count: drift, drift: formatNumber(drift) })}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {a.errorCount ? t('dashboard.dashboard.errorcountErrors', { errorCount: a.errorCount }) : ''}{t('dashboard.dashboard.dc2')} {a.preferredDc}
+                  {a.errorCount ? t('dashboard.dashboard.errorcountErrors', { errorCount: a.errorCount, count: a.errorCount }) : ''}{t('dashboard.dashboard.dc2')} {a.preferredDc}
                 </p>
               </div>
             </div>
@@ -376,9 +376,9 @@ function QueueValidationCard({ data, loading }: { data?: Dashboard; loading: boo
                 <>
                   <p className="mt-1 flex items-center gap-1.5 text-sm">
                     <XCircle className="size-4 text-rose-500" />
-                    <span className="text-xl font-semibold tabular">{v?.errors ?? 0}</span> {t('dashboard.dashboard.errors')}
+                    <span className="text-xl font-semibold tabular">{v?.errors ?? 0}</span> {t('dashboard.dashboard.errors', { count: v?.errors ?? 0 })}
                   </p>
-                  <p className="text-xs text-muted-foreground">{v?.warnings ?? 0} {t('dashboard.dashboard.warnings')}</p>
+                  <p className="text-xs text-muted-foreground">{v?.warnings ?? 0} {t('dashboard.dashboard.warnings', { count: v?.warnings ?? 0 })}</p>
                 </>
               )}
             </Link>

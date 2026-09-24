@@ -1,7 +1,17 @@
+using TierModel.Service.Localization;
+
 namespace TierModel.Service.Config;
 
+/// <param name="GermanTitle">German title – also the key of the English text (see <see cref="L"/>).</param>
 /// <param name="ItemsProperty">Top-level property whose entries are counted as items, if any.</param>
-public record SectionDefinition(string Key, string FileName, string Title, string Description, string? ItemsProperty);
+public record SectionDefinition(string Key, string FileName, string GermanTitle, string GermanDescription, string? ItemsProperty)
+{
+    /// <summary>Title in the language of the current request.</summary>
+    public string Title => L.TC("section", GermanTitle);
+    public string Description => L.TC("section", GermanDescription);
+    /// <summary>Title for persisted texts (change log, commit messages): instance default language.</summary>
+    public string PersistedTitle => L.PC("section", GermanTitle);
+}
 
 /// <summary>The framework configuration files that the service manages.</summary>
 public static class ConfigCatalog

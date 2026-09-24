@@ -1,6 +1,7 @@
 // Tier-model rules, identical to TierRules.cs on the server: control must never flow from a less
 // privileged tier to a more privileged one. Used for live hints while editing.
 
+import { t } from '../i18n/index.ts'
 export type TierIssue = { severity: 'Error' | 'Warning'; message: string }
 
 /** Tier 3 stands for broad groups such as "Authenticated Users" – below every tier. */
@@ -65,7 +66,7 @@ export function principalTier(principal: unknown, groups: GroupTierMap): number 
   return groups.get(bare) ?? numericTier(bare)
 }
 
-const tierLabel = (tt: number) => (tt === BROAD ? 'eine breite Gruppe' : `Tier ${tt}`)
+const tierLabel = (tt: number) => (tt === BROAD ? t('lib.tierRules.aBroadGroup') : `Tier ${tt}`)
 
 /** ACL/MSA/gMSA/dMSA delegation: write rights only on OUs of the principal's own or a less privileged tier. */
 export function aclTierIssues(acl: Record<string, unknown>, groups: GroupTierMap): TierIssue[] {
@@ -78,7 +79,7 @@ export function aclTierIssues(acl: Record<string, unknown>, groups: GroupTierMap
   return [
     {
       severity: 'Error',
-      message: `Tier-Verstoß: „${acl.identityreference}“ (${tierLabel(p)}) erhält Schreibrechte auf eine Tier-${tt}-OU. Damit könnte ein weniger geschütztes Tier ein höheres übernehmen.`,
+      message: t('lib.tierRules.tierViolationIdentityreferenceValueGets', { identityreference: acl.identityreference, value: tierLabel(p), tt }),
     },
   ]
 }
@@ -93,17 +94,17 @@ export function userTierIssues(user: Record<string, unknown>, groups: GroupTierM
     if (tt === null || tt === BROAD || tt === u) continue
     out.push(
       tt < u
-        ? { severity: 'Error', message: `Tier-Verstoß: Konto aus Tier ${u} wird Mitglied der Tier-${tt}-Gruppe „${g}“.` }
-        : { severity: 'Warning', message: `Konto aus Tier ${u} ist Mitglied der Tier-${tt}-Gruppe „${g}“ – Konten sollten nur in ihrem eigenen Tier verwendet werden.` },
+        ? { severity: 'Error', message: t('lib.tierRules.tierViolationAccountFromTier', { u, tt, g }) }
+        : { severity: 'Warning', message: t('lib.tierRules.accountFromTierUIs', { u, tt, g }) },
     )
   }
   return out
 }
 
 const LAPS_FIELDS: [string, string][] = [
-  ['readGroup', 'Lesegruppe'],
-  ['resetGroup', 'Zurücksetzen-Gruppe'],
-  ['decryptorGroup', 'Entschlüsselungsgruppe'],
+  ['readGroup', t('lib.tierRules.readGroup')],
+  ['resetGroup', t('lib.tierRules.resetGroup')],
+  ['decryptorGroup', t('lib.tierRules.decryptorGroup')],
 ]
 
 /** Windows LAPS: reading or resetting passwords of a tier is administration of that tier. */
@@ -113,7 +114,7 @@ export function lapsTierIssues(w: Record<string, unknown>, groups: GroupTierMap)
   const out: TierIssue[] = []
   for (const [field, label] of LAPS_FIELDS) {
     const p = principalTier(w[field], groups)
-    if (p !== null && p > tt) out.push({ severity: 'Error', message: `Tier-Verstoß: ${label} „${w[field]}“ (${tierLabel(p)}) für eine Tier-${tt}-OU.` })
+    if (p !== null && p > tt) out.push({ severity: 'Error', message: t('lib.tierRules.tierViolationLabelValueValue2', { label, value: w[field], value2: tierLabel(p), tt }) })
   }
   return out
 }
@@ -123,7 +124,7 @@ export function gpoLinkTierIssues(gpoName: unknown, target: string): TierIssue[]
   const tt = numericTier(target)
   const g = numericTier(gpoName)
   if (tt === null || g === null || tt === g) return []
-  return [{ severity: 'Warning', message: `GPO „${gpoName}“ gehört zu Tier ${g}, ist aber mit einer Tier-${tt}-OU verknüpft.` }]
+  return [{ severity: 'Warning', message: t('lib.tierRules.gpoGponameBelongsToTier', { gpoName, g, tt }) }]
 }
 
 // ---------------------------------------------------------------- authentication silos
@@ -145,9 +146,9 @@ export function authPolicyTierIssues(p: Record<string, unknown>, groups: GroupTi
   for (const g of strings(from.deviceGroups)) {
     const gt = principalTier(g, groups)
     if (gt === null || gt === tt) continue
-    if (gt === BROAD) out.push({ severity: 'Error', message: `Tier-Verstoß: Die Richtlinie erlaubt die Anmeldung von allen Geräten der breiten Gruppe „${g}“.` })
-    else if (gt > tt) out.push({ severity: 'Error', message: `Tier-Verstoß: Tier-${tt}-Richtlinie erlaubt die Anmeldung von Tier-${gt}-Geräten („${g}“). Tier-${tt}-Anmeldedaten würden dort offengelegt.` })
-    else out.push({ severity: 'Warning', message: `Tier-${tt}-Richtlinie erlaubt die Anmeldung von Tier-${gt}-Geräten („${g}“) – Geräte sollten zum eigenen Tier gehören.` })
+    if (gt === BROAD) out.push({ severity: 'Error', message: t('lib.tierRules.tierViolationThePolicyAllows', { g }) })
+    else if (gt > tt) out.push({ severity: 'Error', message: t('lib.tierRules.tierViolationTierTtPolicy', { tt, gt, g }) })
+    else out.push({ severity: 'Warning', message: t('lib.tierRules.tierTtPolicyAllowsSign', { tt, gt, g }) })
   }
   return out
 }
@@ -164,17 +165,17 @@ export function authSiloTierIssues(s: Record<string, unknown>, policies: Record<
     const from = (p?.allowedToAuthenticateFrom ?? {}) as Record<string, unknown>
     for (const g of strings(from.deviceGroups)) {
       const gt = principalTier(g, groups)
-      if (gt !== null && gt > tt) out.push({ severity: 'Error', message: `Tier-Verstoß: Das Tier-${tt}-Silo erlaubt über „${name}“ die Anmeldung von Tier-${gt}-Geräten („${g}“).` })
+      if (gt !== null && gt > tt) out.push({ severity: 'Error', message: t('lib.tierRules.tierViolationTheTierTt', { tt, name, gt, g }) })
     }
   }
   const members = (s.members ?? {}) as Record<string, unknown>
   for (const g of strings(members.computerGroups)) {
     const gt = principalTier(g, groups)
-    if (gt !== null && gt > tt) out.push({ severity: 'Error', message: `Tier-Verstoß: Computer der Tier-${gt}-Gruppe „${g}“ werden in ein Tier-${tt}-Silo aufgenommen.` })
+    if (gt !== null && gt > tt) out.push({ severity: 'Error', message: t('lib.tierRules.tierViolationComputersOfThe', { gt, g, tt }) })
   }
   for (const ou of [...strings(members.userOUs), ...strings(members.computerOUs)]) {
     const ot = targetTier(ou)
-    if (ot !== null && ot > tt) out.push({ severity: 'Error', message: `Tier-Verstoß: Konten aus einer Tier-${ot}-OU werden in ein Tier-${tt}-Silo aufgenommen.` })
+    if (ot !== null && ot > tt) out.push({ severity: 'Error', message: t('lib.tierRules.tierViolationAccountsFromA', { ot, tt }) })
   }
   return out
 }
@@ -186,5 +187,5 @@ export function deviceSyncTierIssues(d: Record<string, unknown>, groups: GroupTi
   return strings(d.sourceOUs)
     .map((ou) => ({ ou, t: targetTier(ou) }))
     .filter((x) => x.t !== null && x.t > gt)
-    .map((x) => ({ severity: 'Error' as const, message: `Tier-Verstoß: Computer aus einer Tier-${x.t}-OU werden in die Tier-${gt}-Gerätegruppe „${d.group}“ aufgenommen.` }))
+    .map((x) => ({ severity: 'Error' as const, message: t('lib.tierRules.tierViolationComputersFromA', { t: x.t, gt, group: d.group }) }))
 }

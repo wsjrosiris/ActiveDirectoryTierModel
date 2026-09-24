@@ -88,6 +88,7 @@ Beim TierModel Service gelten diese Anforderungen für das **Dienstkonto**.
 | **Läufe** | Warteschlange, Live-Protokoll, Abbrechen, verwendete Konfigurationsversionen |
 | **Änderungsprotokoll** | wer hat wann was geändert, gestartet oder freigegeben |
 | **Mehrere Domänen** | eine Instanz für mehrere Domänen (auch Gesamtstrukturen mit Vertrauensstellung), je Domäne eigene Konfiguration, Läufe und Überwachung, Umschalter in der Kopfzeile |
+| **Sprache** | Oberfläche und Meldungen auf Deutsch oder Englisch, je Benutzer wählbar |
 | **Administration** | Benutzer mit Rollen (Betrachter, Bearbeiter, Operator, Administrator), Windows-Anmeldung mit AD-Gruppen, Benachrichtigungen, Vier-Augen-Prinzip, Systemzustand (Zertifikat, Datenbank, Warteschlange, Hintergrunddienste, Kette des Änderungsprotokolls), Wartungsfenster und Sperrzeiten, Entra-ID-Anmeldung, API-Tokens, SIEM (Syslog/CEF, Log Analytics), PDF-Berichte, Einstellungen |
 
 **Technik:** ASP.NET Core 10 als Windows-Dienst (self-contained, keine .NET-Installation nötig), PostgreSQL,

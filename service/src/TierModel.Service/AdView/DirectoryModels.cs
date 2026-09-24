@@ -1,3 +1,4 @@
+using TierModel.Service.Localization;
 namespace TierModel.Service.AdView;
 
 /* Read-only view of the live Active Directory (roadmap 14). Readers return raw data (SIDs, GUIDs, rights);
@@ -96,4 +97,4 @@ public sealed class UnavailableDirectoryReader : IDirectoryReader
     public List<AdPrincipal> SearchAccounts(string query, int max) => [];
 }
 
-public class DirectoryUnavailableException() : Exception("Active Directory ist auf diesem Server nicht erreichbar.");
+public class DirectoryUnavailableException() : Exception(L.T("Active Directory ist auf diesem Server nicht erreichbar."));

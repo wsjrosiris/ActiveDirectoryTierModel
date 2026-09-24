@@ -10,6 +10,8 @@ import { formatDateTime } from '@/lib/utils'
 import { includesFromRequest, settingsQuery } from './run-request-form'
 import { applyTimingText, maintenanceStatusQuery } from './maintenance-notice'
 import { useOptionalDomains } from '@/features/domains/domain-context'
+import { t } from '@/i18n'
+import { rich } from '@/i18n/rich'
 
 /** Request of a run as shown on its detail page (includes as names). */
 export function requestFromRun(r: { preferredDc: string; scope: RunRequest['scope']; includes: string[]; admlLanguage?: string }): RunRequest {
@@ -43,7 +45,7 @@ export function useApplyPlan() {
     meta: { silent: true },
     onError: (e, { planRunId }) => {
       // Usually the plan went stale in the meantime (configuration saved, plan expired): show why and refresh.
-      toast.error('Anwenden nicht möglich', { description: errorMessage(e) })
+      toast.error(t('runs.planApply.applyNotPossible'), { description: errorMessage(e) })
       qc.invalidateQueries({ queryKey: ['plan-candidates'] })
       if (planRunId !== null) qc.invalidateQueries({ queryKey: ['run', planRunId] })
     },
@@ -53,11 +55,11 @@ export function useApplyPlan() {
       qc.invalidateQueries({ queryKey: ['plan-candidates'] })
       qc.invalidateQueries({ queryKey: ['maintenance'] })
       if (run.status === 'AwaitingApproval') {
-        toast.success(`Deploy #${run.id} zur Freigabe eingereicht`, { description: 'Ein zweiter Operator muss den Deploy freigeben, bevor er ausgeführt wird.' })
+        toast.success(t('runs.planApply.deploymentIdSubmittedForApproval', { id: run.id }), { description: t('runs.planApply.aSecondOperatorMustApprove') })
       } else if (run.status === 'Scheduled') {
-        toast.success(`Deploy #${run.id} geplant`, { description: `Startet automatisch im Wartungsfenster: ${formatDateTime(run.scheduledFor)}.` })
+        toast.success(t('runs.planApply.deploymentIdScheduled', { id: run.id }), { description: t('runs.planApply.startsAutomaticallyInTheMaintenance', { scheduledFor: formatDateTime(run.scheduledFor) }) })
       } else {
-        toast.success(`Deploy #${run.id} eingereiht`, { description: 'Änderungen werden angewendet.' })
+        toast.success(t('runs.planApply.deploymentIdQueued', { id: run.id }), { description: t('runs.planApply.changesAreBeingApplied') })
       }
       navigate(`/laeufe/${run.id}`)
     },
@@ -69,55 +71,56 @@ export function useApplyPlan() {
     const target = domains?.multiple ? (domain ? domains.domains.find((d) => d.key === domain) : domains.current) : null
     const scope = (
       <p className="text-foreground">
-        {target && <>Domäne: <strong>{target.displayName}</strong>{target.dnsName ? ` (${target.dnsName})` : ''} · </>}
-        Bereich: <strong>{req.scope ? scopeLabels[req.scope] : 'Nur Add-ons'}</strong>
-        {includesFromRequest(req).length > 0 && <> · Add-ons: <strong>{includesFromRequest(req).join(', ')}</strong></>}
+        {target && <>{t('runs.planApply.domainLabel')} <strong>{target.displayName}</strong>{target.dnsName ? ` (${target.dnsName})` : ''} · </>}
+        {t('runs.planApply.scopeLabel')} <strong>{req.scope ? scopeLabels[req.scope] : t('runs.planApply.addOnsOnly')}</strong>
+        {includesFromRequest(req).length > 0 && <> · {t('runs.planApply.addOnsLabel')} <strong>{includesFromRequest(req).join(', ')}</strong></>}
         {planRunId !== null && (
           <>
-            {' '}· Planung <strong>#{planRunId}</strong>
-            {changes !== undefined && <> ({changes === 1 ? '1 Änderung' : `${changes} Änderungen`})</>}
+            {' '}· {t('runs.planApply.planLabel')} <strong>#{planRunId}</strong>
+            {changes !== undefined && <> ({t('runs.planApply.changesCount', { count: changes })})</>}
           </>
         )}
       </p>
     )
     const ok = needsApproval
       ? await confirm({
-          title: 'Deploy zur Freigabe einreichen?',
+          title: t('runs.planApply.submitDeploymentForApproval'),
           description: (
             <div className="grid gap-2">
               <p>
-                Der Deploy wird erst ausgeführt, wenn ein zweiter Operator ihn freigibt
-                {settings.data?.approvalTimeoutHours ? <> (innerhalb von <strong className="text-foreground">{settings.data.approvalTimeoutHours} Stunden</strong>, danach verfällt der Antrag)</> : null}.
+                {settings.data?.approvalTimeoutHours
+                  ? rich(t('runs.planApply.approvalWithin'), { hours: <strong className="text-foreground">{t('runs.planApply.hours', { count: settings.data.approvalTimeoutHours })}</strong> })
+                  : t('runs.planApply.approvalNeeded')}
                 {planRunId !== null
-                  ? ' Angewendet werden genau die Konfigurationsversionen der Planung.'
-                  : ' Die aktuell gespeicherten Konfigurationsversionen werden dabei festgeschrieben.'}
+                  ? t('runs.planApply.exactlyTheConfigurationVersionsOf')
+                  : t('runs.planApply.theCurrentlySavedConfigurationVersions')}
               </p>
               <p>
-                Nach der Freigabe verändert er das Active Directory über <span className="font-mono font-medium text-foreground">{req.preferredDc}</span>.
+                {rich(t('runs.planApply.afterApproval'), { dc: <span className="font-mono font-medium text-foreground">{req.preferredDc}</span> })}
               </p>
               {scope}
               {timing && <p className="text-sky-800 dark:text-sky-200">{timing}</p>}
             </div>
           ),
-          confirmText: 'Zur Freigabe einreichen',
+          confirmText: t('runs.planApply.submitForApproval'),
         })
       : await confirm({
-          title: 'Änderungen im Active Directory anwenden?',
+          title: t('runs.planApply.applyChangesToActiveDirectory'),
           description: (
             <div className="grid gap-2">
               <p>
-                Dieser Lauf verändert das produktive Active Directory über <span className="font-mono font-medium text-foreground">{req.preferredDc}</span>.
+                {rich(t('runs.planApply.changesProduction'), { dc: <span className="font-mono font-medium text-foreground">{req.preferredDc}</span> })}
                 {planRunId !== null
-                  ? ' Angewendet werden genau die Konfigurationsversionen der geprüften Planung.'
-                  : ' Führen Sie vorher einen Planungslauf aus und prüfen Sie dessen Ausgabe.'}
+                  ? t('runs.planApply.exactlyTheConfigurationVersionsOf2')
+                  : t('runs.planApply.runAPlanFirstAnd')}
               </p>
               {scope}
               {timing && <p className="text-sky-800 dark:text-sky-200">{timing}</p>}
             </div>
           ),
-          confirmText: maintenance.data && !maintenance.data.allowedNow ? 'Für Wartungsfenster planen' : 'Jetzt anwenden',
+          confirmText: maintenance.data && !maintenance.data.allowedNow ? t('runs.planApply.scheduleForMaintenanceWindow') : t('runs.planApply.applyNow'),
           destructive: true,
-          typeToConfirm: 'ANWENDEN',
+          typeToConfirm: t('runs.planApply.confirmWord'),
         })
     if (ok) deploy.mutate({ req, planRunId, domain })
   }

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Auth;
 
@@ -32,7 +33,7 @@ public static partial class WindowsAuth
     public static (GroupRef? Group, string? Error) Resolve(string entry)
     {
         var value = entry.Trim();
-        if (value.Length == 0) return (null, "Leerer Eintrag.");
+        if (value.Length == 0) return (null, L.T("Leerer Eintrag."));
         if (SidPattern().IsMatch(value))
         {
             var name = value;
@@ -44,7 +45,7 @@ public static partial class WindowsAuth
             return (new GroupRef(name, value.ToUpperInvariant()), null);
         }
         if (!OperatingSystem.IsWindows())
-            return (null, $"'{value}': Namen können nur unter Windows aufgelöst werden – bitte die SID angeben.");
+            return (null, L.F("'{0}': Namen können nur unter Windows aufgelöst werden – bitte die SID angeben.", value));
         return ResolveNameOnWindows(value);
     }
 
@@ -59,7 +60,7 @@ public static partial class WindowsAuth
         }
         catch (Exception)
         {
-            return (null, $"'{value}' wurde im Active Directory nicht gefunden (Format DOMÄNE\\Gruppe).");
+            return (null, L.F("'{0}' wurde im Active Directory nicht gefunden (Format DOMÄNE\\Gruppe).", value));
         }
     }
 
@@ -110,7 +111,7 @@ public static partial class WindowsAuth
             var user = await db.Users.FirstOrDefaultAsync(u => u.Sid == userSid);
             if (role is null)
             {
-                log.Add(accountName, "auth.windows-denied", "auth", user?.Id.ToString(), $"Windows-Anmeldung von '{accountName}' abgelehnt: keiner Rolle zugeordnet");
+                log.Add(accountName, "auth.windows-denied", "auth", user?.Id.ToString(), L.PF("Windows-Anmeldung von '{0}' abgelehnt: keiner Rolle zugeordnet", accountName));
                 await db.SaveChangesAsync();
                 return Results.Redirect("/login?error=windows-norole");
             }
@@ -127,25 +128,25 @@ public static partial class WindowsAuth
                 if (await db.Users.AnyAsync(u => u.NormalizedUsername == user.NormalizedUsername))
                     user.NormalizedUsername = UserService.Normalize(accountName + "@" + userSid);
                 db.Users.Add(user);
-                log.Add(accountName, "user.create", "user", user.Id.ToString(), $"Windows-Konto '{accountName}' bei der ersten Anmeldung angelegt ({role})");
+                log.Add(accountName, "user.create", "user", user.Id.ToString(), L.PF("Windows-Konto '{0}' bei der ersten Anmeldung angelegt ({1})", accountName, role));
             }
             else if (user.Role != role || user.Username != accountName)
             {
                 // Group membership decides: a changed role ends existing sessions.
-                log.Add(accountName, "user.update", "user", user.Id.ToString(), $"Rolle von '{accountName}' aus AD-Gruppen: {user.Role} → {role}");
+                log.Add(accountName, "user.update", "user", user.Id.ToString(), L.PF("Rolle von '{0}' aus AD-Gruppen: {1} → {2}", accountName, user.Role, role));
                 user.Role = role.Value;
                 user.Username = accountName;
                 user.SecurityStamp = Guid.NewGuid().ToString("N");
             }
             if (!user.IsActive)
             {
-                log.Add(accountName, "auth.windows-denied", "auth", user.Id.ToString(), $"Windows-Anmeldung von '{accountName}' abgelehnt: Konto deaktiviert");
+                log.Add(accountName, "auth.windows-denied", "auth", user.Id.ToString(), L.PF("Windows-Anmeldung von '{0}' abgelehnt: Konto deaktiviert", accountName));
                 await db.SaveChangesAsync();
                 return Results.Redirect("/login?error=windows-inactive");
             }
 
             user.LastLoginAt = DateTimeOffset.UtcNow;
-            log.Add(accountName, "auth.windows-login", "auth", user.Id.ToString(), $"{accountName} hat sich mit Windows angemeldet ({user.Role})");
+            log.Add(accountName, "auth.windows-login", "auth", user.Id.ToString(), L.PF("{0} hat sich mit Windows angemeldet ({1})", accountName, user.Role));
             await db.SaveChangesAsync();
 
             var principal = AuthClaims.CreatePrincipal(user);
@@ -182,14 +183,14 @@ public static partial class WindowsAuth
                 }
                 if (messages.Count > 0) errors[$"roleGroups.{role}"] = [.. messages];
             }
-            if (r.Enabled && !Available) errors["enabled"] = ["Windows-Anmeldung ist nur auf einem Windows-Server verfügbar."];
+            if (r.Enabled && !Available) errors["enabled"] = [L.T("Windows-Anmeldung ist nur auf einem Windows-Server verfügbar.")];
             if (r.Enabled && groups[Role.Admin].Count == 0 && groups.Values.All(v => v.Count == 0))
-                errors["roleGroups"] = ["Mindestens einer Rolle eine AD-Gruppe zuordnen."];
+                errors["roleGroups"] = [L.T("Mindestens einer Rolle eine AD-Gruppe zuordnen.")];
             if (errors.Count > 0) return Results.ValidationProblem(errors);
 
             await settings.SetWindowsAuthAsync(new WindowsAuthConfig(r.Enabled, groups));
             log.Add(ctx.User.UserName(), "settings.windows-auth", "settings", null,
-                $"Windows-Anmeldung {(r.Enabled ? "aktiviert" : "deaktiviert")}: " +
+                L.PF("Windows-Anmeldung {0}: ", (r.Enabled ? L.P("aktiviert") : L.P("deaktiviert"))) +
                 string.Join(", ", groups.Where(kv => kv.Value.Count > 0).Select(kv => $"{kv.Key} = {string.Join(" / ", kv.Value.Select(x => x.Name))}")),
                 new { enabled = r.Enabled, roleGroups = groups });
             await db.SaveChangesAsync();

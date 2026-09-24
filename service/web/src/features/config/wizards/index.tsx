@@ -7,6 +7,7 @@ import { useCan } from '@/features/auth/auth'
 import { AdminAccountWizard } from './admin-account-wizard'
 import { DelegationWizard } from './delegation-wizard'
 import { ServerAreaWizard } from './server-area-wizard'
+import { t } from '@/i18n'
 
 /* Entry point of the configuration assistants: an "Assistent" menu for the config page header.
  * Assistants can also be opened by URL (?assistent=server|konto|delegation), e.g. from the command palette. */
@@ -14,9 +15,9 @@ import { ServerAreaWizard } from './server-area-wizard'
 export type WizardId = 'server' | 'konto' | 'delegation'
 
 export const WIZARDS: { id: WizardId; label: string; description: string; icon: React.ReactNode; keywords: string }[] = [
-  { id: 'server', label: 'Neuen Server-Bereich aufnehmen', description: 'OU, Admin-Gruppe, Rechte und GPOs', icon: <Server />, keywords: 'server bereich ou gruppe gpo tier 1 tier 2' },
-  { id: 'konto', label: 'Neues Admin-Konto', description: 'Konto im Tier-OU mit Gruppen', icon: <UserPlus />, keywords: 'admin konto benutzer user protected users' },
-  { id: 'delegation', label: 'Neue Delegation', description: 'Wer darf was auf welcher OU', icon: <KeyRound />, keywords: 'delegation acl rechte berechtigung' },
+  { id: 'server', label: t('config.wizards.index.addNewServerArea'), description: t('config.wizards.index.ouAdminGroupRightsAnd'), icon: <Server />, keywords: t('config.wizards.index.serverAreaOuGroupGpo') },
+  { id: 'konto', label: t('config.wizards.index.newAdminAccount'), description: t('config.wizards.index.accountInTheTierOu'), icon: <UserPlus />, keywords: t('config.wizards.index.adminAccountUserProtectedUsers') },
+  { id: 'delegation', label: t('config.wizards.index.newDelegation'), description: t('config.wizards.index.whoMayDoWhatOn'), icon: <KeyRound />, keywords: t('config.wizards.index.delegationAclRightsPermission') },
 ]
 
 
@@ -47,11 +48,11 @@ export function WizardMenu() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
-            <WandSparkles /> Assistent <ChevronDown className="text-muted-foreground" />
+            <WandSparkles /> {t('config.wizards.index.assistant')} <ChevronDown className="text-muted-foreground" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-72">
-          <DropdownMenuLabel>Geführte Änderungen im Entwurf</DropdownMenuLabel>
+          <DropdownMenuLabel>{t('config.wizards.index.guidedChangesInTheDraft')}</DropdownMenuLabel>
           {WIZARDS.map((w) => (
             <DropdownMenuItem key={w.id} onSelect={() => setActive(w.id)} className="items-start py-2">
               <span className="mt-0.5">{w.icon}</span>

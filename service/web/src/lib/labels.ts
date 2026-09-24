@@ -1,5 +1,5 @@
 import type { RunStatus, Scope } from '@/api/types'
-import { lazyRecord } from '@/i18n'
+import { lazyRecord, t } from '@/i18n'
 
 export const scopeLabels: Record<Scope, string> = lazyRecord('lib.labels.scope')
 
@@ -19,10 +19,10 @@ export const actionLabels: Record<string, string> = lazyRecord('lib.labels.actio
 export const findingTypeLabels: Record<string, string> = lazyRecord('lib.labels.findingType')
 
 export const sectionGroups: { title: string; keys: string[] }[] = [
-  { title: 'Struktur', keys: ['ous', 'groups', 'users'] },
-  { title: 'Delegationen', keys: ['acls', 'msa', 'gmsa', 'dmsa', 'winlaps'] },
-  { title: 'Richtlinien', keys: ['gpos', 'authsilos', 'admx', 'adml-en-US'] },
-  { title: 'System', keys: ['metadata', 'guid-mappings', 'dependencies'] },
+  { title: t('lib.labels.group.structure'), keys: ['ous', 'groups', 'users'] },
+  { title: t('lib.labels.group.delegations'), keys: ['acls', 'msa', 'gmsa', 'dmsa', 'winlaps'] },
+  { title: t('lib.labels.group.policies'), keys: ['gpos', 'authsilos', 'admx', 'adml-en-US'] },
+  { title: t('lib.labels.group.system'), keys: ['metadata', 'guid-mappings', 'dependencies'] },
 ]
 
 export const sectionFallbackTitles: Record<string, string> = lazyRecord('lib.labels.sectionTitle')

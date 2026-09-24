@@ -8,6 +8,7 @@ using MimeKit;
 using TierModel.Service.Auth;
 using TierModel.Service.Data;
 using TierModel.Service.Endpoints;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Reports;
 
@@ -82,16 +83,16 @@ public static class ReportSchedules
     public static Dictionary<string, string[]> Validate(ReportScheduleInput r)
     {
         var errors = new Dictionary<string, string[]>();
-        if (string.IsNullOrWhiteSpace(r.Name) || r.Name.Trim().Length > 100) errors["name"] = ["Name angeben (max. 100 Zeichen)."];
-        if (!ReportTypes.All.Contains(r.Type)) errors["type"] = ["Unbekannter Berichtstyp."];
-        if (!Enum.IsDefined(r.Frequency)) errors["frequency"] = ["Wöchentlich oder monatlich."];
-        else if (r.Frequency == ReportFrequency.Weekly && r.Day is < 0 or > 6) errors["day"] = ["Wochentag 0 (Sonntag) bis 6 (Samstag)."];
-        else if (r.Frequency == ReportFrequency.Monthly && r.Day is < 1 or > 28) errors["day"] = ["Tag 1 bis 28."];
-        if (!TimeOnly.TryParseExact(r.Time ?? "", "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out _)) errors["time"] = ["Uhrzeit im Format HH:MM."];
+        if (string.IsNullOrWhiteSpace(r.Name) || r.Name.Trim().Length > 100) errors["name"] = [L.T("Name angeben (max. 100 Zeichen).")];
+        if (!ReportTypes.All.Contains(r.Type)) errors["type"] = [L.T("Unbekannter Berichtstyp.")];
+        if (!Enum.IsDefined(r.Frequency)) errors["frequency"] = [L.T("Wöchentlich oder monatlich.")];
+        else if (r.Frequency == ReportFrequency.Weekly && r.Day is < 0 or > 6) errors["day"] = [L.T("Wochentag 0 (Sonntag) bis 6 (Samstag).")];
+        else if (r.Frequency == ReportFrequency.Monthly && r.Day is < 1 or > 28) errors["day"] = [L.T("Tag 1 bis 28.")];
+        if (!TimeOnly.TryParseExact(r.Time ?? "", "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out _)) errors["time"] = [L.T("Uhrzeit im Format HH:MM.")];
         var recipients = (r.Recipients ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
-        if (recipients.Count == 0) errors["recipients"] = ["Mindestens einen Empfänger angeben."];
+        if (recipients.Count == 0) errors["recipients"] = [L.T("Mindestens einen Empfänger angeben.")];
         else if (recipients.FirstOrDefault(x => !MailboxAddress.TryParse(x.Trim(), out var m) || !m.Address.Contains('@')) is { } bad)
-            errors["recipients"] = [$"'{bad}' ist keine gültige E-Mail-Adresse."];
+            errors["recipients"] = [L.F("'{0}' ist keine gültige E-Mail-Adresse.", bad)];
         return errors;
     }
 
@@ -102,9 +103,11 @@ public static class ReportSchedules
         if (domain is not null && s.DomainId is { } domainId) domain.Use(domainId);
         var smtp = await settings.GetSmtpAsync(ct);
         if (string.IsNullOrWhiteSpace(smtp.Host) || string.IsNullOrWhiteSpace(smtp.From))
-            throw new InvalidOperationException("SMTP ist nicht eingerichtet (Server und Absender fehlen) – siehe Benachrichtigungen.");
+            throw new InvalidOperationException(L.T("SMTP ist nicht eingerichtet (Server und Absender fehlen) – siehe Benachrichtigungen."));
         var (from, to) = s.Period(now);
-        var doc = await builder.BuildAsync(s.Type, from, to, $"Zeitplan „{s.Name}“", ct);
+        // E-mailed reports use the instance default language, also when sent from a request ("Jetzt senden").
+        using var language = L.Use(L.InstanceDefault);
+        var doc = await builder.BuildAsync(s.Type, from, to, L.F("Zeitplan „{0}“", s.Name), ct);
         var pdf = PdfReportRenderer.Render(doc);
 
         var mail = new MimeMessage();
@@ -113,7 +116,7 @@ public static class ReportSchedules
         mail.Subject = $"[TierModel] {doc.Title} – {HtmlReportRenderer.Range(doc)}" + (domain is not null && s.DomainId is not null ? $" – {domain.Current.DisplayName}" : "");
         var body = new BodyBuilder
         {
-            TextBody = $"Im Anhang: {doc.Title} ({HtmlReportRenderer.Range(doc)}).\nGrundlage: {doc.Basis}\nInstanz: {doc.Instance}\n\nGesendet vom Zeitplan „{s.Name}“.",
+            TextBody = L.F("Im Anhang: {0} ({1}).\nGrundlage: {2}\nInstanz: {3}\n\nGesendet vom Zeitplan „{4}“.", doc.Title, HtmlReportRenderer.Range(doc), doc.Basis, doc.Instance, s.Name),
         };
         body.Attachments.Add(new MimePart("application", "pdf")
         {
@@ -168,13 +171,13 @@ public static class ReportEndpoints
             return new List<ReportTypeDto>
             {
                 new(ReportTypes.SollIst, ReportTypes.Title(ReportTypes.SollIst),
-                    "Ergebnis des letzten Audits: Zusammenfassung und alle Abweichungen nach Bereich und Schweregrad.", false,
+                    L.T("Ergebnis des letzten Audits: Zusammenfassung und alle Abweichungen nach Bereich und Schweregrad."), false,
                     audit is null ? null : $"Audit #{audit.Id}", audit?.At),
                 new(ReportTypes.Changes, ReportTypes.Title(ReportTypes.Changes),
-                    "Konfigurationsversionen mit Kommentar, Läufe, Freigaben und Änderungsprotokoll zwischen zwei Daten.", true, null, null),
+                    L.T("Konfigurationsversionen mit Kommentar, Läufe, Freigaben und Änderungsprotokoll zwischen zwei Daten."), true, null, null),
                 new(ReportTypes.Privileged, ReportTypes.Title(ReportTypes.Privileged),
-                    "Mitglieder privilegierter Gruppen, nicht erwartete Mitglieder, Hygiene, Angriffspfade und Compliance-Wert.", false,
-                    snapshot is null ? null : $"Überwachung #{snapshot.RunId}", snapshot?.TakenAt),
+                    L.T("Mitglieder privilegierter Gruppen, nicht erwartete Mitglieder, Hygiene, Angriffspfade und Compliance-Wert."), false,
+                    snapshot is null ? null : L.F("Überwachung #{0}", snapshot.RunId), snapshot?.TakenAt),
             };
         });
 
@@ -188,11 +191,11 @@ public static class ReportEndpoints
             Domains.DomainRegistry domains) =>
         {
             var errors = new Dictionary<string, string[]>();
-            if (input.Count > 50) errors["schedules"] = ["Höchstens 50 Zeitpläne."];
+            if (input.Count > 50) errors["schedules"] = [L.T("Höchstens 50 Zeitpläne.")];
             for (var i = 0; i < input.Count; i++)
             {
                 foreach (var (k, v) in ReportSchedules.Validate(input[i])) errors[$"schedules[{i}].{k}"] = v;
-                if (input[i].DomainId is { } d && domains.Find(d) is null) errors[$"schedules[{i}].domainId"] = ["Unbekannte Domäne."];
+                if (input[i].DomainId is { } d && domains.Find(d) is null) errors[$"schedules[{i}].domainId"] = [L.T("Unbekannte Domäne.")];
             }
             if (errors.Count > 0) return Results.ValidationProblem(errors);
 
@@ -209,7 +212,7 @@ public static class ReportEndpoints
             }).ToList();
             await ReportSchedules.SaveAsync(settings, list);
             log.Add(ctx.User.UserName(), "settings.report-schedules", "settings", null,
-                list.Count == 0 ? "Alle Berichtszeitpläne entfernt" : $"Berichtszeitpläne gespeichert: {string.Join(", ", list.Select(s => s.Name))}");
+                list.Count == 0 ? L.P("Alle Berichtszeitpläne entfernt") : L.PF("Berichtszeitpläne gespeichert: {0}", string.Join(", ", list.Select(s => s.Name))));
             await db.SaveChangesAsync();
             return Results.Ok(list.Select(s => ReportScheduleDto.From(s, now)));
         }).RequireAuthorization(nameof(Role.Admin));
@@ -224,25 +227,25 @@ public static class ReportEndpoints
             try
             {
                 await ReportSchedules.SendAsync(s, builder, settings, DateTimeOffset.UtcNow, ct, domain);
-                log.Add(ctx.User.UserName(), "report.send", "settings", null, $"Bericht „{s.Name}“ an {string.Join(", ", s.Recipients)} gesendet");
+                log.Add(ctx.User.UserName(), "report.send", "settings", null, L.PF("Bericht „{0}“ an {1} gesendet", s.Name, string.Join(", ", s.Recipients)));
                 await db.SaveChangesAsync(ct);
                 return Results.NoContent();
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                return Results.Problem(title: "Bericht konnte nicht gesendet werden", detail: ex.Message, statusCode: 502);
+                return Results.Problem(title: L.T("Bericht konnte nicht gesendet werden"), detail: ex.Message, statusCode: 502);
             }
         }).RequireAuthorization(nameof(Role.Admin));
 
         api.MapGet("/{type}", async (string type, string? from, string? to, string? format, bool? download, HttpContext ctx, ReportBuilder builder, CancellationToken ct) =>
         {
-            if (!ReportTypes.All.Contains(type)) return Results.Problem(title: "Unbekannter Bericht", statusCode: 404);
+            if (!ReportTypes.All.Contains(type)) return Results.Problem(title: L.T("Unbekannter Bericht"), statusCode: 404);
             var f = (format ?? "pdf").ToLowerInvariant();
             var errors = new Dictionary<string, string[]>();
-            if (!Formats.Contains(f)) errors["format"] = ["pdf oder html."];
-            if (!TryDate(from, out var fromDate)) errors["from"] = ["Datum im Format JJJJ-MM-TT."];
-            if (!TryDate(to, out var toDate)) errors["to"] = ["Datum im Format JJJJ-MM-TT."];
-            if (fromDate is { } a && toDate is { } b && b.DayNumber - a.DayNumber > 3660) errors["from"] = ["Höchstens zehn Jahre."];
+            if (!Formats.Contains(f)) errors["format"] = [L.T("pdf oder html.")];
+            if (!TryDate(from, out var fromDate)) errors["from"] = [L.T("Datum im Format JJJJ-MM-TT.")];
+            if (!TryDate(to, out var toDate)) errors["to"] = [L.T("Datum im Format JJJJ-MM-TT.")];
+            if (fromDate is { } a && toDate is { } b && b.DayNumber - a.DayNumber > 3660) errors["from"] = [L.T("Höchstens zehn Jahre.")];
             if (errors.Count > 0) return Results.ValidationProblem(errors);
 
             var doc = await builder.BuildAsync(type, fromDate, toDate, ctx.User.UserName(), ct);
@@ -307,7 +310,7 @@ public class ReportScheduleWorker(IServiceScopeFactory scopes, ILogger<ReportSch
             await ReportSchedules.SaveAsync(settings, list, ct);
             var log = scope.ServiceProvider.GetRequiredService<ChangeLogService>();
             log.Add("system", error is null ? "report.send" : "report.failed", "settings", null,
-                error is null ? $"Bericht „{s.Name}“ an {string.Join(", ", s.Recipients)} gesendet" : $"Bericht „{s.Name}“ nicht gesendet: {error}");
+                error is null ? L.PF("Bericht „{0}“ an {1} gesendet", s.Name, string.Join(", ", s.Recipients)) : L.PF("Bericht „{0}“ nicht gesendet: {1}", s.Name, error));
             await scope.ServiceProvider.GetRequiredService<AppDbContext>().SaveChangesAsync(ct);
         }
     }

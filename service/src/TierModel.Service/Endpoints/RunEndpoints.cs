@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using TierModel.Service.Auth;
 using TierModel.Service.Data;
 using TierModel.Service.Runs;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Endpoints;
 
@@ -56,7 +57,7 @@ public static class RunEndpoints
         runs.MapPost("/deploy", async (DeployRequest r, HttpContext ctx, RunService service, Maintenance.MaintenanceService maintenance) =>
         {
             if (r.ConfirmApply && !ctx.User.HasRole(Role.Operator))
-                return Results.Problem(title: "Nur Operatoren dürfen Änderungen im Active Directory anwenden", statusCode: 403);
+                return Results.Problem(title: L.T("Nur Operatoren dürfen Änderungen im Active Directory anwenden"), statusCode: 403);
             var errors = RunValidation.Validate(r.ToRunRequest());
             if (errors.Count > 0) return Results.ValidationProblem(errors);
             Run? plan = null;
@@ -66,7 +67,7 @@ public static class RunEndpoints
                 if (planError is not null) return Results.ValidationProblem(new Dictionary<string, string[]> { ["planRunId"] = [planError] });
                 // Freeze periods (roadmap 4): rejected right away; outside a maintenance window the run is scheduled.
                 if (await maintenance.CheckApplyRequestAsync(DateTimeOffset.UtcNow, service.DomainId) is { } freezeError)
-                    return Results.ValidationProblem(new Dictionary<string, string[]> { ["maintenance"] = [freezeError] }, title: "Anwenden derzeit gesperrt");
+                    return Results.ValidationProblem(new Dictionary<string, string[]> { ["maintenance"] = [freezeError] }, title: L.T("Anwenden derzeit gesperrt"));
             }
             var run = await service.EnqueueAsync(RunKind.Deploy, r.ToRunRequest(), r.ConfirmApply, ctx.User.UserName(), planRun: plan);
             return Results.Accepted($"/api/runs/{run.Id}", RunSummaryDto.From(run));
@@ -97,9 +98,9 @@ public static class RunEndpoints
             if (audit is null) return Results.NotFound();
             domain.Use(audit.DomainId);   // the planning run belongs to the audit's domain
             if (audit.Kind != RunKind.Audit)
-                return Results.Problem(title: "Nur für Audits möglich", detail: "Eine Planung zur Behebung kann nur aus den Befunden eines Audits gestartet werden.", statusCode: 409);
+                return Results.Problem(title: L.T("Nur für Audits möglich"), detail: L.T("Eine Planung zur Behebung kann nur aus den Befunden eines Audits gestartet werden."), statusCode: 409);
             if (Remediation.For(r?.Area, audit.PreferredDc, audit.AdmlLanguage) is not { } request)
-                return Results.ValidationProblem(new Dictionary<string, string[]> { ["area"] = [$"Unbekannter Bereich „{r?.Area}“."] });
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["area"] = [L.F("Unbekannter Bereich „{0}“.", r?.Area)] });
             var errors = RunValidation.Validate(request);
             if (errors.Count > 0) return Results.ValidationProblem(errors);
             var run = await service.EnqueueAsync(RunKind.Deploy, request, false, ctx.User.UserName());
@@ -127,7 +128,7 @@ public static class RunEndpoints
             if (run is null) return Results.NotFound();
             return DeployPlanReader.Deserialize(run.Plan) is { } plan
                 ? Results.Json(plan, JsonDefaults.Options)
-                : Results.Problem(title: "Für diesen Lauf liegt keine Planung vor", statusCode: 404);
+                : Results.Problem(title: L.T("Für diesen Lauf liegt keine Planung vor"), statusCode: 404);
         });
 
         runs.MapGet("/plan-candidates", async (string? preferredDc, DeployScope? scope, bool? includeMsa, bool? includeGmsa, bool? includeDmsa, bool? includeWinLaps,
@@ -157,7 +158,7 @@ public static class RunEndpoints
 
         runs.MapPost("/{id:long}/reject", (long id, DecisionRequest? r, HttpContext ctx, RunService service) =>
             string.IsNullOrWhiteSpace(r?.Comment)
-                ? Task.FromResult(Results.ValidationProblem(new Dictionary<string, string[]> { ["comment"] = ["Bitte einen Grund angeben."] }))
+                ? Task.FromResult(Results.ValidationProblem(new Dictionary<string, string[]> { ["comment"] = [L.T("Bitte einen Grund angeben.")] }))
                 : Decide(id, approve: false, r.Comment, ctx, service)).RequireAuthorization(nameof(Role.Operator));
 
         runs.MapPost("/{id:long}/cancel", async (long id, HttpContext ctx, RunService service) =>
@@ -165,7 +166,7 @@ public static class RunEndpoints
             {
                 null => Results.NotFound(),
                 true => Results.NoContent(),
-                false => Results.Problem(title: "Der Lauf ist bereits beendet", statusCode: 409),
+                false => Results.Problem(title: L.T("Der Lauf ist bereits beendet"), statusCode: 409),
             })
             .RequireAuthorization(nameof(Role.Operator));
 
@@ -190,7 +191,7 @@ public static class RunEndpoints
             Apply(s, r);
             db.Schedules.Add(s);
             await db.SaveChangesAsync();
-            log.Add(ctx.User.UserName(), "schedule.create", "schedule", s.Id.ToString(), $"Zeitplan '{s.Name}' angelegt ({s.Cron}, {s.TimeZone})");
+            log.Add(ctx.User.UserName(), "schedule.create", "schedule", s.Id.ToString(), L.PF("Zeitplan '{0}' angelegt ({1}, {2})", s.Name, s.Cron, s.TimeZone));
             await db.SaveChangesAsync();
             return Results.Ok(ScheduleDto.From(s));
         }).RequireAuthorization(nameof(Role.Operator));
@@ -203,7 +204,7 @@ public static class RunEndpoints
             r = r with { Kind = r.Kind ?? s.Kind };   // clients that do not know the kind keep it
             if (ValidateSchedule(r) is { } problem) return problem;
             Apply(s, r);
-            log.Add(ctx.User.UserName(), "schedule.update", "schedule", id.ToString(), $"Zeitplan '{s.Name}' geändert ({s.Cron}, {(s.Enabled ? "aktiv" : "inaktiv")})");
+            log.Add(ctx.User.UserName(), "schedule.update", "schedule", id.ToString(), L.PF("Zeitplan '{0}' geändert ({1}, {2})", s.Name, s.Cron, (s.Enabled ? L.P("aktiv") : L.P("inaktiv"))));
             await db.SaveChangesAsync();
             return Results.Ok(ScheduleDto.From(s));
         }).RequireAuthorization(nameof(Role.Operator));
@@ -214,7 +215,7 @@ public static class RunEndpoints
             if (s is null) return Results.NotFound();
             domain.Use(s.DomainId);
             db.Schedules.Remove(s);
-            log.Add(ctx.User.UserName(), "schedule.delete", "schedule", id.ToString(), $"Zeitplan '{s.Name}' gelöscht");
+            log.Add(ctx.User.UserName(), "schedule.delete", "schedule", id.ToString(), L.PF("Zeitplan '{0}' gelöscht", s.Name));
             await db.SaveChangesAsync();
             return Results.NoContent();
         }).RequireAuthorization(nameof(Role.Operator));
@@ -241,10 +242,10 @@ public static class RunEndpoints
         {
             ApprovalOutcome.Done => Results.Ok(RunSummaryDto.From(run!)),
             ApprovalOutcome.NotFound => Results.NotFound(),
-            ApprovalOutcome.OwnRequest => Results.Problem(title: "Eigene Anträge können nicht selbst freigegeben oder abgelehnt werden",
-                detail: "Das Vier-Augen-Prinzip verlangt eine zweite Person.", statusCode: 403),
-            ApprovalOutcome.Expired => Results.Problem(title: "Die Freigabefrist ist abgelaufen", statusCode: 409),
-            _ => Results.Problem(title: "Der Lauf wartet nicht (mehr) auf eine Freigabe", statusCode: 409),
+            ApprovalOutcome.OwnRequest => Results.Problem(title: L.T("Eigene Anträge können nicht selbst freigegeben oder abgelehnt werden"),
+                detail: L.T("Das Vier-Augen-Prinzip verlangt eine zweite Person."), statusCode: 403),
+            ApprovalOutcome.Expired => Results.Problem(title: L.T("Die Freigabefrist ist abgelaufen"), statusCode: 409),
+            _ => Results.Problem(title: L.T("Der Lauf wartet nicht (mehr) auf eine Freigabe"), statusCode: 409),
         };
     }
 
@@ -254,9 +255,9 @@ public static class RunEndpoints
         {
             RunKind.Audit => RunValidation.Validate(r.ToRunRequest()),
             RunKind.Monitor => RunValidation.ValidateMonitor(r.ToRunRequest()),
-            _ => new Dictionary<string, string[]> { ["kind"] = ["Zeitpläne gibt es nur für Audits und Überwachungen."] },
+            _ => new Dictionary<string, string[]> { ["kind"] = [L.T("Zeitpläne gibt es nur für Audits und Überwachungen.")] },
         };
-        if (string.IsNullOrWhiteSpace(r.Name) || r.Name.Length > 100) errors["name"] = ["Bitte einen Namen (max. 100 Zeichen) angeben."];
+        if (string.IsNullOrWhiteSpace(r.Name) || r.Name.Length > 100) errors["name"] = [L.T("Bitte einen Namen (max. 100 Zeichen) angeben.")];
         if (ScheduleWorker.Validate(r.Cron?.Trim() ?? "", r.TimeZone ?? "") is { } cronError) errors["cron"] = [cronError];
         return errors.Count > 0 ? Results.ValidationProblem(errors) : null;
     }

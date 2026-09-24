@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using TierModel.Service.Config;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Transfer;
 
@@ -39,11 +40,11 @@ public class RemoteConfigClient(IHttpClientFactory httpFactory)
     public static string? UrlError(string? url, bool allowHttp)
     {
         if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url.Trim(), UriKind.Absolute, out var u))
-            return "Vollständige Adresse angeben, z. B. https://tiermodel-test.contoso.com";
+            return L.T("Vollständige Adresse angeben, z. B. https://tiermodel-test.contoso.com");
         if (u.Scheme != Uri.UriSchemeHttps && !(allowHttp && u.Scheme == Uri.UriSchemeHttp))
-            return "Nur https-Adressen sind erlaubt.";
+            return L.T("Nur https-Adressen sind erlaubt.");
         if (!string.IsNullOrEmpty(u.UserInfo) || !string.IsNullOrEmpty(u.Query) || !string.IsNullOrEmpty(u.Fragment))
-            return "Die Adresse darf weder Zugangsdaten noch Parameter enthalten.";
+            return L.T("Die Adresse darf weder Zugangsdaten noch Parameter enthalten.");
         return null;
     }
 
@@ -57,8 +58,8 @@ public class RemoteConfigClient(IHttpClientFactory httpFactory)
         {
             var list = await GetSectionListAsync(url, token, ct, remoteDomain);
             var domains = await GetDomainsAsync(url, token, ct);
-            return new RemoteCheckResult(true, $"Verbindung erfolgreich – {list.Count} Bereiche lesbar"
-                + (domains.Count > 1 ? $", {domains.Count} Domänen." : "."), list.Count, domains);
+            return new RemoteCheckResult(true, L.F("Verbindung erfolgreich – {0} Bereiche lesbar", list.Count)
+                + (domains.Count > 1 ? L.F(", {0} Domänen.", domains.Count) : "."), list.Count, domains);
         }
         catch (RemoteImportException ex)
         {
@@ -87,14 +88,14 @@ public class RemoteConfigClient(IHttpClientFactory httpFactory)
             var content = node?["content"];
             if (content is not JsonObject)
             {
-                invalid[def.Key] = "Die Gegenstelle lieferte keinen gültigen Inhalt.";
+                invalid[def.Key] = L.T("Die Gegenstelle lieferte keinen gültigen Inhalt.");
                 continue;
             }
             sections[def.Key] = ConfigService.Serialize(content);
             versions[def.Key] = node?["version"] is JsonValue v && v.TryGetValue<int>(out var n) ? n : version;
         }
         var notices = new List<string>();
-        if (unknown.Count > 0) notices.Add($"{unknown.Count} unbekannte(r) Bereich(e) der Gegenstelle ignoriert: {string.Join(", ", unknown)}");
+        if (unknown.Count > 0) notices.Add(L.F("{0} unbekannte(r) Bereich(e) der Gegenstelle ignoriert: {1}", unknown.Count, string.Join(", ", unknown)));
         return new ImportSource(name, sections, versions, unknown, invalid, notices);
     }
 
@@ -116,8 +117,8 @@ public class RemoteConfigClient(IHttpClientFactory httpFactory)
     private async Task<List<(string Key, int Version)>> GetSectionListAsync(string url, string token, CancellationToken ct, string? remoteDomain = null)
     {
         var node = await GetJsonAsync(url, token, "/api/config/sections", ct, remoteDomain);
-        if (node is not JsonArray arr) throw new RemoteImportException("Die Gegenstelle ist keine TierModel-Instanz (unerwartete Antwort).");
-        if (arr.Count > MaxSections) throw new RemoteImportException("Die Gegenstelle meldet zu viele Bereiche.");
+        if (node is not JsonArray arr) throw new RemoteImportException(L.T("Die Gegenstelle ist keine TierModel-Instanz (unerwartete Antwort)."));
+        if (arr.Count > MaxSections) throw new RemoteImportException(L.T("Die Gegenstelle meldet zu viele Bereiche."));
         return arr.OfType<JsonObject>()
             .Select(o => (Key: o["key"]?.GetValue<string>() ?? "", Version: o["version"] is JsonValue v && v.TryGetValue<int>(out var n) ? n : 0))
             .Where(x => x.Key.Length > 0)
@@ -137,31 +138,31 @@ public class RemoteConfigClient(IHttpClientFactory httpFactory)
         }
         catch (TaskCanceledException) when (!ct.IsCancellationRequested)
         {
-            throw new RemoteImportException("Zeitüberschreitung – die Gegenstelle antwortet nicht.");
+            throw new RemoteImportException(L.T("Zeitüberschreitung – die Gegenstelle antwortet nicht."));
         }
         catch (HttpRequestException ex)
         {
-            throw new RemoteImportException($"Verbindung fehlgeschlagen: {Redact(ex.GetBaseException().Message, token)}");
+            throw new RemoteImportException(L.F("Verbindung fehlgeschlagen: {0}", Redact(ex.GetBaseException().Message, token)));
         }
         using (response)
         {
             switch (response.StatusCode)
             {
                 case HttpStatusCode.Unauthorized:
-                    throw new RemoteImportException("Das API-Token wurde abgelehnt (ungültig, abgelaufen oder widerrufen).");
+                    throw new RemoteImportException(L.T("Das API-Token wurde abgelehnt (ungültig, abgelaufen oder widerrufen)."));
                 case HttpStatusCode.Forbidden:
-                    throw new RemoteImportException("Das API-Token hat keine Leseberechtigung für die Konfiguration.");
+                    throw new RemoteImportException(L.T("Das API-Token hat keine Leseberechtigung für die Konfiguration."));
                 case HttpStatusCode.NotFound:
-                    throw new RemoteImportException("Die Adresse ist keine TierModel-Instanz (404).");
+                    throw new RemoteImportException(L.T("Die Adresse ist keine TierModel-Instanz (404)."));
                 case HttpStatusCode.BadRequest when !string.IsNullOrWhiteSpace(remoteDomain):
-                    throw new RemoteImportException($"Die Gegenstelle kennt die Domäne „{remoteDomain}“ nicht.");
+                    throw new RemoteImportException(L.F("Die Gegenstelle kennt die Domäne „{0}“ nicht.", remoteDomain));
             }
             if (!response.IsSuccessStatusCode)
-                throw new RemoteImportException($"Die Gegenstelle antwortete mit Fehler {(int)response.StatusCode}.");
+                throw new RemoteImportException(L.F("Die Gegenstelle antwortete mit Fehler {0}.", (int)response.StatusCode));
             if (response.Content.Headers.ContentType?.MediaType?.Contains("json") != true)
-                throw new RemoteImportException("Die Gegenstelle ist keine TierModel-Instanz (keine JSON-Antwort).");
+                throw new RemoteImportException(L.T("Die Gegenstelle ist keine TierModel-Instanz (keine JSON-Antwort)."));
             if (response.Content.Headers.ContentLength > ConfigArchive.MaxEntryBytes)
-                throw new RemoteImportException("Die Antwort der Gegenstelle ist zu groß.");
+                throw new RemoteImportException(L.T("Die Antwort der Gegenstelle ist zu groß."));
             try
             {
                 await using var s = await response.Content.ReadAsStreamAsync(ct);
@@ -169,7 +170,7 @@ public class RemoteConfigClient(IHttpClientFactory httpFactory)
             }
             catch (JsonException)
             {
-                throw new RemoteImportException("Die Gegenstelle lieferte eine ungültige Antwort.");
+                throw new RemoteImportException(L.T("Die Gegenstelle lieferte eine ungültige Antwort."));
             }
         }
     }

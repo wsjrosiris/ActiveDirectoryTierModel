@@ -13,6 +13,7 @@ import { sectionFallbackTitles } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 import { useDirtyKeys } from './draft-store'
 import { validationQuery } from './queries'
+import { currentLocale, t } from '@/i18n'
 
 export function Component() {
   const { data, isLoading, isFetching, refetch, dataUpdatedAt } = useQuery(validationQuery)
@@ -34,45 +35,45 @@ export function Component() {
   return (
     <Page>
       <Button variant="ghost" size="sm" asChild className="mb-3 -ml-2 text-muted-foreground">
-        <Link to="/konfiguration"><ArrowLeft /> Konfiguration</Link>
+        <Link to="/konfiguration"><ArrowLeft /> {t('config.validation.configuration')}</Link>
       </Button>
       <PageHeader
-        title="Validierung"
-        description="Konsistenzprüfung der gespeicherten Konfiguration (Referenzen, Duplikate, Pflichtfelder)."
+        title={t('config.validation.validation')}
+        description={t('config.validation.consistencyCheckOfTheSaved')}
         actions={
           <Button variant="outline" size="sm" onClick={() => refetch()} loading={isFetching}>
-            {!isFetching && <RefreshCw />} Erneut prüfen
+            {!isFetching && <RefreshCw />} {t('config.validation.checkAgain')}
           </Button>
         }
       />
       {dirty.length > 0 && (
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-900 dark:text-amber-200">
           <AlertTriangle className="size-4 shrink-0" />
-          Die Validierung prüft nur gespeicherte Stände. Ungespeicherte Änderungen in {dirty.map((k) => sectionFallbackTitles[k] ?? k).join(', ')} sind nicht berücksichtigt.
+          {t('config.validation.validationOnlyChecksSavedStates')} {dirty.map((k) => sectionFallbackTitles[k] ?? k).join(', ')} {t('config.validation.areNotTakenIntoAccount')}
         </div>
       )}
       <div className="mb-4 grid grid-cols-2 gap-3 sm:max-w-md">
         <Card className="p-4">
-          <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground"><XCircle className="size-4 text-rose-500" /> Fehler</p>
+          <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground"><XCircle className="size-4 text-rose-500" /> {t('config.validation.errors')}</p>
           <p className="mt-1 text-2xl font-semibold tabular">{isLoading ? '–' : errors}</p>
         </Card>
         <Card className="p-4">
-          <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground"><AlertTriangle className="size-4 text-amber-500" /> Warnungen</p>
+          <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground"><AlertTriangle className="size-4 text-amber-500" /> {t('config.validation.warnings')}</p>
           <p className="mt-1 text-2xl font-semibold tabular">{isLoading ? '–' : warnings}</p>
         </Card>
       </div>
       <div className="mb-3 flex items-center justify-between gap-2">
         <Segmented
-          aria-label="Schweregrad"
+          aria-label={t('config.validation.severity')}
           value={sev}
           onValueChange={setSev}
           options={[
-            { value: 'all', label: `Alle · ${issues.length}` },
-            { value: 'Error', label: `Fehler · ${errors}` },
-            { value: 'Warning', label: `Warnungen · ${warnings}` },
+            { value: 'all', label: t('config.validation.allLength', { length: issues.length }) },
+            { value: 'Error', label: t('config.validation.errorsErrors', { errors }) },
+            { value: 'Warning', label: t('config.validation.warningsWarnings', { warnings }) },
           ]}
         />
-        {dataUpdatedAt > 0 && <span className="text-xs text-muted-foreground">Geprüft {new Date(dataUpdatedAt).toLocaleTimeString('de-DE')}</span>}
+        {dataUpdatedAt > 0 && <span className="text-xs text-muted-foreground">{t('config.validation.checked')} {new Date(dataUpdatedAt).toLocaleTimeString(currentLocale())}</span>}
       </div>
       {isLoading ? (
         <Card className="grid gap-2 p-5">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-10" />)}</Card>
@@ -80,8 +81,8 @@ export function Component() {
         <Card>
           <EmptyState
             icon={<CheckCircle2 className="text-emerald-500" />}
-            title={issues.length === 0 ? 'Keine Probleme gefunden' : 'Keine Einträge für diesen Filter'}
-            description={issues.length === 0 ? 'Die Konfiguration ist konsistent.' : undefined}
+            title={issues.length === 0 ? t('config.validation.noProblemsFound') : t('config.validation.noEntriesForThisFilter')}
+            description={issues.length === 0 ? t('config.validation.theConfigurationIsConsistent') : undefined}
           />
         </Card>
       ) : (
@@ -91,23 +92,23 @@ export function Component() {
               <div className="flex items-center justify-between border-b bg-muted/30 px-5 py-2.5">
                 <p className="text-[13px] font-medium">{sectionFallbackTitles[section] ?? section}</p>
                 <Button variant="ghost" size="xs" asChild>
-                  <Link to={`/konfiguration/${section}`}>Öffnen</Link>
+                  <Link to={`/konfiguration/${section}`}>{t('config.validation.open')}</Link>
                 </Button>
               </div>
               <ul className="divide-y">
                 {list.map((i, idx) => (
                   <li key={idx} className="flex items-start gap-3 px-5 py-3">
                     {i.severity === 'Error' ? (
-                      <XCircle className="mt-0.5 size-4 shrink-0 text-rose-500" aria-label="Fehler" />
+                      <XCircle className="mt-0.5 size-4 shrink-0 text-rose-500" aria-label={t('config.validation.error')} />
                     ) : (
-                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" aria-label="Warnung" />
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" aria-label={t('config.validation.warning')} />
                     )}
                     <div className="min-w-0 flex-1">
                       <p className="text-[13px]">{i.message}</p>
                       {i.item && <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{i.item}</p>}
                     </div>
                     <Badge variant={i.severity === 'Error' ? 'danger' : 'warning'} className={cn('shrink-0')}>
-                      {i.severity === 'Error' ? 'Fehler' : 'Warnung'}
+                      {i.severity === 'Error' ? t('config.validation.error') : t('config.validation.warning')}
                     </Badge>
                   </li>
                 ))}

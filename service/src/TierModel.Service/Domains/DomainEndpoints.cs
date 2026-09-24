@@ -5,6 +5,7 @@ using TierModel.Service.Config;
 using TierModel.Service.Data;
 using TierModel.Service.Monitoring;
 using TierModel.Service.Runs;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Domains;
 
@@ -64,7 +65,7 @@ public static class DomainEndpoints
         {
             var input = Normalize(r);
             if (await ValidateAsync(input, null, db, ct) is { Count: > 0 } errors) return Results.ValidationProblem(errors);
-            if (!input.Enabled && input.IsDefault) return Results.ValidationProblem(new Dictionary<string, string[]> { ["enabled"] = ["Die Standard-Domäne kann nicht deaktiviert sein."] });
+            if (!input.Enabled && input.IsDefault) return Results.ValidationProblem(new Dictionary<string, string[]> { ["enabled"] = [L.T("Die Standard-Domäne kann nicht deaktiviert sein.")] });
             await using var tx = await db.Database.BeginTransactionAsync(ct);
             if (input.IsDefault) await db.Domains.Where(d => d.IsDefault).ExecuteUpdateAsync(u => u.SetProperty(d => d.IsDefault, false), ct);
             var domain = new Domain
@@ -74,7 +75,7 @@ public static class DomainEndpoints
             };
             db.Domains.Add(domain);
             await db.SaveChangesAsync(ct);
-            log.Add(ctx.User.UserName(), "domain.create", "domain", domain.Id.ToString(), $"Domäne „{domain.DisplayName}“ ({domain.Key}) angelegt: {Describe(domain)}",
+            log.Add(ctx.User.UserName(), "domain.create", "domain", domain.Id.ToString(), L.PF("Domäne „{0}“ ({1}) angelegt: {2}", domain.DisplayName, domain.Key, Describe(domain)),
                 new { domain = domain.Key });
             await db.SaveChangesAsync(ct);
             await registry.ReloadAsync(db, ct);
@@ -92,9 +93,9 @@ public static class DomainEndpoints
             var input = Normalize(r);
             if (await ValidateAsync(input, id, db, ct) is { Count: > 0 } errors) return Results.ValidationProblem(errors);
             if (domain.IsDefault && !input.IsDefault)
-                return Results.ValidationProblem(new Dictionary<string, string[]> { ["isDefault"] = ["Bitte eine andere Domäne zur Standard-Domäne machen."] });
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["isDefault"] = [L.T("Bitte eine andere Domäne zur Standard-Domäne machen.")] });
             if ((domain.IsDefault || input.IsDefault) && !input.Enabled)
-                return Results.ValidationProblem(new Dictionary<string, string[]> { ["enabled"] = ["Die Standard-Domäne kann nicht deaktiviert werden."] });
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["enabled"] = [L.T("Die Standard-Domäne kann nicht deaktiviert werden.")] });
             await using var tx = await db.Database.BeginTransactionAsync(ct);
             if (input.IsDefault && !domain.IsDefault)
                 await db.Domains.Where(d => d.IsDefault).ExecuteUpdateAsync(u => u.SetProperty(d => d.IsDefault, false), ct);
@@ -108,7 +109,7 @@ public static class DomainEndpoints
             domain.IsDefault = input.IsDefault;
             domain.Notes = input.Notes;
             log.Add(ctx.User.UserName(), "domain.update", "domain", id.ToString(),
-                $"Domäne „{domain.DisplayName}“ ({domain.Key}) geändert: {Describe(domain)}" + (oldKey != domain.Key ? $" – Kurzname vorher {oldKey}" : ""),
+                L.PF("Domäne „{0}“ ({1}) geändert: {2}", domain.DisplayName, domain.Key, Describe(domain)) + (oldKey != domain.Key ? L.PF(" – Kurzname vorher {0}", oldKey) : ""),
                 new { domain = domain.Key, previousKey = oldKey == domain.Key ? null : oldKey });
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
@@ -129,7 +130,7 @@ public static class DomainEndpoints
             var domain = await db.Domains.FirstOrDefaultAsync(d => d.Id == id, ct);
             if (domain is null) return Results.NotFound();
             if (await DeletionBlockerAsync(domain, db, ct) is { } reason)
-                return Results.Problem(title: "Die Domäne kann nicht gelöscht werden", detail: reason, statusCode: 409);
+                return Results.Problem(title: L.T("Die Domäne kann nicht gelöscht werden"), detail: reason, statusCode: 409);
             await using var tx = await db.Database.BeginTransactionAsync(ct);
             await db.ConfigVersions.Where(v => v.DomainId == id).ExecuteDeleteAsync(ct);
             await db.ConfigSections.Where(s => s.DomainId == id).ExecuteDeleteAsync(ct);
@@ -138,7 +139,7 @@ public static class DomainEndpoints
             foreach (var f in await db.FreezePeriods.Where(f => f.DomainIds.Contains(id)).ToListAsync(ct))
                 f.DomainIds = f.DomainIds.Where(x => x != id).ToArray();
             db.Domains.Remove(domain);
-            log.Add(ctx.User.UserName(), "domain.delete", "domain", id.ToString(), $"Domäne „{domain.DisplayName}“ ({domain.Key}) gelöscht", new { domain = domain.Key });
+            log.Add(ctx.User.UserName(), "domain.delete", "domain", id.ToString(), L.PF("Domäne „{0}“ ({1}) gelöscht", domain.DisplayName, domain.Key), new { domain = domain.Key });
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
             await registry.ReloadAsync(db, ct);
@@ -150,27 +151,27 @@ public static class DomainEndpoints
             var dns = r.DnsName?.Trim() ?? "";
             var dc = r.PreferredDc?.Trim() ?? "";
             var errors = new Dictionary<string, string[]>();
-            if (dns.Length > 0 && !DomainRules.IsHostName(dns)) errors["dnsName"] = ["Ungültiger DNS-Name."];
-            if (dc.Length > 0 && !DomainRules.IsHostName(dc)) errors["preferredDc"] = ["Ungültiger Hostname."];
-            if (dns.Length == 0 && dc.Length == 0) errors["dnsName"] = ["DNS-Name oder Domänencontroller angeben."];
+            if (dns.Length > 0 && !DomainRules.IsHostName(dns)) errors["dnsName"] = [L.T("Ungültiger DNS-Name.")];
+            if (dc.Length > 0 && !DomainRules.IsHostName(dc)) errors["preferredDc"] = [L.T("Ungültiger Hostname.")];
+            if (dns.Length == 0 && dc.Length == 0) errors["dnsName"] = [L.T("DNS-Name oder Domänencontroller angeben.")];
             if (errors.Count > 0) return Results.ValidationProblem(errors);
             var reader = directories.Probe(new DirectoryTarget(dns, dc));
             if (!reader.Available)
                 return Results.Ok(new DomainCheckDto(false, OperatingSystem.IsWindows()
-                    ? $"Die Domäne ist über {(dc.Length > 0 ? dc : dns)} nicht erreichbar oder das Dienstkonto hat keinen Lesezugriff."
-                    : "Die Prüfung ist nur möglich, wenn der Dienst auf einem Windows-Server in einer Domäne läuft.", reader.Source, null));
+                    ? L.F("Die Domäne ist über {0} nicht erreichbar oder das Dienstkonto hat keinen Lesezugriff.", (dc.Length > 0 ? dc : dns))
+                    : L.T("Die Prüfung ist nur möglich, wenn der Dienst auf einem Windows-Server in einer Domäne läuft."), reader.Source, null));
             try
             {
                 var info = await Task.Run(reader.DomainInfo, ct);
                 var mismatch = dns.Length > 0 && !string.Equals(info.DnsName, dns, StringComparison.OrdinalIgnoreCase)
-                    ? $" Achtung: Der Domänencontroller gehört zu {info.DnsName}, nicht zu {dns}." : "";
+                    ? L.F(" Achtung: Der Domänencontroller gehört zu {0}, nicht zu {1}.", info.DnsName, dns) : "";
                 return Results.Ok(new DomainCheckDto(mismatch.Length == 0,
-                    $"Verbindung hergestellt: {info.DnsName} ({info.NetBiosName}), Gesamtstruktur {info.ForestName}, {info.DomainControllers.Count} Domänencontroller.{mismatch}",
+                    L.F("Verbindung hergestellt: {0} ({1}), Gesamtstruktur {2}, {3} Domänencontroller.{4}", info.DnsName, info.NetBiosName, info.ForestName, info.DomainControllers.Count, mismatch),
                     reader.Source, info));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                return Results.Ok(new DomainCheckDto(false, $"Verbindung fehlgeschlagen: {ex.Message}", reader.Source, null));
+                return Results.Ok(new DomainCheckDto(false, L.F("Verbindung fehlgeschlagen: {0}", ex.Message), reader.Source, null));
             }
         });
     }
@@ -189,35 +190,35 @@ public static class DomainEndpoints
     {
         var errors = new Dictionary<string, string[]>();
         if (DomainRules.KeyError(r.Key) is { } keyError) errors["key"] = [keyError];
-        else if (await db.Domains.AnyAsync(d => d.Key == r.Key && d.Id != (id ?? 0), ct)) errors["key"] = ["Dieser Kurzname wird bereits verwendet."];
-        if (string.IsNullOrWhiteSpace(r.DisplayName) || r.DisplayName.Length > 100) errors["displayName"] = ["Bitte einen Anzeigenamen (max. 100 Zeichen) angeben."];
-        else if (await db.Domains.AnyAsync(d => d.DisplayName == r.DisplayName && d.Id != (id ?? 0), ct)) errors["displayName"] = ["Dieser Anzeigename wird bereits verwendet."];
+        else if (await db.Domains.AnyAsync(d => d.Key == r.Key && d.Id != (id ?? 0), ct)) errors["key"] = [L.T("Dieser Kurzname wird bereits verwendet.")];
+        if (string.IsNullOrWhiteSpace(r.DisplayName) || r.DisplayName.Length > 100) errors["displayName"] = [L.T("Bitte einen Anzeigenamen (max. 100 Zeichen) angeben.")];
+        else if (await db.Domains.AnyAsync(d => d.DisplayName == r.DisplayName && d.Id != (id ?? 0), ct)) errors["displayName"] = [L.T("Dieser Anzeigename wird bereits verwendet.")];
         if (!string.IsNullOrEmpty(r.DnsName) && (!DomainRules.IsHostName(r.DnsName) || !r.DnsName.Contains('.')))
-            errors["dnsName"] = ["Vollständigen DNS-Namen angeben, z. B. contoso.com."];
+            errors["dnsName"] = [L.T("Vollständigen DNS-Namen angeben, z. B. contoso.com.")];
         // Optional (the first domain may have none, as the former setting); runs then name their DC themselves.
         if (!string.IsNullOrWhiteSpace(r.PreferredDc) && RunValidation.ValidateMonitor(new RunRequest(r.PreferredDc, null, false, false, false, false, null)).ContainsKey("preferredDc"))
-            errors["preferredDc"] = ["Ungültiger Hostname."];
+            errors["preferredDc"] = [L.T("Ungültiger Hostname.")];
         if (RunValidation.Validate(new RunRequest("dc", DeployScope.FullDeployment, false, false, false, false, r.AdmlLanguage)).ContainsKey("admlLanguage"))
-            errors["admlLanguage"] = ["Sprache im Format xx-XX angeben (z. B. en-US)."];
-        if (r.Notes is { Length: > 1000 }) errors["notes"] = ["Höchstens 1000 Zeichen."];
+            errors["admlLanguage"] = [L.T("Sprache im Format xx-XX angeben (z. B. en-US).")];
+        if (r.Notes is { Length: > 1000 }) errors["notes"] = [L.T("Höchstens 1000 Zeichen.")];
         return errors;
     }
 
     private static string Describe(Domain d) =>
-        $"DNS {(d.DnsName.Length == 0 ? "–" : d.DnsName)}, DC {d.PreferredDc}, ADML {d.AdmlLanguage}{(d.Enabled ? "" : ", deaktiviert")}{(d.IsDefault ? ", Standard" : "")}";
+        $"DNS {(d.DnsName.Length == 0 ? "–" : d.DnsName)}, DC {d.PreferredDc}, ADML {d.AdmlLanguage}{(d.Enabled ? "" : L.P(", deaktiviert"))}{(d.IsDefault ? L.P(", Standard") : "")}";
 
     /// <summary>Why a domain cannot be deleted (German), or null.</summary>
     public static async Task<string?> DeletionBlockerAsync(Domain domain, AppDbContext db, CancellationToken ct)
     {
         var id = domain.Id;
-        if (domain.IsDefault) return "Die Standard-Domäne kann nicht gelöscht werden.";
-        if (id == 1) return "Die erste Domäne enthält die Daten aus der Zeit vor mehreren Domänen und kann nur deaktiviert werden.";
-        if (await db.Runs.AnyAsync(r => r.DomainId == id, ct)) return "Für die Domäne gibt es Läufe. Sie kann nur deaktiviert werden, damit die Historie erhalten bleibt.";
-        if (await db.Schedules.AnyAsync(s => s.DomainId == id, ct)) return "Für die Domäne gibt es Zeitpläne. Bitte zuerst löschen oder die Domäne deaktivieren.";
+        if (domain.IsDefault) return L.T("Die Standard-Domäne kann nicht gelöscht werden.");
+        if (id == 1) return L.T("Die erste Domäne enthält die Daten aus der Zeit vor mehreren Domänen und kann nur deaktiviert werden.");
+        if (await db.Runs.AnyAsync(r => r.DomainId == id, ct)) return L.T("Für die Domäne gibt es Läufe. Sie kann nur deaktiviert werden, damit die Historie erhalten bleibt.");
+        if (await db.Schedules.AnyAsync(s => s.DomainId == id, ct)) return L.T("Für die Domäne gibt es Zeitpläne. Bitte zuerst löschen oder die Domäne deaktivieren.");
         if (await db.JitGroups.AnyAsync(g => g.DomainId == id, ct) || await db.JitRequests.AnyAsync(r => r.DomainId == id, ct))
-            return "Für die Domäne gibt es JIT-Gruppen oder -Anträge. Sie kann nur deaktiviert werden.";
+            return L.T("Für die Domäne gibt es JIT-Gruppen oder -Anträge. Sie kann nur deaktiviert werden.");
         if (await db.ConfigVersions.AnyAsync(v => v.DomainId == id && v.CreatedBy != "system", ct))
-            return "Die Konfiguration der Domäne wurde bereits bearbeitet. Sie kann nur deaktiviert werden.";
+            return L.T("Die Konfiguration der Domäne wurde bereits bearbeitet. Sie kann nur deaktiviert werden.");
         return null;
     }
 }

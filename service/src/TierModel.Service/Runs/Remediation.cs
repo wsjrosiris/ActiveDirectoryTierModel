@@ -1,4 +1,5 @@
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Runs;
 
@@ -34,8 +35,8 @@ public static class Remediation
     public static string AreaLabel(string area) => area switch
     {
         "ous" => "OUs",
-        "groups" => "Gruppen",
-        "users" => "Benutzer",
+        "groups" => L.T("Gruppen"),
+        "users" => L.TC("section", "Benutzer"),
         "acls" => "OU-ACLs",
         "gpos" => "GPOs",
         "admx" => "ADMX",

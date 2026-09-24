@@ -1,12 +1,13 @@
 import * as React from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronsLeft,
   Command,
   Hourglass,
   KeyRound,
   KeySquare,
+  Languages,
   Laptop,
   Loader2,
   LogOut,
@@ -43,7 +44,10 @@ import { useDomains } from '@/features/domains/domain-context'
 import { DomainSwitcher } from '@/features/domains/domain-switcher'
 import { adminNav, mainNav, type NavItem } from './nav'
 import { CommandPalette, GlobalSearch } from './command-menu'
-import { t } from '@/i18n'
+import { t, type LanguagePreference } from '@/i18n'
+import { applyPreference, preferenceOf } from '@/i18n/language'
+import { toast } from 'sonner'
+import { errorMessage } from '@/lib/query'
 
 export function useDashboardQuery() {
   return useQuery({ queryKey: ['dashboard'], queryFn: api.dashboard, refetchInterval: 15_000, meta: { silent: true } })
@@ -249,6 +253,17 @@ function Topbar({
   const logout = useLogout()
   const navigate = useNavigate()
   const { theme, setTheme, resolved, toggle } = useTheme()
+  const qc = useQueryClient()
+  const languagePref = preferenceOf(user.language)
+  async function changeLanguage(pref: LanguagePreference) {
+    try {
+      await api.auth.setLanguage(pref === 'auto' ? null : pref)
+    } catch (e) {
+      toast.error(t('layout.appLayout.languageNotSaved'), { description: errorMessage(e) })
+      return
+    }
+    if (!applyPreference(pref)) void qc.invalidateQueries({ queryKey: ['auth', 'me'] })
+  }
   const { data } = useDashboardQuery()
   const running = data?.queue.running ?? 0
   const queued = data?.queue.queued ?? 0
@@ -339,6 +354,13 @@ function Topbar({
               <DropdownMenuRadioItem value="light"><Sun /> {t('layout.appLayout.light')}</DropdownMenuRadioItem>
               <DropdownMenuRadioItem value="dark"><Moon /> {t('layout.appLayout.dark')}</DropdownMenuRadioItem>
               <DropdownMenuRadioItem value="system"><Laptop /> {t('layout.appLayout.system')}</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>{t('layout.appLayout.language')}</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={languagePref} onValueChange={(v) => void changeLanguage(v as LanguagePreference)}>
+              <DropdownMenuRadioItem value="de" lang="de"><Languages /> Deutsch</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="en" lang="en"><Languages /> English</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="auto"><Laptop /> {t('layout.appLayout.browserDefault')}</DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => navigate('/passwort-aendern')}>

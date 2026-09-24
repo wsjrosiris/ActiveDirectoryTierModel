@@ -4,6 +4,7 @@ using TierModel.Service;
 using TierModel.Service.Auth;
 using TierModel.Service.Config;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 using TierModel.Service.AdView;
 using TierModel.Service.Endpoints;
 using TierModel.Service.Monitoring;
@@ -117,12 +118,15 @@ await using (var scope = app.Services.CreateAsyncScope())
     // Change-log entries from before the hash chain get their hashes once (roadmap 23).
     if (await ChangeLogChain.BackfillAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>()) is > 0 and var chained)
         app.Logger.LogInformation("Änderungsprotokoll: {Count} ältere Einträge in die Hash-Kette aufgenommen", chained);
+    await scope.ServiceProvider.GetRequiredService<SettingsService>().LoadDefaultLanguageAsync();
     await scope.ServiceProvider.GetRequiredService<ConfigService>().SeedAsync();
     if (!await scope.ServiceProvider.GetRequiredService<AppDbContext>().Users.AnyAsync())
         app.Logger.LogWarning("Es existiert noch kein Benutzer. Anlegen mit: TierModel.Service.exe admin create --username <name>");
 }
 
 app.UseExceptionHandler();
+// Request language for server texts (roadmap 25), see Localization/LocalizationSetup.cs.
+app.UseTierModelLocalization();
 if (options.RequireHttps)
 {
     app.UseHsts();
@@ -158,7 +162,7 @@ app.MapApiTokenEndpoints();
 app.MapChangeLogChainEndpoints();
 TierModel.Service.Jit.JitEndpoints.MapJitEndpoints(app);
 TierModel.Service.Transfer.TransferEndpoints.MapTransferEndpoints(app);
-app.Map("/api/{**rest}", () => Results.Problem(title: "Nicht gefunden", statusCode: 404));
+app.Map("/api/{**rest}", () => Results.Problem(title: L.T("Nicht gefunden"), statusCode: 404));
 app.MapFallbackToFile("index.html", new StaticFileOptions { OnPrepareResponse = CacheHeaders });
 
 app.Run();

@@ -90,7 +90,7 @@ function TierTile({ tier, data }: { tier: TierCompliance; data: Compliance }) {
         <div className={cn('h-full rounded-full', b.bar)} style={{ width: `${tier.score}%` }} />
       </div>
       <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span>{tier.deductions.length === 0 ? t('dashboard.complianceTiles.noDeductions') : t('dashboard.complianceTiles.reducePointsDeducted', { reduce: tier.deductions.reduce((s, d) => s + d.points, 0) })}</span>
+        <span>{tier.deductions.length === 0 ? t('dashboard.complianceTiles.noDeductions') : t('dashboard.complianceTiles.reducePointsDeducted', { reduce: tier.deductions.reduce((s, d) => s + d.points, 0), count: tier.deductions.reduce((s, d) => s + d.points, 0) })}</span>
         <Breakdown tier={tier} data={data} />
       </div>
     </Card>
@@ -117,7 +117,7 @@ function Breakdown({ tier, data }: { tier: TierCompliance; data: Compliance }) {
               <li key={i} className="flex items-start justify-between gap-3 px-4 py-2 text-[13px]">
                 <span className="min-w-0">
                   <span className="block">{d.label}</span>
-                  <span className="text-xs text-muted-foreground">{categoryLabels[d.category] ?? d.category} {t('dashboard.complianceTiles.each')} {d.pointsEach} {t('dashboard.complianceTiles.points')}</span>
+                  <span className="text-xs text-muted-foreground">{categoryLabels[d.category] ?? d.category} {t('dashboard.complianceTiles.each')} {d.pointsEach} {t('dashboard.complianceTiles.points', { count: d.pointsEach })}</span>
                 </span>
                 <span className="shrink-0 font-medium tabular text-rose-700 dark:text-rose-400">−{d.points}</span>
               </li>

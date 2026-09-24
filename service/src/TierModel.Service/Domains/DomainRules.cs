@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Domains;
 
@@ -20,9 +21,9 @@ public static partial class DomainRules
 
     public static string? KeyError(string? key)
     {
-        if (string.IsNullOrWhiteSpace(key)) return "Bitte einen Kurznamen angeben.";
-        if (!KeyPattern().IsMatch(key)) return "Nur Kleinbuchstaben, Ziffern und Bindestriche (höchstens 32 Zeichen), z. B. contoso oder fabrikam-test.";
-        if (ReservedKeys.Contains(key)) return $"„{key}“ ist reserviert.";
+        if (string.IsNullOrWhiteSpace(key)) return L.T("Bitte einen Kurznamen angeben.");
+        if (!KeyPattern().IsMatch(key)) return L.T("Nur Kleinbuchstaben, Ziffern und Bindestriche (höchstens 32 Zeichen), z. B. contoso oder fabrikam-test.");
+        if (ReservedKeys.Contains(key)) return L.F("„{0}“ ist reserviert.", key);
         return null;
     }
 

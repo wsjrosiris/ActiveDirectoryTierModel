@@ -16,6 +16,7 @@ import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { DriftBadge, RunKindLabel, RunStatusBadge } from '@/components/shared/badges'
 import { includeLabels, scopeLabels } from '@/lib/labels'
 import { formatDateTime, formatDuration, formatNumber, formatRelative } from '@/lib/utils'
+import { t } from '@/i18n'
 
 export function RunsTable({
   kind,
@@ -54,36 +55,36 @@ export function RunsTable({
       {q.isLoading ? (
         <div className="grid gap-2 p-5">{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-10" />)}</div>
       ) : items.length === 0 ? (
-        <EmptyState icon={<Activity />} title="Keine Läufe" description={kind || status ? 'Für diese Filter gibt es keine Läufe.' : 'Es wurden noch keine Deploys, Audits oder Überwachungen gestartet.'} action={emptyAction} />
+        <EmptyState icon={<Activity />} title={t('runs.runsTable.noRuns')} description={kind || status ? t('runs.runsTable.thereAreNoRunsFor') : t('runs.runsTable.noDeploymentsAuditsOrMonitoring')} action={emptyAction} />
       ) : (
         <Table>
           <THead>
             <TR>
               <TH className="w-16">#</TH>
-              {!hideKind && <TH>Art</TH>}
-              <TH>Status</TH>
-              <TH className="hidden xl:table-cell">Bereich</TH>
-              {kind !== 'Deploy' && <TH>Drift</TH>}
-              <TH className="hidden 2xl:table-cell">DC</TH>
-              <TH className="hidden md:table-cell">Angefordert</TH>
-              <TH className="text-right">Dauer</TH>
+              {!hideKind && <TH>{t('runs.runsTable.type')}</TH>}
+              <TH>{t('common.status')}</TH>
+              <TH className="hidden xl:table-cell">{t('runs.runsTable.scope')}</TH>
+              {kind !== 'Deploy' && <TH>{t('runs.runsTable.drift')}</TH>}
+              <TH className="hidden 2xl:table-cell">{t('runs.runsTable.dc')}</TH>
+              <TH className="hidden md:table-cell">{t('runs.runsTable.requested')}</TH>
+              <TH className="text-right">{t('runs.runsTable.duration')}</TH>
             </TR>
           </THead>
           <TBody className={q.isPlaceholderData ? 'opacity-60 transition-opacity' : undefined}>
             {items.map((r) => (
-              <TR key={r.id} className="cursor-pointer" onClick={() => navigate(`/laeufe/${r.id}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/laeufe/${r.id}`)} tabIndex={0} role="link" aria-label={`Lauf ${r.id} öffnen`}>
+              <TR key={r.id} className="cursor-pointer" onClick={() => navigate(`/laeufe/${r.id}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/laeufe/${r.id}`)} tabIndex={0} role="link" aria-label={t('runs.runsTable.openRunId', { id: r.id })}>
                 <TD className="font-mono text-xs text-muted-foreground">#{r.id}</TD>
                 {!hideKind && <TD><RunKindLabel run={r} /></TD>}
                 <TD><RunStatusBadge status={r.status} scheduledFor={r.scheduledFor} /></TD>
                 <TD className="hidden xl:table-cell">
-                  <span className="text-[13px]">{r.kind === 'Jit' ? (r.jitRequestId ? `JIT-Antrag #${r.jitRequestId}` : 'JIT-Voraussetzungen') : r.kind === 'Monitor' ? 'Privilegierte Gruppen' : r.scope ? scopeLabels[r.scope] : 'Nur Add-ons'}</span>
+                  <span className="text-[13px]">{r.kind === 'Jit' ? (r.jitRequestId ? t('runs.runsTable.jitRequestJitrequestid', { jitRequestId: r.jitRequestId }) : t('runs.runsTable.jitPrerequisites')) : r.kind === 'Monitor' ? t('runs.runsTable.privilegedGroups') : r.scope ? scopeLabels[r.scope] : t('runs.runsTable.addOnsOnly')}</span>
                   {r.includes.length > 0 && <span className="ml-1.5 text-xs text-muted-foreground">+ {r.includes.map((i) => includeLabels[i] ?? i).join(', ')}</span>}
                 </TD>
                 {kind !== 'Deploy' && <TD>{r.kind !== 'Deploy' && r.kind !== 'Jit' ? <DriftBadge count={r.driftCount} monitor={r.kind === 'Monitor'} /> : <span className="text-muted-foreground">–</span>}</TD>}
                 <TD className="hidden font-mono text-xs text-muted-foreground 2xl:table-cell">{r.preferredDc}</TD>
                 <TD className="hidden md:table-cell">
                   <div className="text-[13px]" title={formatDateTime(r.createdAt)}>{formatRelative(r.createdAt)}</div>
-                  <div className="text-xs text-muted-foreground">{r.trigger === 'Schedule' ? 'Zeitplan' : r.requestedBy}</div>
+                  <div className="text-xs text-muted-foreground">{r.trigger === 'Schedule' ? t('runs.runsTable.schedule') : r.requestedBy}</div>
                 </TD>
                 <TD className="text-right text-[13px] text-muted-foreground tabular">
                   {r.status === 'Scheduled' ? <CancelScheduled id={r.id} /> : formatDuration(r.startedAt, r.finishedAt, now)}
@@ -96,12 +97,12 @@ export function RunsTable({
       {total > 0 && (
         <div className="flex items-center justify-between gap-2 border-t bg-muted/20 px-5 py-2 text-xs text-muted-foreground">
           <span>
-            {formatNumber((page - 1) * pageSize + 1)}–{formatNumber(Math.min(page * pageSize, total))} von {formatNumber(total)}
+            {t('runs.runsTable.range', { from: formatNumber((page - 1) * pageSize + 1), to: formatNumber(Math.min(page * pageSize, total)), total: formatNumber(total) })}
           </span>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon-xs" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} aria-label="Vorherige Seite"><ChevronLeft /></Button>
-            <span className="px-1 tabular">Seite {page} / {pages}</span>
-            <Button variant="ghost" size="icon-xs" disabled={page >= pages} onClick={() => setPage((p) => p + 1)} aria-label="Nächste Seite"><ChevronRight /></Button>
+            <Button variant="ghost" size="icon-xs" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} aria-label={t('runs.runsTable.previousPage')}><ChevronLeft /></Button>
+            <span className="px-1 tabular">{t('runs.runsTable.page')} {page} / {pages}</span>
+            <Button variant="ghost" size="icon-xs" disabled={page >= pages} onClick={() => setPage((p) => p + 1)} aria-label={t('runs.runsTable.nextPage')}><ChevronRight /></Button>
           </div>
         </div>
       )}
@@ -117,22 +118,22 @@ function CancelScheduled({ id }: { id: number }) {
   const cancel = useMutation({
     mutationFn: () => api.runs.cancel(id),
     onSuccess: () => {
-      toast.success(`Geplanter Lauf #${id} abgebrochen`)
+      toast.success(t('runs.runsTable.scheduledRunIdCancelled', { id }))
       qc.invalidateQueries({ queryKey: ['runs'] })
     },
   })
   if (!canCancel) return <span>–</span>
   return (
-    <Tooltip content="Geplanten Lauf abbrechen">
+    <Tooltip content={t('runs.runsTable.cancelScheduledRun')}>
       <Button
         variant="ghost"
         size="icon-xs"
         className="text-destructive hover:text-destructive"
-        aria-label={`Geplanten Lauf #${id} abbrechen`}
+        aria-label={t('runs.runsTable.cancelScheduledRunId', { id })}
         loading={cancel.isPending}
         onClick={async (e) => {
           e.stopPropagation()
-          if (await confirm({ title: `Lauf #${id} abbrechen?`, description: 'Der Lauf wird nicht im Wartungsfenster gestartet.', confirmText: 'Lauf abbrechen', cancelText: 'Geplant lassen', destructive: true }))
+          if (await confirm({ title: t('runs.runsTable.cancelRunId', { id }), description: t('runs.runsTable.theRunWillNotBe'), confirmText: t('runs.runsTable.cancelRun'), cancelText: t('runs.runsTable.keepScheduled'), destructive: true }))
             cancel.mutate()
         }}
         onKeyDown={(e) => e.stopPropagation()}

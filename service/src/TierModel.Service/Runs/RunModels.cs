@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Runs;
 
@@ -59,7 +60,7 @@ public static partial class RunValidation
     private static void ValidateDc(string? dc, Dictionary<string, string[]> errors)
     {
         if (string.IsNullOrWhiteSpace(dc) || dc.Length > 253 || !HostName().IsMatch(dc))
-            errors["preferredDc"] = ["Bitte einen gültigen Domänencontroller-Namen angeben (z. B. dc01.contoso.com)."];
+            errors["preferredDc"] = [L.T("Bitte einen gültigen Domänencontroller-Namen angeben (z. B. dc01.contoso.com).")];
     }
 
     /// <summary>Returns field errors; empty when valid. Values end up as process arguments, so they are strictly checked.</summary>
@@ -69,14 +70,14 @@ public static partial class RunValidation
         ValidateDc(r.PreferredDc, errors);
         var anyInclude = r.IncludeMsa || r.IncludeGmsa || r.IncludeDmsa || r.IncludeWinLaps;
         if (r.Scope is { } scope && !Enum.IsDefined(scope))
-            errors["scope"] = ["Unbekannter Bereich."];
+            errors["scope"] = [L.T("Unbekannter Bereich.")];
         else if (r.Scope is null && !anyInclude)
-            errors["scope"] = ["Bereich wählen oder mindestens eine Erweiterung aktivieren."];
+            errors["scope"] = [L.T("Bereich wählen oder mindestens eine Erweiterung aktivieren.")];
         // Deploy-/Audit-TierModel.ps1 reject -Include* together with any scope except -FullDeployment.
         else if (anyInclude && r.Scope is not (null or DeployScope.FullDeployment))
-            errors["scope"] = ["Erweiterungen (MSA, gMSA, dMSA, Windows LAPS) sind nur mit „Vollständig“ oder ohne Bereich möglich."];
+            errors["scope"] = [L.T("Erweiterungen (MSA, gMSA, dMSA, Windows LAPS) sind nur mit „Vollständig“ oder ohne Bereich möglich.")];
         if (r.AdmlLanguage is { Length: > 0 } lang && !Language().IsMatch(lang))
-            errors["admlLanguage"] = ["Sprache im Format xx-XX angeben (z. B. en-US)."];
+            errors["admlLanguage"] = [L.T("Sprache im Format xx-XX angeben (z. B. en-US).")];
         return errors;
     }
 }

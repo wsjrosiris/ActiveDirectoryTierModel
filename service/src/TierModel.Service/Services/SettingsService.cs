@@ -11,13 +11,13 @@ public record SettingsDto(
     bool RequireApproval, int ApprovalTimeoutHours, string PublicBaseUrl,
     bool RequirePlanBeforeApply, int PlanMaxAgeHours,
     string FrameworkPath, string PwshPath,
-    int StaleDays = 90, int PasswordMaxAgeDays = 365);
+    int StaleDays = 90, int PasswordMaxAgeDays = 365, string DefaultLanguage = "de");
 
 public record UpdateSettingsRequest(
     string DefaultPreferredDc, string AdmlLanguage, int RunRetentionDays,
     bool? RequireApproval, int? ApprovalTimeoutHours, string? PublicBaseUrl,
     bool? RequirePlanBeforeApply = null, int? PlanMaxAgeHours = null,
-    int? StaleDays = null, int? PasswordMaxAgeDays = null);
+    int? StaleDays = null, int? PasswordMaxAgeDays = null, string? DefaultLanguage = null);
 
 public record GroupRef(string Name, string Sid);
 
@@ -43,6 +43,8 @@ public class SettingsService(AppDbContext db, IOptions<TierModelOptions> options
     private const string PlanMaxAgeKey = "planMaxAgeHours";
     private const string StaleDaysKey = "hygieneStaleDays";
     private const string PasswordMaxAgeKey = "hygienePasswordMaxAgeDays";
+    /// <summary>Instance default language (roadmap 25) for background and persisted texts; see <see cref="Localization.L"/>.</summary>
+    public const string DefaultLanguageKey = "defaultLanguage";
     private const string WindowsAuthKey = "windowsAuth";
     private const string SmtpKey = "smtp";
 
@@ -54,6 +56,8 @@ public class SettingsService(AppDbContext db, IOptions<TierModelOptions> options
         var o = options.Value;
         var stored = await db.Settings.AsNoTracking().ToDictionaryAsync(s => s.Key, s => s.Value, ct);
         var d = domain.Current;
+        var language = Localization.L.Normalize(stored.GetValueOrDefault(DefaultLanguageKey)) ?? Localization.L.German;
+        Localization.L.InstanceDefault = language;
         return new SettingsDto(
             d.PreferredDc,
             string.IsNullOrWhiteSpace(d.AdmlLanguage) ? o.AdmlLanguage : d.AdmlLanguage,
@@ -67,7 +71,8 @@ public class SettingsService(AppDbContext db, IOptions<TierModelOptions> options
             o.FrameworkPath,
             o.PwshPath,
             int.TryParse(stored.GetValueOrDefault(StaleDaysKey), out var stale) ? stale : 90,
-            int.TryParse(stored.GetValueOrDefault(PasswordMaxAgeKey), out var pwAge) ? pwAge : 365);
+            int.TryParse(stored.GetValueOrDefault(PasswordMaxAgeKey), out var pwAge) ? pwAge : 365,
+            language);
     }
 
     /// <summary>Stages the changes; the caller saves and reloads the domain registry.</summary>
@@ -87,7 +92,12 @@ public class SettingsService(AppDbContext db, IOptions<TierModelOptions> options
         if (r.PlanMaxAgeHours is { } planHours) await SetAsync(PlanMaxAgeKey, planHours.ToString(), ct);
         if (r.StaleDays is { } stale) await SetAsync(StaleDaysKey, stale.ToString(), ct);
         if (r.PasswordMaxAgeDays is { } pwAge) await SetAsync(PasswordMaxAgeKey, pwAge.ToString(), ct);
+        if (Localization.L.Normalize(r.DefaultLanguage) is { } language) { await SetAsync(DefaultLanguageKey, language, ct); Localization.L.InstanceDefault = language; }
     }
+
+    /// <summary>Loads the instance default language into <see cref="Localization.L"/> (start-up).</summary>
+    public async Task LoadDefaultLanguageAsync(CancellationToken ct = default) =>
+        Localization.L.InstanceDefault = Localization.L.Normalize(await GetValueAsync(DefaultLanguageKey, ct)) ?? Localization.L.German;
 
     public async Task<WindowsAuthConfig> GetWindowsAuthAsync(CancellationToken ct = default)
     {

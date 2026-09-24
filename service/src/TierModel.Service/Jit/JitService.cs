@@ -9,6 +9,7 @@ using TierModel.Service.Data;
 using TierModel.Service.Monitoring;
 using TierModel.Service.Notifications;
 using TierModel.Service.Runs;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Jit;
 
@@ -101,13 +102,13 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
     public Dictionary<string, string[]> ValidateGroup(JitGroupInput r)
     {
         var errors = new Dictionary<string, string[]>();
-        if (NormalizeIdentity(r.Group) is null) errors["group"] = ["Bitte eine Gruppe wählen (samAccountName oder SID)."];
-        if (!string.IsNullOrWhiteSpace(r.GroupSid) && !SidPattern().IsMatch(r.GroupSid.Trim())) errors["groupSid"] = ["Ungültige SID."];
-        if (r.DisplayName is { Length: > 128 }) errors["displayName"] = ["Anzeigename: höchstens 128 Zeichen."];
-        if (r.Tier is not (null or 0 or 1 or 2)) errors["tier"] = ["Tier 0, 1 oder 2."];
-        if (r.MaxMinutes is < MinMinutes or > MaxMinutesLimit) errors["maxMinutes"] = [$"Höchstdauer zwischen {MinMinutes} Minuten und {MaxMinutesLimit / 60} Stunden."];
-        if (r.MinimumRole is { } role && !Enum.IsDefined(role)) errors["minimumRole"] = ["Unbekannte Rolle."];
-        if ((r.EligibleUsers ?? []).Any(u => string.IsNullOrWhiteSpace(u) || u.Length > 256)) errors["eligibleUsers"] = ["Ungültiger Benutzername."];
+        if (NormalizeIdentity(r.Group) is null) errors["group"] = [L.T("Bitte eine Gruppe wählen (samAccountName oder SID).")];
+        if (!string.IsNullOrWhiteSpace(r.GroupSid) && !SidPattern().IsMatch(r.GroupSid.Trim())) errors["groupSid"] = [L.T("Ungültige SID.")];
+        if (r.DisplayName is { Length: > 128 }) errors["displayName"] = [L.T("Anzeigename: höchstens 128 Zeichen.")];
+        if (r.Tier is not (null or 0 or 1 or 2)) errors["tier"] = [L.T("Tier 0, 1 oder 2.")];
+        if (r.MaxMinutes is < MinMinutes or > MaxMinutesLimit) errors["maxMinutes"] = [L.F("Höchstdauer zwischen {0} Minuten und {1} Stunden.", MinMinutes, MaxMinutesLimit / 60)];
+        if (r.MinimumRole is { } role && !Enum.IsDefined(role)) errors["minimumRole"] = [L.T("Unbekannte Rolle.")];
+        if ((r.EligibleUsers ?? []).Any(u => string.IsNullOrWhiteSpace(u) || u.Length > 256)) errors["eligibleUsers"] = [L.T("Ungültiger Benutzername.")];
         return errors;
     }
 
@@ -189,7 +190,7 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
         bool? Bool(string key) => node?[key] is JsonValue v && v.TryGetValue<bool>(out var b) ? b : null;
         var messages = node?["messages"] is JsonArray a ? a.Select(x => x?.ToString() ?? "").Where(x => x.Length > 0).ToList() : [];
         if (run.Status != RunStatus.Succeeded || node is null)
-            return new("Error", run.Id, run.FinishedAt, run.PreferredDc, null, null, null, messages, run.Message ?? "Die Prüfung ist fehlgeschlagen.");
+            return new("Error", run.Id, run.FinishedAt, run.PreferredDc, null, null, null, messages, run.Message ?? L.T("Die Prüfung ist fehlgeschlagen."));
         var ready = Bool("ready") == true;
         return new(ready ? "Ready" : "NotReady", run.Id, run.FinishedAt, run.PreferredDc, Bool("pamEnabled"), node["forestMode"]?.ToString(),
             Bool("forestLevelSufficient"), messages, null);
@@ -203,30 +204,30 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
         var errors = new Dictionary<string, string[]>();
         var domainId = DomainId;
         var group = await db.JitGroups.AsNoTracking().FirstOrDefaultAsync(g => g.Id == r.GroupId && g.DomainId == domainId, ct);
-        if (group is null || !group.Enabled) errors["groupId"] = ["Bitte eine freigegebene JIT-Gruppe wählen."];
-        else if (!IsEligible(group, user.Username, role)) return (null, null, "Sie sind für diese Gruppe nicht berechtigt.");
+        if (group is null || !group.Enabled) errors["groupId"] = [L.T("Bitte eine freigegebene JIT-Gruppe wählen.")];
+        else if (!IsEligible(group, user.Username, role)) return (null, null, L.T("Sie sind für diese Gruppe nicht berechtigt."));
         if (group is not null && (r.Minutes < MinMinutes || r.Minutes > group.MaxMinutes))
-            errors["minutes"] = [$"Die Dauer muss zwischen {MinMinutes} und {group.MaxMinutes} Minuten liegen (Höchstdauer der Gruppe)."];
+            errors["minutes"] = [L.F("Die Dauer muss zwischen {0} und {1} Minuten liegen (Höchstdauer der Gruppe).", MinMinutes, group.MaxMinutes)];
         var justification = r.Justification?.Trim() ?? "";
-        if (justification.Length < 5) errors["justification"] = ["Bitte begründen Sie den Antrag (mindestens 5 Zeichen)."];
-        else if (justification.Length > 1000) errors["justification"] = ["Die Begründung darf höchstens 1000 Zeichen lang sein."];
+        if (justification.Length < 5) errors["justification"] = [L.T("Bitte begründen Sie den Antrag (mindestens 5 Zeichen).")];
+        else if (justification.Length > 1000) errors["justification"] = [L.T("Die Begründung darf höchstens 1000 Zeichen lang sein.")];
 
         var defaultMember = DefaultMemberAccount(user.Username, user.AuthType);
         var member = string.IsNullOrWhiteSpace(r.MemberAccount) ? defaultMember : r.MemberAccount;
         var normalized = NormalizeIdentity(member);
-        if (normalized is null) errors["memberAccount"] = ["Ungültiges AD-Konto (samAccountName oder SID)."];
+        if (normalized is null) errors["memberAccount"] = [L.T("Ungültiges AD-Konto (samAccountName oder SID).")];
         else if (role < Role.Admin && !SameUser(normalized, NormalizeIdentity(defaultMember)))
-            return (null, null, "Nur Administratoren dürfen Zugriff für ein anderes Konto beantragen.");
+            return (null, null, L.T("Nur Administratoren dürfen Zugriff für ein anderes Konto beantragen."));
         if (errors.Count > 0) return (null, errors, null);
 
         var prerequisite = await PrerequisiteAsync(ct);
         if (prerequisite.Status == "NotReady")
-            return (null, null, "Die Voraussetzungen für befristete Gruppenmitgliedschaften sind nicht erfüllt (Privileged Access Management Feature). Details auf der Seite „Befristeter Zugriff“.");
+            return (null, null, L.T("Die Voraussetzungen für befristete Gruppenmitgliedschaften sind nicht erfüllt (Privileged Access Management Feature). Details auf der Seite „Befristeter Zugriff“."));
         if (await DefaultDcAsync(ct) is not { Length: > 0 })
-            return (null, null, "Kein Domänencontroller bekannt: Bitte in den Einstellungen einen Standard-Domänencontroller hinterlegen oder die Voraussetzungen mit einem DC prüfen.");
+            return (null, null, L.T("Kein Domänencontroller bekannt: Bitte in den Einstellungen einen Standard-Domänencontroller hinterlegen oder die Voraussetzungen mit einem DC prüfen."));
         var duplicate = await db.JitRequests.AnyAsync(x => x.JitGroupId == group!.Id && x.MemberAccount == normalized
             && (x.Status == JitStatus.Pending || x.Status == JitStatus.Approved || x.Status == JitStatus.Active), ct);
-        if (duplicate) return (null, null, $"Für {normalized} gibt es bereits einen offenen oder aktiven Antrag für diese Gruppe.");
+        if (duplicate) return (null, null, L.F("Für {0} gibt es bereits einen offenen oder aktiven Antrag für diese Gruppe.", normalized));
 
         var s = await settings.GetAsync(ct);
         var now = DateTimeOffset.UtcNow;
@@ -250,13 +251,13 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
         db.JitRequests.Add(request);
         await db.SaveChangesAsync(ct);
         changeLog.Add(user.Username, "jit.request", EntityType, request.Id.ToString(),
-            $"Befristeter Zugriff #{request.Id} beantragt: {request.MemberAccount} in {request.GroupDisplayName} für {FormatMinutes(request.Minutes)} – {request.Justification}");
+            L.PF("Befristeter Zugriff #{0} beantragt: {1} in {2} für {3} – {4}", request.Id, request.MemberAccount, request.GroupDisplayName, FormatMinutes(request.Minutes, persisted: true), request.Justification));
         if (!group.RequiresApproval)
         {
             request.Status = JitStatus.Approved;
             request.DecidedAt = now;
             changeLog.Add("system", "jit.approve", EntityType, request.Id.ToString(),
-                $"Befristeter Zugriff #{request.Id} ohne Freigabe genehmigt (Gruppe {request.GroupDisplayName} verlangt keine Freigabe)");
+                L.PF("Befristeter Zugriff #{0} ohne Freigabe genehmigt (Gruppe {1} verlangt keine Freigabe)", request.Id, request.GroupDisplayName));
             await db.SaveChangesAsync(ct);
             await StartRunAsync(request, JitAction.Grant, user.Username, ct);
         }
@@ -290,7 +291,7 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
         if (updated == 0) return (JitOutcome.Conflict, request);
         await db.Entry(request).ReloadAsync(ct);
         changeLog.Add(user, approve ? "jit.approve" : "jit.reject", EntityType, id.ToString(),
-            $"Befristeter Zugriff #{id} von {request.RequestedBy} ({request.MemberAccount} in {request.GroupDisplayName}) {(approve ? "freigegeben" : "abgelehnt")}"
+            L.PF("Befristeter Zugriff #{0} von {1} ({2} in {3}) {4}", id, request.RequestedBy, request.MemberAccount, request.GroupDisplayName, (approve ? L.P("freigegeben") : L.P("abgelehnt")))
             + (trimmed is null ? "" : $": {trimmed}"));
         await db.SaveChangesAsync(ct);
         if (approve) await StartRunAsync(request, JitAction.Grant, user, ct);
@@ -305,10 +306,10 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
         if (!SameUser(request.RequestedBy, user)) return (JitOutcome.Forbidden, request);
         var n = await db.JitRequests.Where(r => r.Id == id && r.Status == JitStatus.Pending).ExecuteUpdateAsync(u => u
             .SetProperty(r => r.Status, JitStatus.Cancelled)
-            .SetProperty(r => r.Message, "Vom Antragsteller zurückgezogen"), ct);
+            .SetProperty(r => r.Message, L.P("Vom Antragsteller zurückgezogen")), ct);
         if (n == 0) return (JitOutcome.Conflict, request);
         await db.Entry(request).ReloadAsync(ct);
-        changeLog.Add(user, "jit.withdraw", EntityType, id.ToString(), $"Antrag auf befristeten Zugriff #{id} zurückgezogen");
+        changeLog.Add(user, "jit.withdraw", EntityType, id.ToString(), L.PF("Antrag auf befristeten Zugriff #{0} zurückgezogen", id));
         await db.SaveChangesAsync(ct);
         return (JitOutcome.Done, request);
     }
@@ -322,7 +323,7 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
         if (!SameUser(request.RequestedBy, user) && role < Role.Operator) return (JitOutcome.Forbidden, request);
         if (request.Status != JitStatus.Active || request.RevokeRunId is not null) return (JitOutcome.Conflict, request);
         changeLog.Add(user, "jit.revoke-request", EntityType, id.ToString(),
-            $"Vorzeitiger Entzug von befristetem Zugriff #{id} angefordert: {request.MemberAccount} aus {request.GroupDisplayName}");
+            L.PF("Vorzeitiger Entzug von befristetem Zugriff #{0} angefordert: {1} aus {2}", id, request.MemberAccount, request.GroupDisplayName));
         await StartRunAsync(request, JitAction.Revoke, user, ct);
         return (JitOutcome.Done, request);
     }
@@ -336,7 +337,7 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
         var run = NewRun(dc!, user, JitAction.Check, null);
         db.Runs.Add(run);
         await db.SaveChangesAsync(ct);
-        changeLog.Add(user, "jit.check", EntityType, null, $"Voraussetzungen für befristeten Zugriff werden geprüft (Lauf #{run.Id} über {dc})");
+        changeLog.Add(user, "jit.check", EntityType, null, L.PF("Voraussetzungen für befristeten Zugriff werden geprüft (Lauf #{0} über {1})", run.Id, dc));
         await db.SaveChangesAsync(ct);
         queue.Notify();
         return (run, null);
@@ -372,7 +373,7 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
         }
         else request.RevokeRunId = run.Id;
         changeLog.Add(user, "run.jit", "run", run.Id.ToString(),
-            $"{RunService.RunTitle(run)} #{run.Id} gestartet: {request.MemberAccount} {(action == JitAction.Grant ? "in" : "aus")} {request.GroupDisplayName} über {dc}");
+            L.PF("{0} #{1} gestartet: {2} {3} {4} über {5}", RunService.RunTitle(run, persisted: true), run.Id, request.MemberAccount, (action == JitAction.Grant ? L.P("in") : L.P("aus")), request.GroupDisplayName, dc));
         await db.SaveChangesAsync(ct);
         queue.Notify();
     }
@@ -404,7 +405,7 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
                 request.Dc = result.Dc ?? request.Dc;
                 request.Message = null;
                 changeLog.Add("system", "jit.grant", EntityType, request.Id.ToString(),
-                    $"Befristeter Zugriff #{request.Id} aktiv: {request.MemberAccount} ist bis {Format(request.ExpiresAt.Value)} Mitglied von {request.GroupDisplayName} (Lauf #{run.Id})",
+                    L.PF("Befristeter Zugriff #{0} aktiv: {1} ist bis {2} Mitglied von {3} (Lauf #{4})", request.Id, request.MemberAccount, Format(request.ExpiresAt.Value), request.GroupDisplayName, run.Id),
                     new { runId = run.Id, groupSid = request.GroupSid, memberSid = request.MemberSid, expiresAt = request.ExpiresAt });
                 // Remember the SID of the group for the monitoring match.
                 if (request.JitGroupId is { } gid && request.GroupSid is { } sid)
@@ -415,9 +416,9 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
             else
             {
                 request.Status = JitStatus.Failed;
-                request.Message = result?.Error ?? run.Message ?? "Der Lauf ist fehlgeschlagen.";
+                request.Message = result?.Error ?? run.Message ?? L.P("Der Lauf ist fehlgeschlagen.");
                 changeLog.Add("system", "jit.grant-failed", EntityType, request.Id.ToString(),
-                    $"Befristeter Zugriff #{request.Id} konnte nicht erteilt werden (Lauf #{run.Id}): {request.Message}");
+                    L.PF("Befristeter Zugriff #{0} konnte nicht erteilt werden (Lauf #{1}): {2}", request.Id, run.Id, request.Message));
                 await db.SaveChangesAsync(ct);
             }
             return;
@@ -430,16 +431,16 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
             request.Status = JitStatus.Revoked;
             request.RevokedAt = run.FinishedAt ?? DateTimeOffset.UtcNow;
             request.RevokedBy = run.RequestedBy;
-            request.Message = result!.Removed == false ? "Die Mitgliedschaft bestand beim Entzug nicht mehr (bereits abgelaufen)." : null;
+            request.Message = result!.Removed == false ? L.P("Die Mitgliedschaft bestand beim Entzug nicht mehr (bereits abgelaufen).") : null;
             changeLog.Add(run.RequestedBy, "jit.revoke", EntityType, request.Id.ToString(),
-                $"Befristeter Zugriff #{request.Id} vorzeitig entzogen: {request.MemberAccount} aus {request.GroupDisplayName} (Lauf #{run.Id})");
+                L.PF("Befristeter Zugriff #{0} vorzeitig entzogen: {1} aus {2} (Lauf #{3})", request.Id, request.MemberAccount, request.GroupDisplayName, run.Id));
         }
         else if (!ok)
         {
             request.RevokeRunId = null;
-            request.Message = "Entzug fehlgeschlagen: " + (result?.Error ?? run.Message ?? "unbekannter Fehler");
+            request.Message = L.P("Entzug fehlgeschlagen: ") + (result?.Error ?? run.Message ?? L.P("unbekannter Fehler"));
             changeLog.Add("system", "jit.revoke-failed", EntityType, request.Id.ToString(),
-                $"Vorzeitiger Entzug von befristetem Zugriff #{request.Id} fehlgeschlagen (Lauf #{run.Id}): {request.Message}");
+                L.PF("Vorzeitiger Entzug von befristetem Zugriff #{0} fehlgeschlagen (Lauf #{1}): {2}", request.Id, run.Id, request.Message));
         }
         await db.SaveChangesAsync(ct);
     }
@@ -458,7 +459,7 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
         {
             r.Status = JitStatus.Expired;
             changeLog.Add("system", "jit.expire", EntityType, r.Id.ToString(),
-                $"Befristeter Zugriff #{r.Id} abgelaufen: {r.MemberAccount} ist seit {Format(r.ExpiresAt!.Value)} nicht mehr Mitglied von {r.GroupDisplayName}",
+                L.PF("Befristeter Zugriff #{0} abgelaufen: {1} ist seit {2} nicht mehr Mitglied von {3}", r.Id, r.MemberAccount, Format(r.ExpiresAt!.Value), r.GroupDisplayName),
                 domainId: r.DomainId);
             changed++;
         }
@@ -466,8 +467,8 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
         foreach (var r in overdue)
         {
             r.Status = JitStatus.Rejected;
-            r.Message = "Freigabe abgelaufen – niemand hat rechtzeitig entschieden.";
-            changeLog.Add("system", "jit.approval-expired", EntityType, r.Id.ToString(), $"Freigabe für befristeten Zugriff #{r.Id} von {r.RequestedBy} abgelaufen",
+            r.Message = L.P("Freigabe abgelaufen – niemand hat rechtzeitig entschieden.");
+            changeLog.Add("system", "jit.approval-expired", EntityType, r.Id.ToString(), L.PF("Freigabe für befristeten Zugriff #{0} von {1} abgelaufen", r.Id, r.RequestedBy),
                 domainId: r.DomainId);
             changed++;
         }
@@ -480,8 +481,8 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
         foreach (var x in stuck)
         {
             x.Request.Status = JitStatus.Failed;
-            x.Request.Message = x.Message ?? "Der Lauf wurde nicht ausgeführt.";
-            changeLog.Add("system", "jit.grant-failed", EntityType, x.Request.Id.ToString(), $"Befristeter Zugriff #{x.Request.Id} nicht erteilt: {x.Request.Message}",
+            x.Request.Message = x.Message ?? L.P("Der Lauf wurde nicht ausgeführt.");
+            changeLog.Add("system", "jit.grant-failed", EntityType, x.Request.Id.ToString(), L.PF("Befristeter Zugriff #{0} nicht erteilt: {1}", x.Request.Id, x.Request.Message),
                 domainId: x.Request.DomainId);
             changed++;
         }
@@ -492,7 +493,7 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
         foreach (var x in stuckRevoke)
         {
             x.Request.RevokeRunId = null;
-            x.Request.Message = "Entzug fehlgeschlagen: " + (x.Message ?? "Der Lauf wurde nicht ausgeführt.");
+            x.Request.Message = L.P("Entzug fehlgeschlagen: ") + (x.Message ?? L.P("Der Lauf wurde nicht ausgeführt."));
             changed++;
         }
         if (changed > 0) await db.SaveChangesAsync(ct);
@@ -534,9 +535,9 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
                 var sam = g["samaccountname"]?.ToString();
                 if (string.IsNullOrWhiteSpace(sam)) continue;
                 var name = g["name"]?.ToString() ?? sam;
-                list.Add(new(sam, name, null, TierRules.TierOf(name) ?? TierRules.TierOf(sam) ?? TierRules.TierOf(g["path"]?.ToString()), "Konfiguration"));
+                list.Add(new(sam, name, null, TierRules.TierOf(name) ?? TierRules.TierOf(sam) ?? TierRules.TierOf(g["path"]?.ToString()), L.T("Konfiguration")));
             }
-        list.AddRange(BuiltinGroups.Select(b => new GroupCandidate(b, b, null, 0, "Integriert")));
+        list.AddRange(BuiltinGroups.Select(b => new GroupCandidate(b, b, null, 0, L.T("Integriert"))));
         foreach (var g in directory.For(domain.Current).Reader.SearchGroups(q, 25))
             list.Add(new(g.SamAccountName, g.Name, g.Sid, TierRules.TierOf(g.Name) ?? TierRules.TierOf(g.DistinguishedName), "Active Directory"));
         return list.Where(c => q.Length == 0 || c.Group.Contains(q, StringComparison.OrdinalIgnoreCase) || c.DisplayName.Contains(q, StringComparison.OrdinalIgnoreCase))
@@ -550,11 +551,11 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
         var q = query?.Trim() ?? "";
         var list = new List<AccountCandidate>();
         foreach (var u in await db.Users.AsNoTracking().Where(u => u.IsActive).Select(u => new { u.Username, u.DisplayName, u.AuthType }).ToListAsync(ct))
-            list.Add(new(DefaultMemberAccount(u.Username, u.AuthType), u.DisplayName, u.AuthType == AuthType.Local ? "Dienst-Benutzer" : "Anmeldung " + u.AuthType));
+            list.Add(new(DefaultMemberAccount(u.Username, u.AuthType), u.DisplayName, u.AuthType == AuthType.Local ? L.T("Dienst-Benutzer") : L.T("Anmeldung ") + u.AuthType));
         var sections = await config.CurrentContentAsync(ct);
         if (sections.GetValueOrDefault("users")?["users"] is JsonArray users)
             foreach (var u in users.OfType<JsonObject>())
-                if (u["samAccountName"]?.ToString() is { Length: > 0 } sam) list.Add(new(sam, u["displayName"]?.ToString() ?? sam, "Konfiguration"));
+                if (u["samAccountName"]?.ToString() is { Length: > 0 } sam) list.Add(new(sam, u["displayName"]?.ToString() ?? sam, L.T("Konfiguration")));
         foreach (var a in directory.For(domain.Current).Reader.SearchAccounts(q, 25)) list.Add(new(a.SamAccountName, a.Name, "Active Directory"));
         return list.Where(c => NormalizeIdentity(c.Account) is not null)
             .Where(c => q.Length == 0 || c.Account.Contains(q, StringComparison.OrdinalIgnoreCase) || c.DisplayName.Contains(q, StringComparison.OrdinalIgnoreCase))
@@ -564,50 +565,54 @@ public partial class JitService(AppDbContext db, RunQueue queue, ChangeLogServic
 
     // ------------------------------------------------------------------ helpers and notifications
 
-    public static string FormatMinutes(int minutes) => minutes % 60 == 0
-        ? (minutes == 60 ? "1 Stunde" : $"{minutes / 60} Stunden")
-        : $"{minutes} Minuten";
+    /// <summary>"30 Minuten", "1 Stunde", "8 Stunden" – with <paramref name="persisted"/> in the instance default language.</summary>
+    public static string FormatMinutes(int minutes, bool persisted = false)
+    {
+        var language = persisted ? L.InstanceDefault : L.Language;
+        return minutes % 60 == 0
+            ? (minutes == 60 ? L.In(language, "1 Stunde") : L.FormatIn(language, "{0} Stunden", minutes / 60))
+            : L.FormatIn(language, "{0} Minuten", minutes);
+    }
 
-    public static string Format(DateTimeOffset at) => MaintenanceFormat(at);
-
-    private static string MaintenanceFormat(DateTimeOffset at) => Maintenance.MaintenanceCalendar.Format(at);
+    /// <summary>Date and time for persisted texts (change log, notifications): instance default language.</summary>
+    public static string Format(DateTimeOffset at) => Maintenance.MaintenanceCalendar.Format(at, persisted: true);
 
     private static string? PageUrl(string publicBaseUrl) => string.IsNullOrWhiteSpace(publicBaseUrl) ? null : $"{publicBaseUrl.TrimEnd('/')}/zugriff";
 
     private static IReadOnlyList<(string, string)> WithDomain(List<(string, string)> facts, string? domain)
     {
-        if (domain is not null) facts.Insert(1, ("Domäne", domain));
+        if (domain is not null) facts.Insert(1, (L.P("Domäne"), domain));
         return facts;
     }
 
     public static NotificationMessage RequestedMessage(JitRequest r, string publicBaseUrl, string? domain = null) => new(
         NotificationEvent.JitRequested,
-        $"Befristeter Zugriff beantragt: {r.GroupDisplayName}" + (domain is null ? "" : $" ({domain})"),
+        L.PF("Befristeter Zugriff beantragt: {0}", r.GroupDisplayName) + (domain is null ? "" : $" ({domain})"),
         r.ApprovalRequired
-            ? $"{r.RequestedBy} beantragt {FormatMinutes(r.Minutes)} Mitgliedschaft in {r.GroupDisplayName}. Eine zweite Person mit der Rolle Operator muss freigeben"
-              + (r.ApprovalExpiresAt is { } exp ? $" (bis {Format(exp)})." : ".")
-            : $"{r.RequestedBy} erhält {FormatMinutes(r.Minutes)} Mitgliedschaft in {r.GroupDisplayName} (Gruppe ohne Freigabepflicht).",
-        WithDomain([("Antrag", $"#{r.Id}"), ("Konto", r.MemberAccount), ("Gruppe", r.GroupDisplayName), ("Tier", r.Tier?.ToString() ?? "–"),
-         ("Dauer", FormatMinutes(r.Minutes)), ("Begründung", r.Justification), ("Beantragt von", r.RequestedBy)], domain),
+            ? L.PF("{0} beantragt {1} Mitgliedschaft in {2}. Eine zweite Person mit der Rolle Operator muss freigeben", r.RequestedBy, FormatMinutes(r.Minutes, persisted: true), r.GroupDisplayName)
+              + (r.ApprovalExpiresAt is { } exp ? L.PF(" (bis {0}).", Format(exp)) : ".")
+            : L.PF("{0} erhält {1} Mitgliedschaft in {2} (Gruppe ohne Freigabepflicht).", r.RequestedBy, FormatMinutes(r.Minutes, persisted: true), r.GroupDisplayName),
+        WithDomain([(L.P("Antrag"), $"#{r.Id}"), (L.P("Konto"), r.MemberAccount), (L.P("Gruppe"), r.GroupDisplayName), ("Tier", r.Tier?.ToString() ?? "–"),
+         (L.P("Dauer"), FormatMinutes(r.Minutes, persisted: true)), (L.P("Begründung"), r.Justification), (L.P("Beantragt von"), r.RequestedBy)], domain),
         PageUrl(publicBaseUrl), "accent");
 
     public static NotificationMessage GrantedMessage(JitRequest r, string publicBaseUrl, string? domain = null) => new(
         NotificationEvent.JitGranted,
-        $"Befristeter Zugriff erteilt: {r.MemberAccount} in {r.GroupDisplayName}" + (domain is null ? "" : $" ({domain})"),
-        $"{r.MemberAccount} ist bis {Format(r.ExpiresAt ?? DateTimeOffset.UtcNow)} Mitglied von {r.GroupDisplayName}. Active Directory entfernt die Mitgliedschaft danach selbst.",
-        WithDomain([("Antrag", $"#{r.Id}"), ("Konto", r.MemberAccount), ("Gruppe", r.GroupDisplayName), ("Tier", r.Tier?.ToString() ?? "–"),
-         ("Gültig bis", Format(r.ExpiresAt ?? DateTimeOffset.UtcNow)), ("Freigegeben von", r.DecidedBy ?? "keine Freigabe nötig"),
-         ("Beantragt von", r.RequestedBy), ("Domänencontroller", r.Dc ?? "–")], domain),
+        L.PF("Befristeter Zugriff erteilt: {0} in {1}", r.MemberAccount, r.GroupDisplayName) + (domain is null ? "" : $" ({domain})"),
+        L.PF("{0} ist bis {1} Mitglied von {2}. Active Directory entfernt die Mitgliedschaft danach selbst.", r.MemberAccount, Format(r.ExpiresAt ?? DateTimeOffset.UtcNow), r.GroupDisplayName),
+        WithDomain([(L.P("Antrag"), $"#{r.Id}"), (L.P("Konto"), r.MemberAccount), (L.P("Gruppe"), r.GroupDisplayName), ("Tier", r.Tier?.ToString() ?? "–"),
+         (L.P("Gültig bis"), Format(r.ExpiresAt ?? DateTimeOffset.UtcNow)), (L.P("Freigegeben von"), r.DecidedBy ?? L.P("keine Freigabe nötig")),
+         (L.P("Beantragt von"), r.RequestedBy), (L.P("Domänencontroller"), r.Dc ?? "–")], domain),
         PageUrl(publicBaseUrl), "warning");
 
     private async Task ExpireApprovalAsync(JitRequest request, CancellationToken ct)
     {
         var n = await db.JitRequests.Where(r => r.Id == request.Id && r.Status == JitStatus.Pending).ExecuteUpdateAsync(u => u
             .SetProperty(r => r.Status, JitStatus.Rejected)
-            .SetProperty(r => r.Message, "Freigabe abgelaufen – niemand hat rechtzeitig entschieden."), ct);
+            .SetProperty(r => r.Message, L.P("Freigabe abgelaufen – niemand hat rechtzeitig entschieden.")), ct);
         if (n == 0) return;
         request.Status = JitStatus.Rejected;
-        changeLog.Add("system", "jit.approval-expired", EntityType, request.Id.ToString(), $"Freigabe für befristeten Zugriff #{request.Id} von {request.RequestedBy} abgelaufen");
+        changeLog.Add("system", "jit.approval-expired", EntityType, request.Id.ToString(), L.PF("Freigabe für befristeten Zugriff #{0} von {1} abgelaufen", request.Id, request.RequestedBy));
         await db.SaveChangesAsync(ct);
     }
 }
@@ -624,7 +629,7 @@ public record JitRunResult(bool Success, string? Error, string? Group, string? M
         var file = Path.Combine(workDir, "out", FileName);
         if (!File.Exists(file))
         {
-            log($"Keine Ergebnisdatei ({FileName}) gefunden.", "warn");
+            log(L.PF("Keine Ergebnisdatei ({0}) gefunden.", FileName), "warn");
             return null;
         }
         try
@@ -633,14 +638,14 @@ public record JitRunResult(bool Success, string? Error, string? Group, string? M
         }
         catch (Exception ex) when (ex is JsonException or FormatException or InvalidOperationException)
         {
-            log($"Ergebnisdatei konnte nicht gelesen werden: {ex.Message}", "warn");
+            log(L.PF("Ergebnisdatei konnte nicht gelesen werden: {0}", ex.Message), "warn");
             return null;
         }
     }
 
     public static JitRunResult Parse(string json)
     {
-        if (JsonCase.CamelCaseKeys(JsonNode.Parse(json)) is not JsonObject o) throw new FormatException("Die Ergebnisdatei enthält kein JSON-Objekt.");
+        if (JsonCase.CamelCaseKeys(JsonNode.Parse(json)) is not JsonObject o) throw new FormatException(L.P("Die Ergebnisdatei enthält kein JSON-Objekt."));
         string? Str(JsonNode? n) => n is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrWhiteSpace(s) ? s : null;
         bool? Bool(JsonNode? n) => n is JsonValue v && v.TryGetValue<bool>(out var b) ? b : null;
         long? Long(JsonNode? n) => n is JsonValue v && v.TryGetValue<long>(out var l) ? l : n is JsonValue d && d.TryGetValue<double>(out var x) ? (long)x : null;

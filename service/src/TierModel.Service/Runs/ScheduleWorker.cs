@@ -2,6 +2,7 @@ using Cronos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Runs;
 
@@ -32,7 +33,7 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
         }
         catch (CronFormatException ex)
         {
-            return $"Ungültiger Cron-Ausdruck: {ex.Message}";
+            return L.F("Ungültiger Cron-Ausdruck: {0}", ex.Message);
         }
         try
         {
@@ -40,7 +41,7 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
         }
         catch (Exception)
         {
-            return $"Unbekannte Zeitzone '{timeZone}'.";
+            return L.F("Unbekannte Zeitzone '{0}'.", timeZone);
         }
         return null;
     }
@@ -100,7 +101,7 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
             else if (!busy)
             {
                 var run = await runs.EnqueueAsync(s.Kind == RunKind.Monitor ? RunKind.Monitor : RunKind.Audit, RequestFor(s),
-                    confirmApply: false, $"Zeitplan: {s.Name}", RunTrigger.Schedule, s.Id, ct);
+                    confirmApply: false, L.PF("Zeitplan: {0}", s.Name), RunTrigger.Schedule, s.Id, ct);
                 s.LastRunId = run.Id;
                 s.LastRunAt = now;
                 logger.LogInformation("Schedule {Schedule} queued {Kind} run {RunId}", s.Name, s.Kind, run.Id);

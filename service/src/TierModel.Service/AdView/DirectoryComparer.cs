@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using TierModel.Service.Config;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.AdView;
 
@@ -153,18 +154,20 @@ public static class DirectoryComparer
 
         if (ou is null)
         {
-            diffs.Add(new("ou-missing", "Die OU fehlt im Active Directory und wird beim nächsten Deploy angelegt."));
+            diffs.Add(new("ou-missing", L.T("Die OU fehlt im Active Directory und wird beim nächsten Deploy angelegt.")));
             if (wantAces.Count > 0 || wantLinks.Count > 0)
-                diffs.Add(new("ou-missing", $"Danach werden {wantAces.Count} Berechtigung{(wantAces.Count == 1 ? "" : "en")} und {wantLinks.Count} GPO-Verknüpfung{(wantLinks.Count == 1 ? "" : "en")} gesetzt."));
+                diffs.Add(new("ou-missing", L.F("Danach werden {0} und {1} gesetzt.",
+                    wantAces.Count == 1 ? L.T("1 Berechtigung") : L.F("{0} Berechtigungen", wantAces.Count),
+                    wantLinks.Count == 1 ? L.T("1 GPO-Verknüpfung") : L.F("{0} GPO-Verknüpfungen", wantLinks.Count))));
             return new(dn, configDn, name, parentDn, "missing", true, false, builtin, isRoot, index, null,
                 null, null, wantAces.Count, 0, wantLinks.Count, 0, diffs);
         }
 
         if (!inConfig && !builtin)
         {
-            diffs.Add(new("ou-extra", "Die OU existiert nur im Active Directory und ist nicht in der Konfiguration."));
-            if (actualAces.Count > 0) diffs.Add(new("ou-extra", $"Sie hat {actualAces.Count} eigene Berechtigung{(actualAces.Count == 1 ? "" : "en")}."));
-            if (ou.GpoLinks.Count > 0) diffs.Add(new("ou-extra", $"Verknüpfte GPOs: {string.Join(", ", ou.GpoLinks.OrderBy(l => l.Order).Select(l => $"„{l.Name}“"))}."));
+            diffs.Add(new("ou-extra", L.T("Die OU existiert nur im Active Directory und ist nicht in der Konfiguration.")));
+            if (actualAces.Count > 0) diffs.Add(new("ou-extra", actualAces.Count == 1 ? L.T("Sie hat 1 eigene Berechtigung.") : L.F("Sie hat {0} eigene Berechtigungen.", actualAces.Count)));
+            if (ou.GpoLinks.Count > 0) diffs.Add(new("ou-extra", L.F("Verknüpfte GPOs: {0}.", string.Join(", ", ou.GpoLinks.OrderBy(l => l.Order).Select(l => L.F("„{0}“", l.Name))))));
             return new(dn, configDn, name, parentDn, "extra", false, true, false, false, null,
                 parentDn is null ? null : SuggestedPath(parentDn, domainDn), ou.Protected, ou.BlockInheritance,
                 0, actualAces.Count, 0, ou.GpoLinks.Count, diffs);
@@ -175,9 +178,9 @@ public static class DirectoryComparer
             var wantProtect = desired["protectFromAccidentalDeletion"] is JsonValue p && p.TryGetValue<bool>(out var pv) && pv;
             var wantBlock = desired["blockGpoInheritance"] is JsonValue b && b.TryGetValue<bool>(out var bv) && bv;
             if (wantProtect != ou.Protected)
-                diffs.Add(new("protect", wantProtect ? "Der Löschschutz ist im AD aus, erwartet ist an." : "Der Löschschutz ist im AD an, erwartet ist aus."));
+                diffs.Add(new("protect", wantProtect ? L.T("Der Löschschutz ist im AD aus, erwartet ist an.") : L.T("Der Löschschutz ist im AD an, erwartet ist aus.")));
             if (wantBlock != ou.BlockInheritance)
-                diffs.Add(new("block-inheritance", wantBlock ? "Die GPO-Vererbung ist im AD nicht blockiert, erwartet ist blockiert." : "Die GPO-Vererbung ist im AD blockiert, erwartet ist nicht blockiert."));
+                diffs.Add(new("block-inheritance", wantBlock ? L.T("Die GPO-Vererbung ist im AD nicht blockiert, erwartet ist blockiert.") : L.T("Die GPO-Vererbung ist im AD blockiert, erwartet ist nicht blockiert.")));
         }
 
         CompareAces(wantAces, actualAces, guids, diffs);
@@ -223,33 +226,33 @@ public static class DirectoryComparer
         foreach (var (k, w) in wanted)
         {
             if (!actual.TryGetValue(k, out var h))
-                diffs.Add(new("ace-missing", $"Berechtigung fehlt im AD: {Describe(w, display, guids)}."));
+                diffs.Add(new("ace-missing", L.F("Berechtigung fehlt im AD: {0}.", Describe(w, display, guids))));
             else if (h.Mask != w.Mask)
-                diffs.Add(new("ace-rights", $"Rechte von „{display[w.Principal]}“ {ObjectText(w, guids)} weichen ab: erwartet {string.Join(", ", AdRights.Names(w.Mask))}, im AD {string.Join(", ", AdRights.Names(h.Mask))}."));
+                diffs.Add(new("ace-rights", L.F("Rechte von „{0}“ {1} weichen ab: erwartet {2}, im AD {3}.", display[w.Principal], ObjectText(w, guids), string.Join(", ", AdRights.Names(w.Mask)), string.Join(", ", AdRights.Names(h.Mask)))));
         }
         foreach (var (k, h) in actual.Where(a => !wanted.ContainsKey(a.Key)))
-            diffs.Add(new("ace-extra", $"Zusätzliche Berechtigung im AD: {Describe(h, display, guids)}."));
+            diffs.Add(new("ace-extra", L.F("Zusätzliche Berechtigung im AD: {0}.", Describe(h, display, guids))));
     }
 
     private static string Describe(AceGroup a, Dictionary<string, string> display, GuidNames guids) =>
-        $"„{display.GetValueOrDefault(a.Principal, a.Principal)}“ {(a.Type == "deny" ? "verweigert" : "erhält")} {string.Join(", ", AdRights.Names(a.Mask))} {ObjectText(a, guids)}, {InheritanceText(a.Inheritance)}";
+        L.F("„{0}“ {1} {2} {3}, {4}", display.GetValueOrDefault(a.Principal, a.Principal), (a.Type == "deny" ? L.T("verweigert") : L.T("erhält")), string.Join(", ", AdRights.Names(a.Mask)), ObjectText(a, guids), InheritanceText(a.Inheritance));
 
     private static string ObjectText(AceGroup a, GuidNames guids)
     {
         var obj = guids.NameOf(a.ObjectType) is { Length: > 0 } n ? n : a.ObjectType;
         var inh = guids.NameOf(a.InheritedObjectType) is { Length: > 0 } m ? m : a.InheritedObjectType;
-        var text = obj.Length == 0 ? "für alle Objekte" : $"für „{obj}“";
-        return inh.Length == 0 ? text : $"{text} auf „{inh}“-Objekten";
+        var text = obj.Length == 0 ? L.T("für alle Objekte") : L.F("für „{0}“", obj);
+        return inh.Length == 0 ? text : L.F("{0} auf „{1}“-Objekten", text, inh);
     }
 
     public static string InheritanceText(string inheritance) => inheritance.ToLowerInvariant() switch
     {
-        "none" => "nur für dieses Objekt",
-        "all" => "für dieses Objekt und alle Nachfolger",
-        "descendents" => "nur für Nachfolger",
-        "selfandchildren" => "für dieses Objekt und direkte Kinder",
-        "children" => "nur für direkte Kinder",
-        _ => $"Vererbung {inheritance}",
+        "none" => L.T("nur für dieses Objekt"),
+        "all" => L.T("für dieses Objekt und alle Nachfolger"),
+        "descendents" => L.T("nur für Nachfolger"),
+        "selfandchildren" => L.T("für dieses Objekt und direkte Kinder"),
+        "children" => L.T("nur für direkte Kinder"),
+        _ => L.F("Vererbung {0}", inheritance),
     };
 
     private static void CompareLinks(List<DesiredLink> want, List<AdGpoLink> have, List<DiffEntry> diffs)
@@ -258,9 +261,9 @@ public static class DirectoryComparer
         var wantByName = want.GroupBy(l => l.Name, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
         foreach (var w in want.Where(w => !haveByName.ContainsKey(w.Name)))
-            diffs.Add(new("gpo-missing", $"GPO-Verknüpfung fehlt im AD: „{w.Name}“ (Reihenfolge {w.Order})."));
+            diffs.Add(new("gpo-missing", L.F("GPO-Verknüpfung fehlt im AD: „{0}“ (Reihenfolge {1}).", w.Name, w.Order)));
         foreach (var h in have.Where(h => !wantByName.ContainsKey(h.Name)))
-            diffs.Add(new("gpo-extra", $"Zusätzliche GPO-Verknüpfung im AD: „{h.Name}“ (Reihenfolge {h.Order})."));
+            diffs.Add(new("gpo-extra", L.F("Zusätzliche GPO-Verknüpfung im AD: „{0}“ (Reihenfolge {1}).", h.Name, h.Order)));
 
         // Order: compare the rank among links present on both sides, so one extra link does not shift everything.
         var common = want.Where(w => haveByName.ContainsKey(w.Name)).ToList();
@@ -270,9 +273,9 @@ public static class DirectoryComparer
         {
             var h = haveByName[w.Name];
             if (wantRank[w.Name] != haveRank[h.Name])
-                diffs.Add(new("gpo-order", $"Reihenfolge von „{w.Name}“ weicht ab: erwartet {w.Order}, im AD {h.Order}."));
+                diffs.Add(new("gpo-order", L.F("Reihenfolge von „{0}“ weicht ab: erwartet {1}, im AD {2}.", w.Name, w.Order, h.Order)));
             if (w.Enabled != h.Enabled)
-                diffs.Add(new("gpo-enabled", $"Verknüpfung „{w.Name}“ ist im AD {(h.Enabled ? "aktiviert" : "deaktiviert")}, erwartet {(w.Enabled ? "aktiviert" : "deaktiviert")}."));
+                diffs.Add(new("gpo-enabled", L.F("Verknüpfung „{0}“ ist im AD {1}, erwartet {2}.", w.Name, (h.Enabled ? L.T("aktiviert") : L.T("deaktiviert")), (w.Enabled ? L.T("aktiviert") : L.T("deaktiviert")))));
         }
     }
 

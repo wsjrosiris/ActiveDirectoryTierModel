@@ -1,51 +1,40 @@
 import type { DeployPlan, PlanAction, PlanDetailValue } from '@/api/types'
+import { lazyRecord, t } from '@/i18n'
 
-/* German wording for the framework's deploy plan (deploy-plan.json). Unknown actions and areas are
+/* Wording (German/English, see i18n) for the framework's deploy plan (deploy-plan.json). Unknown actions and areas are
  * described generically from their name, so a newer framework version never breaks the view. */
 
-export const planAreaLabels: Record<string, string> = {
-  ous: 'Organisationseinheiten',
-  groups: 'Gruppen',
-  users: 'Benutzer',
-  acls: 'OU-Berechtigungen',
-  gpos: 'Gruppenrichtlinien',
-  admx: 'ADMX-Vorlagen',
-  msa: 'MSA-Delegationen',
-  gmsa: 'gMSA-Delegationen',
-  dmsa: 'dMSA-Delegationen',
-  winlaps: 'Windows LAPS',
-  authsilos: 'Authentication Silos',
-}
+export const planAreaLabels: Record<string, string> = lazyRecord('runs.planModel.area')
 
 export type ActionKind = 'create' | 'update' | 'link' | 'configure' | 'remove' | 'other'
 
 const knownActions: Record<string, { label: string; kind: ActionKind }> = {
-  CreateOU: { label: 'OU anlegen', kind: 'create' },
-  CreateGroup: { label: 'Gruppe anlegen', kind: 'create' },
-  CreateUser: { label: 'Benutzer anlegen', kind: 'create' },
-  UpdateUserMembership: { label: 'Mitgliedschaft ändern', kind: 'update' },
-  CreateAcl: { label: 'Berechtigung vergeben', kind: 'create' },
-  CreateGPO: { label: 'GPO anlegen', kind: 'create' },
-  ImportGPO: { label: 'GPO importieren', kind: 'create' },
-  LinkGPO: { label: 'GPO verknüpfen', kind: 'link' },
-  ConfigureLapsDecryptor: { label: 'LAPS-Entschlüsselung konfigurieren', kind: 'configure' },
-  AddDeviceGroupMember: { label: 'Gerät zur Gerätegruppe hinzufügen', kind: 'update' },
-  CreateAuthPolicy: { label: 'Authentifizierungsrichtlinie anlegen', kind: 'create' },
-  UpdateAuthPolicy: { label: 'Authentifizierungsrichtlinie ändern', kind: 'update' },
-  CreateAuthSilo: { label: 'Silo anlegen', kind: 'create' },
-  UpdateAuthSilo: { label: 'Silo ändern', kind: 'update' },
-  GrantSiloAccess: { label: 'Konto im Silo zulassen', kind: 'configure' },
-  AssignSilo: { label: 'Konto dem Silo zuweisen', kind: 'configure' },
+  CreateOU: { label: t('runs.planModel.action.CreateOU'), kind: 'create' },
+  CreateGroup: { label: t('runs.planModel.action.CreateGroup'), kind: 'create' },
+  CreateUser: { label: t('runs.planModel.action.CreateUser'), kind: 'create' },
+  UpdateUserMembership: { label: t('runs.planModel.action.UpdateUserMembership'), kind: 'update' },
+  CreateAcl: { label: t('runs.planModel.action.CreateAcl'), kind: 'create' },
+  CreateGPO: { label: t('runs.planModel.action.CreateGPO'), kind: 'create' },
+  ImportGPO: { label: t('runs.planModel.action.ImportGPO'), kind: 'create' },
+  LinkGPO: { label: t('runs.planModel.action.LinkGPO'), kind: 'link' },
+  ConfigureLapsDecryptor: { label: t('runs.planModel.action.ConfigureLapsDecryptor'), kind: 'configure' },
+  AddDeviceGroupMember: { label: t('runs.planModel.action.AddDeviceGroupMember'), kind: 'update' },
+  CreateAuthPolicy: { label: t('runs.planModel.action.CreateAuthPolicy'), kind: 'create' },
+  UpdateAuthPolicy: { label: t('runs.planModel.action.UpdateAuthPolicy'), kind: 'update' },
+  CreateAuthSilo: { label: t('runs.planModel.action.CreateAuthSilo'), kind: 'create' },
+  UpdateAuthSilo: { label: t('runs.planModel.action.UpdateAuthSilo'), kind: 'update' },
+  GrantSiloAccess: { label: t('runs.planModel.action.GrantSiloAccess'), kind: 'configure' },
+  AssignSilo: { label: t('runs.planModel.action.AssignSilo'), kind: 'configure' },
 }
 
 const verbs: [RegExp, string, ActionKind][] = [
-  [/^(create|new|add)/i, 'anlegen', 'create'],
-  [/^import/i, 'importieren', 'create'],
-  [/^copy/i, 'kopieren', 'create'],
-  [/^(update|set|modify)/i, 'aktualisieren', 'update'],
-  [/^link/i, 'verknüpfen', 'link'],
-  [/^configure/i, 'konfigurieren', 'configure'],
-  [/^(remove|delete)/i, 'entfernen', 'remove'],
+  [/^(create|new|add)/i, t('runs.planModel.verb.create'), 'create'],
+  [/^import/i, t('runs.planModel.verb.import'), 'create'],
+  [/^copy/i, t('runs.planModel.verb.copy'), 'create'],
+  [/^(update|set|modify)/i, t('runs.planModel.verb.update'), 'update'],
+  [/^link/i, t('runs.planModel.verb.link'), 'link'],
+  [/^configure/i, t('runs.planModel.verb.configure'), 'configure'],
+  [/^(remove|delete)/i, t('runs.planModel.verb.remove'), 'remove'],
 ]
 
 /** "CopyAdmxFile" → ["Copy", "Admx File"] */
@@ -59,28 +48,22 @@ export function actionKind(action: string): ActionKind {
   return knownActions[action]?.kind ?? verbs.find(([re]) => re.test(action))?.[2] ?? 'other'
 }
 
-/** Label for counters and the filter ("GPO verknüpfen", "Admx File kopieren"). */
+/** Label for counters and the filter ("GPO verknüpfen", "ADMX-Datei kopieren" / "Link GPO", "Copy ADMX file"). */
 export function actionLabel(action: string): string {
   if (knownActions[action]) return knownActions[action].label
   const [verb, object] = splitAction(action)
   const v = verbs.find(([re]) => re.test(verb))
-  if (v && object) return `${objectLabel(object)} ${v[1]}`
+  if (v && object) return t('runs.planModel.objectVerb', { object: objectLabel(object), verb: v[1] })
   return action.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
 }
 
+const objectLabels: Record<string, string> = lazyRecord('runs.planModel.object')
+
 function objectLabel(o: string) {
-  const map: Record<string, string> = { Admx: 'ADMX-Vorlage', 'Admx File': 'ADMX-Datei', Adml: 'ADML-Datei', 'Adml File': 'ADML-Datei', 'Admx Store': 'Zentraler Speicher', 'Central Store': 'Zentraler Speicher' }
-  return map[o] ?? o
+  return objectLabels[o] ?? o
 }
 
-export const actionKindLabels: Record<ActionKind, string> = {
-  create: 'Anlegen',
-  update: 'Ändern',
-  link: 'Verknüpfen',
-  configure: 'Konfigurieren',
-  remove: 'Entfernen',
-  other: 'Sonstiges',
-}
+export const actionKindLabels: Record<ActionKind, string> = lazyRecord('runs.planModel.kind')
 
 /** "OU=Groups,OU=Tier 1,DC=contoso,DC=local" → "Tier 1 › Groups"; domain root → "Domänenstamm (contoso.local)". */
 export function readableDn(dn: string | null | undefined): string {
@@ -89,14 +72,14 @@ export function readableDn(dn: string | null | undefined): string {
   const parts = dn.split(/,(?=\s*[A-Za-z]+=)/).map((p) => p.trim())
   const rdns = parts.filter((p) => !/^DC=/i.test(p)).map((p) => p.replace(/^[A-Za-z]+=/, ''))
   const domain = parts.filter((p) => /^DC=/i.test(p)).map((p) => p.slice(3)).join('.')
-  if (!rdns.length) return domain ? `Domänenstamm (${domain})` : dn
+  if (!rdns.length) return domain ? t('runs.planModel.domainRoot', { domain }) : dn
   return rdns.reverse().join(' › ')
 }
 
 function text(v: PlanDetailValue | undefined): string | null {
   if (v === undefined || v === null || v === '') return null
   if (Array.isArray(v)) return v.length ? v.join(', ') : null
-  if (typeof v === 'boolean') return v ? 'Ja' : 'Nein'
+  if (typeof v === 'boolean') return v ? t('common.yes') : t('common.no')
   return String(v)
 }
 
@@ -119,69 +102,92 @@ function detail(a: PlanAction, ...keys: string[]): PlanDetailValue | undefined {
 export type SentencePart = string | { name: string } | { path: string }
 
 const q = (name: string) => ({ name })
-const at = (path: string | null | undefined): SentencePart[] => (path ? [' in ', { path }] : [])
+const at = (path: string | null | undefined): SentencePart[] => (path ? [t('runs.planModel.in'), { path }] : [])
 
-/** One German sentence per planned action, e.g. OU „Tier 1 Servers“ anlegen in „Tier 1“. */
+/** A translated sentence with [[markers]] for names, paths or further parts (word order differs per language). */
+function sentence(text: string, vars: Record<string, SentencePart | SentencePart[] | null | undefined>): SentencePart[] {
+  const out: SentencePart[] = []
+  text.split(/\[\[(\w+)\]\]/).forEach((p, i) => {
+    if (i % 2 === 0) {
+      if (p) out.push(p)
+    } else {
+      const v = vars[p]
+      if (Array.isArray(v)) out.push(...v)
+      else if (v) out.push(v)
+    }
+  })
+  return out
+}
+
+/** "a, b und c" / "a, b and c" */
+function listParts(items: string[], last: string): SentencePart[] {
+  const parts: SentencePart[] = []
+  items.forEach((g, i) => parts.push(...(i ? [i === items.length - 1 ? last : ', '] : []), q(g)))
+  return parts
+}
+
+/** One sentence per planned action, e.g. OU „Tier 1 Servers“ anlegen in „Tier 1“ / Create OU "Tier 1 Servers" in "Tier 1". */
 export function describeAction(a: PlanAction): SentencePart[] {
+  const name = q(a.name)
   switch (a.action) {
     case 'CreateOU':
-      return ['OU ', q(a.name), ' anlegen', ...at(a.path)]
+      return sentence(t('runs.planModel.s.createOu'), { name, at: at(a.path) })
     case 'CreateGroup':
-      return ['Gruppe ', q(a.name), ' anlegen', ...at(a.path)]
+      return sentence(t('runs.planModel.s.createGroup'), { name, at: at(a.path) })
     case 'CreateUser':
-      return ['Benutzer ', q(a.name), ' anlegen', ...at(a.path)]
+      return sentence(t('runs.planModel.s.createUser'), { name, at: at(a.path) })
     case 'UpdateUserMembership': {
       const groups = [...new Set([...list(detail(a, 'addGroups', 'groups')), ...list(detail(a, 'group', 'memberOf'))])]
-      if (!groups.length) return ['Gruppenmitgliedschaften von ', q(a.name), ' aktualisieren']
-      const parts: SentencePart[] = [q(a.name), groups.length === 1 ? ' zu Gruppe ' : ' zu den Gruppen ']
-      groups.forEach((g, i) => parts.push(...(i ? [i === groups.length - 1 ? ' und ' : ', '] : []), q(g)))
-      parts.push(' hinzufügen')
-      return parts
+      if (!groups.length) return sentence(t('runs.planModel.s.updateMemberships'), { name })
+      return sentence(t('runs.planModel.s.addToGroups', { count: groups.length }), { name, groups: listParts(groups, t('runs.planModel.and')) })
     }
     case 'CreateAcl': {
       const principal = text(detail(a, 'principal', 'identityReference', 'identityreference')) ?? a.name
       const rights = text(detail(a, 'rights', 'activeDirectoryRights', 'activedirectoryrights'))
       const target = a.path ? readableDn(a.path) : null
-      return ['Berechtigung für ', q(principal), ...(target ? [' auf ', { path: a.path! } as SentencePart] : []), ' vergeben', ...(rights ? [` (Rechte: ${rights})`] : [])]
+      return sentence(t('runs.planModel.s.grantPermission'), {
+        principal: q(principal),
+        target: target ? [t('runs.planModel.on'), { path: a.path! }] : null,
+        rights: rights ? t('runs.planModel.rights', { rights }) : null,
+      })
     }
     case 'CreateGPO':
-      return ['GPO ', q(a.name), ' anlegen']
+      return sentence(t('runs.planModel.s.createGpo'), { name })
     case 'ImportGPO':
-      return ['GPO ', q(a.name), ' aus Sicherung importieren']
+      return sentence(t('runs.planModel.s.importGpo'), { name })
     case 'LinkGPO':
-      return ['GPO ', q(a.name), ' verknüpfen mit ', ...(a.path ? [{ path: a.path } as SentencePart] : ['–'])]
-    case 'AddDeviceGroupMember': {
-      const group = text(detail(a, 'group'))
-      return ['Gerät ', q(a.name), ' zur Gerätegruppe ', q(group ?? '?'), ' hinzufügen']
-    }
+      return sentence(t('runs.planModel.s.linkGpo'), { name, target: a.path ? { path: a.path } : '–' })
+    case 'AddDeviceGroupMember':
+      return sentence(t('runs.planModel.s.addDevice'), { name, group: q(text(detail(a, 'group')) ?? '?') })
     case 'CreateAuthPolicy':
     case 'UpdateAuthPolicy': {
-      const parts: SentencePart[] = ['Authentifizierungsrichtlinie ', q(a.name), a.action === 'CreateAuthPolicy' ? ' anlegen' : ' ändern']
       const rule = signInRule(a)
-      if (rule) parts.push(` – ${rule}`)
-      return parts
+      return sentence(t(a.action === 'CreateAuthPolicy' ? 'runs.planModel.s.createPolicy' : 'runs.planModel.s.updatePolicy'), { name, rule: rule ? ` – ${rule}` : null })
     }
     case 'CreateAuthSilo':
     case 'UpdateAuthSilo': {
       const policy = text(detail(a, 'userAuthenticationPolicy'))
-      return ['Silo ', q(a.name), a.action === 'CreateAuthSilo' ? ' anlegen' : ' ändern', ...(policy ? [' mit Benutzerrichtlinie ', q(policy)] : [])]
+      return sentence(t(a.action === 'CreateAuthSilo' ? 'runs.planModel.s.createSilo' : 'runs.planModel.s.updateSilo'), {
+        name,
+        policy: policy ? [t('runs.planModel.withUserPolicy'), q(policy)] : null,
+      })
     }
     case 'GrantSiloAccess':
-      return ['Konto ', q(a.name), ' im Silo ', q(text(detail(a, 'silo')) ?? '?'), ' zulassen']
+      return sentence(t('runs.planModel.s.grantSilo'), { name, silo: q(text(detail(a, 'silo')) ?? '?') })
     case 'AssignSilo':
-      return ['Konto ', q(a.name), ' dem Silo ', q(text(detail(a, 'silo')) ?? '?'), ' zuweisen']
+      return sentence(t('runs.planModel.s.assignSilo'), { name, silo: q(text(detail(a, 'silo')) ?? '?') })
     case 'ConfigureLapsDecryptor':
-      return ['LAPS-Entschlüsselung ', q(a.name), ' konfigurieren', ...(a.path ? [' für ', { path: a.path } as SentencePart] : [])]
+      return sentence(t('runs.planModel.s.configureLaps'), { name, for: a.path ? [t('runs.planModel.for'), { path: a.path }] : null })
   }
-  // Generic: "<Objekt> „Name“ <verb> in <Pfad>"
+  // Generic: "<Objekt> „Name“ <verb> in <Pfad>" / "<Verb> <object> "name" in <path>"
   const [verb, object] = splitAction(a.action)
   const v = verbs.find(([re]) => re.test(verb))
-  const noun = object ? objectLabel(object) : a.resourceType || 'Objekt'
-  if (v) return [`${noun} `, q(a.name), ` ${v[1]}`, ...at(a.path)]
-  return [`${actionLabel(a.action)}: `, q(a.name), ...at(a.path)]
+  const noun = object ? objectLabel(object) : a.resourceType || t('runs.planModel.objectFallback')
+  if (v) return sentence(t('runs.planModel.s.generic'), { noun, name, verb: v[1], at: at(a.path) })
+  return [`${actionLabel(a.action)}: `, name, ...at(a.path)]
 }
 
-/** „Anmeldung nur von Domänencontrollern oder Geräten in A, B“ from a policy action's details. */
+/** „Anmeldung nur von Domänencontrollern oder Geräten in A, B“ (sign-in rule) from a policy action's details. */
 function signInRule(a: PlanAction): string | null {
   const dcs = detail(a, 'includeDomainControllers')
   const groups = list(detail(a, 'deviceGroups'))
@@ -192,15 +198,17 @@ function signInRule(a: PlanAction): string | null {
 /** Readable sentence for the device condition of an authentication policy (no SDDL). */
 export function describeSignInRule(includeDomainControllers: boolean, deviceGroups: string[]): string {
   const groups = deviceGroups.filter(Boolean)
-  if (!includeDomainControllers && !groups.length) return 'Keine Gerätebedingung – Anmeldung von jedem Gerät'
-  const g = groups.length === 1 ? `Geräten in ${groups[0]}` : `Geräten in ${groups.slice(0, -1).join(', ')} oder ${groups[groups.length - 1]}`
-  if (includeDomainControllers && groups.length) return `Anmeldung nur von Domänencontrollern oder ${g}`
-  if (includeDomainControllers) return 'Anmeldung nur von Domänencontrollern'
-  return `Anmeldung nur von ${g}`
+  if (!includeDomainControllers && !groups.length) return t('runs.planModel.rule.anyDevice')
+  const g = t('runs.planModel.rule.devicesIn', {
+    groups: groups.length === 1 ? groups[0] : `${groups.slice(0, -1).join(', ')}${t('runs.planModel.or')}${groups[groups.length - 1]}`,
+  })
+  if (includeDomainControllers && groups.length) return t('runs.planModel.rule.dcsOr', { devices: g })
+  if (includeDomainControllers) return t('runs.planModel.rule.dcsOnly')
+  return t('runs.planModel.rule.only', { devices: g })
 }
 
 export function sentenceText(parts: SentencePart[]): string {
-  return parts.map((p) => (typeof p === 'string' ? p : 'name' in p ? `„${p.name}“` : `„${readableDn(p.path)}“`)).join('')
+  return parts.map((p) => (typeof p === 'string' ? p : 'name' in p ? t('common.quoted', { text: p.name }) : t('common.quoted', { text: readableDn(p.path) }))).join('')
 }
 
 export interface PlanGroup {
@@ -224,7 +232,7 @@ export function groupPlan(plan: DeployPlan, actions: PlanAction[]): PlanGroup[] 
         key,
         phase: a.phase,
         area: a.area,
-        title: planAreaLabels[a.area] ?? phase?.name ?? a.area ?? 'Weitere Änderungen',
+        title: planAreaLabels[a.area] ?? phase?.name ?? a.area ?? t('runs.planModel.otherChanges'),
         actions: [],
         existing: phase ? phase.existingCount : null,
       }
@@ -242,10 +250,10 @@ export function planTotal(plan: DeployPlan) {
 /** "3 anlegen · 2 verknüpfen" for compact displays. */
 export function planCountsText(s: { create: number; update: number; link: number; configure: number }) {
   const parts = [
-    s.create && `${s.create} anlegen`,
-    s.update && `${s.update} ändern`,
-    s.link && `${s.link} verknüpfen`,
-    s.configure && `${s.configure} konfigurieren`,
+    s.create && t('runs.planModel.count.create', { count: s.create }),
+    s.update && t('runs.planModel.count.update', { count: s.update }),
+    s.link && t('runs.planModel.count.link', { count: s.link }),
+    s.configure && t('runs.planModel.count.configure', { count: s.configure }),
   ].filter(Boolean)
   return parts.join(' · ')
 }

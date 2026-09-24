@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Auth;
 
@@ -133,13 +134,13 @@ public static class AuthSetup
             {
                 var failure = (await ctx.AuthenticateAsync(ApiTokens.Scheme)).Failure?.Message;
                 ctx.Response.Headers.WWWAuthenticate = "Bearer";
-                await Results.Problem(title: "Nicht angemeldet", detail: failure ?? "Ungültiges API-Token.", statusCode: StatusCodes.Status401Unauthorized).ExecuteAsync(ctx);
+                await Results.Problem(title: L.T("Nicht angemeldet"), detail: failure ?? L.T("Ungültiges API-Token."), statusCode: StatusCodes.Status401Unauthorized).ExecuteAsync(ctx);
                 return;
             }
             // Sign-in, sign-out and password changes belong to the browser session, not to scripts.
             if (path.StartsWithSegments("/api/auth") && ctx.User.IsTokenAuthenticated() && !HttpMethods.IsGet(ctx.Request.Method))
             {
-                await Results.Problem(title: "Mit einem API-Token nicht möglich", statusCode: StatusCodes.Status403Forbidden).ExecuteAsync(ctx);
+                await Results.Problem(title: L.T("Mit einem API-Token nicht möglich"), statusCode: StatusCodes.Status403Forbidden).ExecuteAsync(ctx);
                 return;
             }
             // CSRF protects the cookie session only; token requests carry no cookie credentials.
@@ -152,7 +153,7 @@ public static class AuthSetup
                 }
                 catch (AntiforgeryValidationException)
                 {
-                    await Results.Problem(title: "Ungültiges oder fehlendes CSRF-Token", detail: "Bitte die Seite neu laden.",
+                    await Results.Problem(title: L.T("Ungültiges oder fehlendes CSRF-Token"), detail: L.T("Bitte die Seite neu laden."),
                         statusCode: StatusCodes.Status400BadRequest).ExecuteAsync(ctx);
                     return;
                 }
@@ -161,7 +162,7 @@ public static class AuthSetup
             if (path.StartsWithSegments("/api") && !path.StartsWithSegments("/api/auth")
                 && ctx.User.Identity?.IsAuthenticated == true && ctx.User.FindFirst(AuthClaims.MustChangePassword)?.Value == "1")
             {
-                await Results.Problem(title: "Passwortänderung erforderlich", statusCode: StatusCodes.Status403Forbidden).ExecuteAsync(ctx);
+                await Results.Problem(title: L.T("Passwortänderung erforderlich"), statusCode: StatusCodes.Status403Forbidden).ExecuteAsync(ctx);
                 return;
             }
             await next();

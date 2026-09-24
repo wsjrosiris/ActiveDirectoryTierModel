@@ -1,5 +1,6 @@
 using TierModel.Service.Config;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.AdView;
 
@@ -19,10 +20,10 @@ public static class AdEndpoints
     public const int MaxMembers = 500;
 
     private static string UnavailableMessage(DomainDirectory d) =>
-        d.Source == "Testdaten" ? "Testdaten sind nicht verfügbar." :
+        d.Source == "Testdaten" ? L.T("Testdaten sind nicht verfügbar.") :
         OperatingSystem.IsWindows()
-            ? "Der Server ist keiner Domäne beigetreten oder das Dienstkonto kann das Active Directory nicht lesen."
-            : "Die Ist-Ansicht ist nur verfügbar, wenn der Dienst auf einem Windows-Server in der Domäne läuft.";
+            ? L.T("Der Server ist keiner Domäne beigetreten oder das Dienstkonto kann das Active Directory nicht lesen.")
+            : L.T("Die Ist-Ansicht ist nur verfügbar, wenn der Dienst auf einem Windows-Server in der Domäne läuft.");
 
     public static void MapAdEndpoints(this IEndpointRouteBuilder app)
     {
@@ -40,7 +41,7 @@ public static class AdEndpoints
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                return new AdTreeDto(false, directory.Source, $"Active Directory konnte nicht gelesen werden: {ex.Message}", null, null, false, []);
+                return new AdTreeDto(false, directory.Source, L.F("Active Directory konnte nicht gelesen werden: {0}", ex.Message), null, null, false, []);
             }
         });
 
@@ -48,7 +49,7 @@ public static class AdEndpoints
         {
             var directory = directories.For(domain.Current);
             if (string.IsNullOrWhiteSpace(dn) || dn.Length > 2048 || dn.Contains('\0'))
-                return Results.ValidationProblem(new Dictionary<string, string[]> { ["dn"] = ["Bitte einen gültigen Distinguished Name angeben."] });
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["dn"] = [L.T("Bitte einen gültigen Distinguished Name angeben.")] });
             dn = dn.Trim();
             if (!directory.Available)
                 return Results.Ok(new AdObjectDto(false, directory.Source, UnavailableMessage(directory), dn, "unknown", dn, null, null, []));
@@ -59,7 +60,7 @@ public static class AdEndpoints
                 var domainDn = state.Snapshot.Domain.DistinguishedName;
                 // Only objects of the domain partition; configuration and schema are out of scope.
                 if (!DirectoryComparer.NormalizeDn(dn).EndsWith(DirectoryComparer.NormalizeDn(domainDn)))
-                    return Results.ValidationProblem(new Dictionary<string, string[]> { ["dn"] = ["Das Objekt liegt nicht in der Domäne."] });
+                    return Results.ValidationProblem(new Dictionary<string, string[]> { ["dn"] = [L.T("Das Objekt liegt nicht in der Domäne.")] });
                 return await Task.Run(() =>
                 {
                     var reader = directory.Reader;
@@ -76,7 +77,7 @@ public static class AdEndpoints
                             new AdOuDetails(children, counts, ou.GpoLinks.OrderBy(l => l.Order).ToList(), ou.Protected, ou.BlockInheritance), null, ou.Aces));
                     }
                     var cls = reader.ObjectClass(dn);
-                    if (cls is null) return Results.Problem(title: "Objekt nicht gefunden", detail: $"„{dn}“ existiert nicht im Active Directory.", statusCode: 404);
+                    if (cls is null) return Results.Problem(title: L.T("Objekt nicht gefunden"), detail: L.F("„{0}“ existiert nicht im Active Directory.", dn), statusCode: 404);
                     var names = directory.Names(mappings, state.Snapshot);
                     var aces = DirectoryService.Aces(reader.Aces(dn), names);
                     var name = dn.Split(',')[0];
@@ -87,7 +88,7 @@ public static class AdEndpoints
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                return Results.Ok(new AdObjectDto(false, directory.Source, $"Active Directory konnte nicht gelesen werden: {ex.Message}", dn, "unknown", dn, null, null, []));
+                return Results.Ok(new AdObjectDto(false, directory.Source, L.F("Active Directory konnte nicht gelesen werden: {0}", ex.Message), dn, "unknown", dn, null, null, []));
             }
         });
 
@@ -104,7 +105,7 @@ public static class AdEndpoints
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                return new AdCompareDto(false, directory.Source, $"Active Directory konnte nicht gelesen werden: {ex.Message}", null, null, null);
+                return new AdCompareDto(false, directory.Source, L.F("Active Directory konnte nicht gelesen werden: {0}", ex.Message), null, null, null);
             }
         });
     }

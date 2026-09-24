@@ -1,4 +1,5 @@
 using System.Text;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Reports;
 
@@ -20,7 +21,7 @@ public static class HtmlReportRenderer
     };
 
     public static string Range(ReportDocument d) =>
-        d.From is { } f && d.To is { } t ? $"{ReportBuilder.Date(f)} – {ReportBuilder.Date(t)}" : d.To is { } to ? $"Stand {ReportBuilder.Date(to)}" : "";
+        d.From is { } f && d.To is { } t ? $"{ReportBuilder.Date(f)} – {ReportBuilder.Date(t)}" : d.To is { } to ? L.F("Stand {0}", ReportBuilder.Date(to)) : "";
 
     private const string Css = """
         :root { --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --soft:#f8fafc; --brand:#1d4ed8; --ok:#047857; --warn:#b45309; --bad:#b91c1c; --info:#1d4ed8; }
@@ -74,27 +75,27 @@ public static class HtmlReportRenderer
     public static string Render(ReportDocument d)
     {
         var sb = new StringBuilder();
-        sb.Append("<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+        sb.Append("<!doctype html><html lang=\"").Append(L.Language).Append("\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
         sb.Append("<title>").Append(E($"{d.Title} – {Range(d)}")).Append("</title><style>").Append(Css).Append("</style></head><body><main class=\"page\">");
 
-        sb.Append("<section class=\"cover\"><div class=\"brand\"><i></i>TierModel Service · Bericht</div>");
+        sb.Append("<section class=\"cover\"><div class=\"brand\"><i></i>" + E(L.T("TierModel Service · Bericht")) + "</div>");
         sb.Append("<h1>").Append(E(d.Title)).Append("</h1><p class=\"subtitle\">").Append(E(d.Subtitle)).Append("</p><dl class=\"meta\">");
         void Meta(string label, string value) => sb.Append("<div><dt>").Append(E(label)).Append("</dt><dd>").Append(E(value)).Append("</dd></div>");
-        Meta(d.From is null ? "Stand" : "Zeitraum", d.From is null && d.To is { } st ? ReportBuilder.Date(st) : Range(d));
-        Meta("Grundlage", d.Basis);
-        Meta("Instanz", d.Instance);
-        Meta("Erstellt von", d.GeneratedBy);
-        Meta("Erstellt am", ReportBuilder.DateTime(d.GeneratedAt));
+        Meta(d.From is null ? L.T("Stand") : L.T("Zeitraum"), d.From is null && d.To is { } st ? ReportBuilder.Date(st) : Range(d));
+        Meta(L.T("Grundlage"), d.Basis);
+        Meta(L.T("Instanz"), d.Instance);
+        Meta(L.T("Erstellt von"), d.GeneratedBy);
+        Meta(L.T("Erstellt am"), ReportBuilder.DateTime(d.GeneratedAt));
         sb.Append("</dl>");
 
-        sb.Append("<h3>Compliance-Wert <small>aktueller Stand je Ebene (0–100)</small></h3><div class=\"scores\">");
+        sb.Append("<h3>" + E(L.T("Compliance-Wert")) + " <small>" + E(L.T("aktueller Stand je Ebene (0–100)")) + "</small></h3><div class=\"scores\">");
         foreach (var s in d.Scores)
             sb.Append("<div class=\"tile ").Append(ToneClass(ReportBuilder.ScoreTone(s.Score))).Append("\"><div class=\"l\">").Append(E(s.Label))
               .Append("</div><div class=\"v\">").Append(s.Score?.ToString() ?? "–").Append("</div><div class=\"n\">").Append(E(s.Note)).Append("</div></div>");
         sb.Append("</div>");
         if (d.Highlights.Count > 0)
         {
-            sb.Append("<h3>Auf einen Blick</h3><div class=\"stats\">");
+            sb.Append("<h3>" + E(L.T("Auf einen Blick")) + "</h3><div class=\"stats\">");
             foreach (var h in d.Highlights) Tile(sb, h);
             sb.Append("</div>");
         }
@@ -108,7 +109,7 @@ public static class HtmlReportRenderer
             sb.Append("</section>");
         }
         sb.Append("<footer><span>").Append(E($"{d.Title} · {d.Instance}")).Append("</span><span>")
-          .Append(E($"Erstellt am {ReportBuilder.DateTime(d.GeneratedAt)} von {d.GeneratedBy}")).Append("</span></footer>");
+          .Append(E(L.F("Erstellt am {0} von {1}", ReportBuilder.DateTime(d.GeneratedAt), d.GeneratedBy))).Append("</span></footer>");
         sb.Append("</main></body></html>");
         return sb.ToString();
     }

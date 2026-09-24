@@ -8,6 +8,7 @@ import { Page, PageHeader } from '@/components/shared/page-header'
 import { useCan } from '@/features/auth/auth'
 import { statusLabels } from '@/lib/labels'
 import { RunsTable } from './runs-table'
+import { t } from '@/i18n'
 
 export function Component() {
   const [params, setParams] = useSearchParams()
@@ -24,29 +25,29 @@ export function Component() {
     <Page wide>
       <PageHeader
         icon={<Activity />}
-        title="Läufe"
-        description="Alle Deploys, Audits und Überwachungen mit Status, Dauer und Protokoll."
-        actions={canEdit && <Button asChild><Link to="/deploy"><Rocket /> Neuer Deploy</Link></Button>}
+        title={t('runs.runs.runs')}
+        description={t('runs.runs.allDeploymentsAuditsAndMonitoring')}
+        actions={canEdit && <Button asChild><Link to="/deploy"><Rocket /> {t('runs.runs.newDeployment')}</Link></Button>}
       />
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Segmented<string>
-          aria-label="Art"
+          aria-label={t('runs.runs.type')}
           value={kind || 'all'}
           onValueChange={(v) => set('kind', v === 'all' ? '' : v)}
           options={[
-            { value: 'all', label: 'Alle' },
-            { value: 'Deploy', label: 'Deploys' },
-            { value: 'Audit', label: 'Audits' },
-            { value: 'Monitor', label: 'Überwachungen' },
+            { value: 'all', label: t('runs.runs.all') },
+            { value: 'Deploy', label: t('runs.runs.deployments') },
+            { value: 'Audit', label: t('runs.runs.audits') },
+            { value: 'Monitor', label: t('runs.runs.monitoringRuns') },
           ]}
         />
         <div className="w-52">
           <Select
-            aria-label="Status"
+            aria-label={t('common.status')}
             size="sm"
             value={status || 'all'}
             onValueChange={(v) => set('status', v === 'all' ? '' : v)}
-            options={[{ value: 'all', label: 'Alle Status' }, ...Object.entries(statusLabels).map(([value, label]) => ({ value, label }))]}
+            options={[{ value: 'all', label: t('runs.runs.allStatuses') }, ...Object.entries(statusLabels).map(([value, label]) => ({ value, label }))]}
           />
         </div>
       </div>

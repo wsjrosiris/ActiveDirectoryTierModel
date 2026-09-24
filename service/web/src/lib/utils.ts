@@ -1,36 +1,50 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { currentLocale, t } from '../i18n/index.ts'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-const dtf = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
-const dtfShort = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-const tf = new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-const rtf = new Intl.RelativeTimeFormat('de-DE', { numeric: 'auto' })
-const nf = new Intl.NumberFormat('de-DE')
+// Intl formatters for the active UI language (de-DE, or en-GB for English: 24-hour clock, day before month).
+// Created lazily and cached per locale, so a language change needs no reload of this module.
+const formatters = new Map<string, ReturnType<typeof createFormatters>>()
+function createFormatters(locale: string) {
+  return {
+    dtf: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }),
+    dtfShort: new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+    tf: new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    rtf: new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }),
+    nf: new Intl.NumberFormat(locale),
+  }
+}
+function fmt() {
+  const locale = currentLocale()
+  let f = formatters.get(locale)
+  if (!f) formatters.set(locale, (f = createFormatters(locale)))
+  return f
+}
 
 export function formatDateTime(v: string | null | undefined) {
   if (!v) return '–'
   const d = new Date(v)
-  return isNaN(d.getTime()) ? '–' : dtf.format(d)
+  return isNaN(d.getTime()) ? '–' : fmt().dtf.format(d)
 }
 
 export function formatDateShort(v: string | null | undefined) {
   if (!v) return '–'
   const d = new Date(v)
-  return isNaN(d.getTime()) ? '–' : dtfShort.format(d)
+  return isNaN(d.getTime()) ? '–' : fmt().dtfShort.format(d)
 }
 
 export function formatTime(v: string | null | undefined) {
   if (!v) return ''
   const d = new Date(v)
-  return isNaN(d.getTime()) ? '' : tf.format(d)
+  return isNaN(d.getTime()) ? '' : fmt().tf.format(d)
 }
 
 export function formatNumber(n: number | null | undefined) {
-  return n === null || n === undefined ? '–' : nf.format(n)
+  return n === null || n === undefined ? '–' : fmt().nf.format(n)
 }
 
 export function formatRelative(v: string | null | undefined, now = Date.now()) {
@@ -39,7 +53,8 @@ export function formatRelative(v: string | null | undefined, now = Date.now()) {
   if (isNaN(d)) return '–'
   const diff = (d - now) / 1000
   const abs = Math.abs(diff)
-  if (abs < 45) return 'gerade eben'
+  const { rtf, dtf } = fmt()
+  if (abs < 45) return t('lib.utils.justNow')
   if (abs < 3600) return rtf.format(Math.round(diff / 60), 'minute')
   if (abs < 86400) return rtf.format(Math.round(diff / 3600), 'hour')
   if (abs < 86400 * 30) return rtf.format(Math.round(diff / 86400), 'day')
@@ -60,10 +75,6 @@ export function formatDuration(start: string | null, end: string | null, now = D
   return `${sec} s`
 }
 
-export function pluralize(n: number, one: string, many: string) {
-  return `${nf.format(n)} ${n === 1 ? one : many}`
-}
-
 export function downloadUrl(url: string) {
   const a = document.createElement('a')
   a.href = url
@@ -74,7 +85,7 @@ export function downloadUrl(url: string) {
 }
 
 export const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
-export const modKey = isMac ? '⌘' : 'Strg'
+export const modKey = isMac ? '⌘' : t('lib.utils.ctrl')
 
 export function deepClone<T>(v: T): T {
   return v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T)

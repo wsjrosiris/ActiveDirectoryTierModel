@@ -1,3 +1,4 @@
+using TierModel.Service.Localization;
 namespace TierModel.Service.Reports;
 
 /// <summary>Report types of GET /api/reports/{type}.</summary>
@@ -11,9 +12,9 @@ public static class ReportTypes
 
     public static string Title(string type) => type switch
     {
-        SollIst => "Soll/Ist-Bericht",
-        Changes => "Änderungen im Zeitraum",
-        Privileged => "Privilegierte Zugriffe",
+        SollIst => L.T("Soll/Ist-Bericht"),
+        Changes => L.T("Änderungen im Zeitraum"),
+        Privileged => L.T("Privilegierte Zugriffe"),
         _ => type,
     };
 
@@ -63,4 +64,7 @@ public record ReportCell(string Text, Tone Tone = Tone.Default, string? Sub = nu
     public static implicit operator ReportCell(string text) => new(text);
 }
 
-public record ReportTable(List<ReportColumn> Columns, List<List<ReportCell>> Rows, string Empty = "Keine Einträge.", string? Note = null) : ReportBlock;
+public record ReportTable(List<ReportColumn> Columns, List<List<ReportCell>> Rows, string? Empty = null, string? Note = null) : ReportBlock
+{
+    public string Empty { get; init; } = Empty ?? L.T("Keine Einträge.");
+}

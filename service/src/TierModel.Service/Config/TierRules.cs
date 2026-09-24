@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Config;
 
@@ -62,7 +63,7 @@ public static partial class TierRules
         return i >= 0 ? principal[(i + 1)..] : principal;
     }
 
-    private static string TierLabel(int tier) => tier == Broad ? "eine breite Gruppe" : $"Tier {tier}";
+    private static string TierLabel(int tier) => tier == Broad ? L.T("eine breite Gruppe") : $"Tier {tier}";
 
     public static List<ValidationIssue> Check(IReadOnlyDictionary<string, JsonNode?> sections)
     {
@@ -102,7 +103,7 @@ public static partial class TierRules
                 if (TargetTier(target) is not { } targetTier || PrincipalTier(principal) is not { } principalTier) continue;
                 if (principalTier > targetTier)
                     issues.Add(new("Error", key,
-                        $"Tier-Verstoß: '{principal}' ({TierLabel(principalTier)}) erhält Schreibrechte auf eine Tier-{targetTier}-OU",
+                        L.F("Tier-Verstoß: '{0}' ({1}) erhält Schreibrechte auf eine Tier-{2}-OU", principal, TierLabel(principalTier), targetTier),
                         $"#{i} {principal} → {target}"));
             }
         }
@@ -117,8 +118,8 @@ public static partial class TierRules
                 var group = m?.ToString();
                 if (PrincipalTier(group) is not { } groupTier || groupTier == Broad || groupTier == userTier) continue;
                 issues.Add(groupTier < userTier
-                    ? new("Error", "users", $"Tier-Verstoß: Konto aus Tier {userTier} wird Mitglied der Tier-{groupTier}-Gruppe '{group}'", sam)
-                    : new("Warning", "users", $"Konto aus Tier {userTier} ist Mitglied der Tier-{groupTier}-Gruppe '{group}' – Konten sollten nur in ihrem eigenen Tier verwendet werden", sam));
+                    ? new("Error", "users", L.F("Tier-Verstoß: Konto aus Tier {0} wird Mitglied der Tier-{1}-Gruppe '{2}'", userTier, groupTier, group), sam)
+                    : new("Warning", "users", L.F("Konto aus Tier {0} ist Mitglied der Tier-{1}-Gruppe '{2}' – Konten sollten nur in ihrem eigenen Tier verwendet werden", userTier, groupTier, group), sam));
             }
         }
 
@@ -130,7 +131,7 @@ public static partial class TierRules
             foreach (var field in new[] { "readGroup", "resetGroup", "decryptorGroup" })
                 if (PrincipalTier(Str(w, field)) is { } groupTier && groupTier > ouTier)
                     issues.Add(new("Error", "winlaps",
-                        $"Tier-Verstoß: {FieldLabel(field)} '{Str(w, field)}' ({TierLabel(groupTier)}) für eine Tier-{ouTier}-OU", dn));
+                        L.F("Tier-Verstoß: {0} '{1}' ({2}) für eine Tier-{3}-OU", FieldLabel(field), Str(w, field), TierLabel(groupTier), ouTier), dn));
         }
 
         // GPOs of one tier linked to an OU of another tier are almost always a mistake.
@@ -144,7 +145,7 @@ public static partial class TierRules
                     foreach (var gpo in (list as JsonArray ?? []).OfType<JsonObject>())
                         if (TierOf(Str(gpo, "name")) is { } gpoTier && gpoTier != targetTier)
                             issues.Add(new("Warning", "gpos",
-                                $"GPO '{Str(gpo, "name")}' (Tier {gpoTier}) ist mit einer Tier-{targetTier}-OU verknüpft", target));
+                                L.F("GPO '{0}' (Tier {1}) ist mit einer Tier-{2}-OU verknüpft", Str(gpo, "name"), gpoTier, targetTier), target));
             }
 
         CheckAuthSilos(sections, issues, PrincipalTier);
@@ -172,10 +173,10 @@ public static partial class TierRules
             foreach (var g in groups)
                 if (principalTier(g) is { } groupTier && groupTier != Broad && groupTier != tier)
                     issues.Add(groupTier > tier
-                        ? new("Error", key, $"Tier-Verstoß: Tier-{tier}-Richtlinie erlaubt die Anmeldung von Tier-{groupTier}-Geräten ('{g}')", name)
-                        : new("Warning", key, $"Tier-{tier}-Richtlinie erlaubt die Anmeldung von Tier-{groupTier}-Geräten ('{g}') – Geräte sollten zum eigenen Tier gehören", name));
+                        ? new("Error", key, L.F("Tier-Verstoß: Tier-{0}-Richtlinie erlaubt die Anmeldung von Tier-{1}-Geräten ('{2}')", tier, groupTier, g), name)
+                        : new("Warning", key, L.F("Tier-{0}-Richtlinie erlaubt die Anmeldung von Tier-{1}-Geräten ('{2}') – Geräte sollten zum eigenen Tier gehören", tier, groupTier, g), name));
                 else if (principalTier(g) == Broad)
-                    issues.Add(new("Error", key, $"Tier-Verstoß: Richtlinie erlaubt die Anmeldung von allen Geräten der breiten Gruppe '{g}'", name));
+                    issues.Add(new("Error", key, L.F("Tier-Verstoß: Richtlinie erlaubt die Anmeldung von allen Geräten der breiten Gruppe '{0}'", g), name));
         }
 
         foreach (var s in Items(sections, key, "authenticationPolicySilos"))
@@ -187,15 +188,15 @@ public static partial class TierRules
                 if (Str(s, field) is not { Length: > 0 } policy || !policyGroups.TryGetValue(policy, out var groups)) continue;
                 foreach (var g in groups)
                     if (principalTier(g) is { } groupTier && groupTier > tier)
-                        issues.Add(new("Error", key, $"Tier-Verstoß: Tier-{tier}-Silo erlaubt über '{policy}' die Anmeldung von Tier-{groupTier}-Geräten ('{g}')", name));
+                        issues.Add(new("Error", key, L.F("Tier-Verstoß: Tier-{0}-Silo erlaubt über '{1}' die Anmeldung von Tier-{2}-Geräten ('{3}')", tier, policy, groupTier, g), name));
             }
             var members = s["members"] as JsonObject;
             foreach (var g in StrList(members, "computerGroups"))
                 if (principalTier(g) is { } groupTier && groupTier > tier)
-                    issues.Add(new("Error", key, $"Tier-Verstoß: Computer der Tier-{groupTier}-Gruppe '{g}' werden in ein Tier-{tier}-Silo aufgenommen", name));
+                    issues.Add(new("Error", key, L.F("Tier-Verstoß: Computer der Tier-{0}-Gruppe '{1}' werden in ein Tier-{2}-Silo aufgenommen", groupTier, g, tier), name));
             foreach (var ou in StrList(members, "userOUs").Concat(StrList(members, "computerOUs")))
                 if (TargetTier(ou) is { } ouTier && ouTier > tier)
-                    issues.Add(new("Error", key, $"Tier-Verstoß: Konten aus einer Tier-{ouTier}-OU werden in ein Tier-{tier}-Silo aufgenommen", name));
+                    issues.Add(new("Error", key, L.F("Tier-Verstoß: Konten aus einer Tier-{0}-OU werden in ein Tier-{1}-Silo aufgenommen", ouTier, tier), name));
         }
 
         foreach (var d in Items(sections, key, "deviceGroupSync"))
@@ -204,7 +205,7 @@ public static partial class TierRules
             if (string.IsNullOrWhiteSpace(group) || (ExplicitTier(d) ?? principalTier(group)) is not { } groupTier || groupTier == Broad) continue;
             foreach (var ou in StrList(d, "sourceOUs"))
                 if (TargetTier(ou) is { } ouTier && ouTier > groupTier)
-                    issues.Add(new("Error", key, $"Tier-Verstoß: Computer aus einer Tier-{ouTier}-OU werden in die Tier-{groupTier}-Gerätegruppe '{group}' aufgenommen", group));
+                    issues.Add(new("Error", key, L.F("Tier-Verstoß: Computer aus einer Tier-{0}-OU werden in die Tier-{1}-Gerätegruppe '{2}' aufgenommen", ouTier, groupTier, group), group));
         }
     }
 
@@ -213,9 +214,9 @@ public static partial class TierRules
 
     private static string FieldLabel(string field) => field switch
     {
-        "readGroup" => "Lesegruppe",
-        "resetGroup" => "Zurücksetzen-Gruppe",
-        _ => "Entschlüsselungsgruppe",
+        "readGroup" => L.T("Lesegruppe"),
+        "resetGroup" => L.T("Zurücksetzen-Gruppe"),
+        _ => L.T("Entschlüsselungsgruppe"),
     };
 
     private static List<JsonObject> Items(IReadOnlyDictionary<string, JsonNode?> sections, string key, string prop) =>

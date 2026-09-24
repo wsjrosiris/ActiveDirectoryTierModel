@@ -1,3 +1,4 @@
+using TierModel.Service.Localization;
 namespace TierModel.Service.Domains;
 
 /// <summary>
@@ -27,14 +28,14 @@ public sealed class DomainMiddleware(RequestDelegate next)
             }
             if (found is null)
             {
-                await Results.Problem(title: "Unbekannte Domäne", detail: $"Eine Domäne mit dem Kurznamen „{key.Trim()}“ ist nicht eingerichtet.",
+                await Results.Problem(title: L.T("Unbekannte Domäne"), detail: L.F("Eine Domäne mit dem Kurznamen „{0}“ ist nicht eingerichtet.", key.Trim()),
                     statusCode: StatusCodes.Status400BadRequest).ExecuteAsync(ctx);
                 return;
             }
             var isDomainAdmin = ctx.Request.Path.StartsWithSegments("/api/domains") || ctx.Request.Path.StartsWithSegments("/api/auth");
             if (!found.Enabled && !HttpMethods.IsGet(ctx.Request.Method) && !HttpMethods.IsHead(ctx.Request.Method) && !isDomainAdmin)
             {
-                await Results.Problem(title: "Domäne deaktiviert", detail: $"Die Domäne „{found.DisplayName}“ ist deaktiviert und kann nur gelesen werden.",
+                await Results.Problem(title: L.T("Domäne deaktiviert"), detail: L.F("Die Domäne „{0}“ ist deaktiviert und kann nur gelesen werden.", found.DisplayName),
                     statusCode: StatusCodes.Status409Conflict).ExecuteAsync(ctx);
                 return;
             }

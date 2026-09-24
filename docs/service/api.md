@@ -3,6 +3,13 @@
 Base URL: `/api`. JSON in camelCase, Enums als Strings. Fehler kommen als
 RFC 7807 ProblemDetails (`{ title, detail, status, errors? }`).
 
+## Sprache
+
+Meldungen (Validierung, Fehler, Berichte) richten sich nach `Accept-Language` (`de`, `en`) oder `?lang=`; ohne Angabe
+Deutsch. `GET /api/auth/me` liefert `language` (`de`, `en` oder `null` = Browser-Standard),
+`PUT /api/auth/me/language` `{ language }` setzt sie. Einstellung `defaultLanguage` (Instanz) bestimmt die Sprache
+gespeicherter und versendeter Texte.
+
 ## Domäne wählen
 
 Domänengebundene Aufrufe (Konfiguration, Läufe, Zeitpläne, Überwachung, Compliance, AD-Ansicht, Einrichtung,

@@ -16,6 +16,7 @@ import {
   type TierIssue,
 } from '../../../lib/tier-rules.ts'
 import { addTarget, GPO_KINDS, gpoList, isLinked, kindLabels, targetTitle, type GpoKind } from '../gpo-model.ts'
+import { t } from '../../../i18n/index.ts'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Obj = Record<string, any>
@@ -54,7 +55,7 @@ export const usersOf = (c: Contents) => arr(c.users, 'users')
 export const aclsOf = (c: Contents) => arr(c.acls, 'aclDelegations')
 
 const lower = (s: unknown) => String(s ?? '').trim().toLowerCase()
-const shortDn = (dn: string) => (dn === DOMAIN ? 'Domänenstamm' : dn.replace(/,\{\{DOMAIN_DN\}\}$/, ''))
+const shortDn = (dn: string) => (dn === DOMAIN ? t('config.wizards.wizardModel.domainRoot') : dn.replace(/,\{\{DOMAIN_DN\}\}$/, ''))
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v))
 
 // ------------------------------------------------------------------ names & suggestions
@@ -117,27 +118,27 @@ const SAM_FORBIDDEN = /[\s"/\\[\]:;|=,+*?<>@]/
 
 export function groupSamError(sam: string, groups: Obj[]): string | null {
   const s = sam.trim()
-  if (!s) return 'sAMAccountName ist erforderlich.'
-  if (SAM_FORBIDDEN.test(s)) return 'Enthält unzulässige Zeichen (Leerzeichen, " / \\ [ ] : ; | = , + * ? < > @).'
-  if (s.length > 256) return 'Maximal 256 Zeichen.'
-  if (groups.some((g) => lower(g.samaccountname) === lower(s))) return 'Dieser sAMAccountName ist bereits vergeben.'
+  if (!s) return t('config.wizards.wizardModel.samaccountnameIsRequired')
+  if (SAM_FORBIDDEN.test(s)) return t('config.wizards.wizardModel.containsInvalidCharactersSpaces')
+  if (s.length > 256) return t('config.wizards.wizardModel.atMost256Characters')
+  if (groups.some((g) => lower(g.samaccountname) === lower(s))) return t('config.wizards.wizardModel.thisSamaccountnameIsAlreadyIn')
   return null
 }
 
 export function userSamError(sam: string, users: Obj[]): string | null {
   const s = sam.trim()
-  if (!s) return 'sAMAccountName ist erforderlich.'
-  if (SAM_FORBIDDEN.test(s)) return 'Enthält unzulässige Zeichen (Leerzeichen, " / \\ [ ] : ; | = , + * ? < > @).'
-  if (s.length > USER_SAM_MAX) return `Maximal ${USER_SAM_MAX} Zeichen.`
-  if (users.some((u) => lower(u.samAccountName) === lower(s))) return 'Dieser sAMAccountName ist bereits vergeben.'
+  if (!s) return t('config.wizards.wizardModel.samaccountnameIsRequired')
+  if (SAM_FORBIDDEN.test(s)) return t('config.wizards.wizardModel.containsInvalidCharactersSpaces')
+  if (s.length > USER_SAM_MAX) return t('config.wizards.wizardModel.atMostUserSamMax', { uSER_SAM_MAX: USER_SAM_MAX })
+  if (users.some((u) => lower(u.samAccountName) === lower(s))) return t('config.wizards.wizardModel.thisSamaccountnameIsAlreadyIn')
   return null
 }
 
 export function ouNameError(name: string): string | null {
   const n = name.trim()
-  if (!n) return 'Name ist erforderlich.'
-  if (/[,=+<>#;\\"]/.test(n)) return 'Name darf keine Sonderzeichen wie , = + < > # ; \\ " enthalten.'
-  if (n.length > 64) return 'Maximal 64 Zeichen.'
+  if (!n) return t('config.wizards.wizardModel.nameIsRequired')
+  if (/[,=+<>#;\\"]/.test(n)) return t('config.wizards.wizardModel.nameMustNotContainSpecial')
+  if (n.length > 64) return t('config.wizards.wizardModel.atMost64Characters')
   return null
 }
 
@@ -198,8 +199,8 @@ export interface RightsPreset {
 export const SERVER_RIGHTS_PRESETS: RightsPreset[] = [
   {
     id: 'full',
-    label: 'Vollzugriff auf Computerobjekte',
-    description: 'Computer und Unter-OUs anlegen, verwalten und löschen – wie Tier0Admins auf den Tier-0-Servern.',
+    label: t('config.wizards.wizardModel.fullControlOfComputerObjects'),
+    description: t('config.wizards.wizardModel.createManageAndDeleteComputers'),
     entries: [
       { objecttype: 'Computer', activedirectoryrights: ['GenericAll', 'CreateChild', 'DeleteChild'], activeDirectorysecurityinheritance: 'Descendents' },
       { objecttype: 'OrganizationalUnit', activedirectoryrights: ['GenericAll', 'CreateChild', 'DeleteChild'], activeDirectorysecurityinheritance: 'All' },
@@ -207,22 +208,22 @@ export const SERVER_RIGHTS_PRESETS: RightsPreset[] = [
   },
   {
     id: 'join',
-    label: 'Nur Domänenbeitritt',
-    description: 'Computerobjekte anlegen und löschen, z. B. beim Domänenbeitritt – keine weitere Verwaltung.',
+    label: t('config.wizards.wizardModel.domainJoinOnly'),
+    description: t('config.wizards.wizardModel.createAndDeleteComputerObjects'),
     entries: [{ objecttype: 'Computer', activedirectoryrights: ['CreateChild', 'DeleteChild'], activeDirectorysecurityinheritance: 'SelfAndChildren' }],
   },
 ]
 
 /** Single-entry presets for the delegation assistant. */
 export const DELEGATION_PRESETS: RightsPreset[] = [
-  { id: 'computer-full', label: 'Computerobjekte vollständig verwalten', description: 'Vollzugriff auf alle Computer unterhalb der OU.', entries: [{ objecttype: 'Computer', activedirectoryrights: ['GenericAll'], activeDirectorysecurityinheritance: 'Descendents' }] },
-  { id: 'computer-join', label: 'Computer anlegen und löschen (Domänenbeitritt)', description: 'Computerobjekte in der OU erstellen und entfernen.', entries: [{ objecttype: 'Computer', activedirectoryrights: ['CreateChild', 'DeleteChild'], activeDirectorysecurityinheritance: 'SelfAndChildren' }] },
-  { id: 'user-full', label: 'Benutzerkonten vollständig verwalten', description: 'Vollzugriff auf alle Benutzer unterhalb der OU.', entries: [{ objecttype: 'User', activedirectoryrights: ['GenericAll'], activeDirectorysecurityinheritance: 'Descendents' }] },
-  { id: 'user-create', label: 'Benutzer anlegen und löschen', description: 'Benutzerobjekte in der OU erstellen und entfernen.', entries: [{ objecttype: 'User', activedirectoryrights: ['CreateChild', 'DeleteChild'], activeDirectorysecurityinheritance: 'SelfAndChildren' }] },
-  { id: 'password-reset', label: 'Kennwörter zurücksetzen', description: 'Erweitertes Recht „Kennwort zurücksetzen“ auf Nachfolgeobjekte.', entries: [{ objecttype: 'PasswordReset', activedirectoryrights: ['ExtendedRight'], activeDirectorysecurityinheritance: 'Descendents' }] },
-  { id: 'unlock', label: 'Konten entsperren', description: 'Sperrzeit (lockoutTime) lesen und schreiben.', entries: [{ objecttype: 'LockoutTime', activedirectoryrights: ['ReadProperty', 'WriteProperty'], activeDirectorysecurityinheritance: 'Descendents' }] },
-  { id: 'group-full', label: 'Gruppen vollständig verwalten', description: 'Vollzugriff auf alle Gruppen unterhalb der OU.', entries: [{ objecttype: 'Group', activedirectoryrights: ['GenericAll'], activeDirectorysecurityinheritance: 'Descendents' }] },
-  { id: 'ou-manage', label: 'Unter-OUs anlegen und löschen', description: 'Organisationseinheiten in der OU erstellen und entfernen.', entries: [{ objecttype: 'OrganizationalUnit', activedirectoryrights: ['CreateChild', 'DeleteChild'], activeDirectorysecurityinheritance: 'SelfAndChildren' }] },
+  { id: 'computer-full', label: t('config.wizards.wizardModel.fullyManageComputerObjects'), description: t('config.wizards.wizardModel.fullControlOfAllComputers'), entries: [{ objecttype: 'Computer', activedirectoryrights: ['GenericAll'], activeDirectorysecurityinheritance: 'Descendents' }] },
+  { id: 'computer-join', label: t('config.wizards.wizardModel.createAndDeleteComputersDomain'), description: t('config.wizards.wizardModel.createAndRemoveComputerObjects'), entries: [{ objecttype: 'Computer', activedirectoryrights: ['CreateChild', 'DeleteChild'], activeDirectorysecurityinheritance: 'SelfAndChildren' }] },
+  { id: 'user-full', label: t('config.wizards.wizardModel.fullyManageUserAccounts'), description: t('config.wizards.wizardModel.fullControlOfAllUsers'), entries: [{ objecttype: 'User', activedirectoryrights: ['GenericAll'], activeDirectorysecurityinheritance: 'Descendents' }] },
+  { id: 'user-create', label: t('config.wizards.wizardModel.createAndDeleteUsers'), description: t('config.wizards.wizardModel.createAndRemoveUserObjects'), entries: [{ objecttype: 'User', activedirectoryrights: ['CreateChild', 'DeleteChild'], activeDirectorysecurityinheritance: 'SelfAndChildren' }] },
+  { id: 'password-reset', label: t('config.wizards.wizardModel.resetPasswords'), description: t('config.wizards.wizardModel.extendedRightResetPasswordOn'), entries: [{ objecttype: 'PasswordReset', activedirectoryrights: ['ExtendedRight'], activeDirectorysecurityinheritance: 'Descendents' }] },
+  { id: 'unlock', label: t('config.wizards.wizardModel.unlockAccounts'), description: t('config.wizards.wizardModel.readAndWriteTheLockout'), entries: [{ objecttype: 'LockoutTime', activedirectoryrights: ['ReadProperty', 'WriteProperty'], activeDirectorysecurityinheritance: 'Descendents' }] },
+  { id: 'group-full', label: t('config.wizards.wizardModel.fullyManageGroups'), description: t('config.wizards.wizardModel.fullControlOfAllGroups'), entries: [{ objecttype: 'Group', activedirectoryrights: ['GenericAll'], activeDirectorysecurityinheritance: 'Descendents' }] },
+  { id: 'ou-manage', label: t('config.wizards.wizardModel.createAndDeleteSubOus'), description: t('config.wizards.wizardModel.createAndRemoveOrganizationalUnits'), entries: [{ objecttype: 'OrganizationalUnit', activedirectoryrights: ['CreateChild', 'DeleteChild'], activeDirectorysecurityinheritance: 'SelfAndChildren' }] },
 ]
 
 export const CUSTOM_PRESET = 'custom'
@@ -235,24 +236,24 @@ export function matchPreset(v: AclTemplate): string {
 }
 
 export const INHERITANCE_LABELS: Record<string, string> = {
-  None: 'Nur diese OU',
-  All: 'Diese OU und alle Nachfolger',
-  Descendents: 'Nur Nachfolger',
-  SelfAndChildren: 'Diese OU und direkte Kinder',
-  Children: 'Nur direkte Kinder',
+  None: t('config.wizards.wizardModel.thisOuOnly'),
+  All: t('config.wizards.wizardModel.thisOuAndAllDescendants'),
+  Descendents: t('config.wizards.wizardModel.descendantsOnly'),
+  SelfAndChildren: t('config.wizards.wizardModel.thisOuAndDirectChildren'),
+  Children: t('config.wizards.wizardModel.directChildrenOnly'),
 }
 
 export const OBJECT_TYPE_LABELS: Record<string, string> = {
-  Computer: 'Computerobjekte',
-  User: 'Benutzerobjekte',
-  Group: 'Gruppenobjekte',
-  OrganizationalUnit: 'Organisationseinheiten',
-  Contact: 'Kontakte',
-  AllObjectClasses: 'alle Objektklassen',
-  PasswordReset: 'Kennwort zurücksetzen',
+  Computer: t('config.wizards.wizardModel.computerObjects'),
+  User: t('config.wizards.wizardModel.userObjects'),
+  Group: t('config.wizards.wizardModel.groupObjects'),
+  OrganizationalUnit: t('config.wizards.wizardModel.organizationalUnits'),
+  Contact: t('config.wizards.wizardModel.contacts'),
+  AllObjectClasses: t('config.wizards.wizardModel.allObjectClasses'),
+  PasswordReset: t('config.wizards.wizardModel.resetPassword'),
 }
 
-export const objectTypeText = (tx: string | undefined) => (tx ? (OBJECT_TYPE_LABELS[tx] ?? tx) : 'alle Objekte')
+export const objectTypeText = (tx: string | undefined) => (tx ? (OBJECT_TYPE_LABELS[tx] ?? tx) : t('config.wizards.wizardModel.allObjects'))
 
 /** One ACL delegation in the key order of tiermodel-acls.json. */
 export function buildAcl(opts: {
@@ -278,10 +279,10 @@ export function buildAcl(opts: {
 }
 
 export function aclSentence(a: Obj): string {
-  const verb = a.accesscontroltype === 'Deny' ? 'wird verweigert' : 'erhält'
+  const verb = a.accesscontroltype === 'Deny' ? t('config.wizards.wizardModel.isDenied') : t('config.wizards.wizardModel.gets')
   const rights = (a.activedirectoryrights as string[]).join(', ')
   const inh = INHERITANCE_LABELS[a.activeDirectorysecurityinheritance] ?? a.activeDirectorysecurityinheritance
-  return `„${a.identityreference}“ ${verb} ${rights} auf ${objectTypeText(a.objecttype)} in „${shortDn(a.targetOUPath)}“ (Vererbung: ${inh}).`
+  return t('config.wizards.wizardModel.identityreferenceVerbRightsOnValue', { identityreference: a.identityreference, verb, rights, value: objectTypeText(a.objecttype), value2: shortDn(a.targetOUPath), inh })
 }
 
 const sameAcl = (a: Obj, b: Obj) =>
@@ -414,39 +415,39 @@ export function buildServerAreaPlan(contents: Contents, input: ServerAreaInput):
 
   // ---- consistency
   const nameErr = ouNameError(name)
-  if (nameErr) issues.push({ severity: 'Error', message: `OU-Name: ${nameErr}` })
+  if (nameErr) issues.push({ severity: 'Error', message: t('config.wizards.wizardModel.ouNameNameerr', { nameErr }) })
   const parentFull = lower(toFullDn(input.parentPath || DOMAIN))
   if (input.parentPath && input.parentPath !== DOMAIN && !ous.some((o) => lower(ouFullDn(o)) === parentFull))
-    issues.push({ severity: 'Error', message: `Die übergeordnete OU „${shortDn(toFullDn(input.parentPath))}“ existiert nicht in der Konfiguration.` })
-  if (ous.some((o) => lower(ouFullDn(o)) === lower(dn))) issues.push({ severity: 'Error', message: `Die OU „${shortDn(dn)}“ existiert bereits.` })
+    issues.push({ severity: 'Error', message: t('config.wizards.wizardModel.theParentOuValueDoes', { value: shortDn(toFullDn(input.parentPath)) }) })
+  if (ous.some((o) => lower(ouFullDn(o)) === lower(dn))) issues.push({ severity: 'Error', message: t('config.wizards.wizardModel.theOuValueAlreadyExists', { value: shortDn(dn) }) })
   const ouTier = numericTier(dn)
   if (name && ouTier !== tx)
     issues.push({
       severity: 'Error',
-      message: `Die neue OU „${shortDn(dn)}“ gehört ${ouTier === null ? 'zu keinem Tier' : `zu Tier ${ouTier}`}, gewählt ist aber Tier ${tx}. Wählen Sie eine übergeordnete OU aus Tier ${tx}.`,
+      message: t('config.wizards.wizardModel.theNewOuValueBelongs', { value: shortDn(dn), value2: ouTier === null ? t('config.wizards.wizardModel.toNoTier') : t('config.wizards.wizardModel.toTier', { tier: ouTier }), tx }),
     })
   if (tx === 0)
     issues.push({
       severity: 'Warning',
-      message: 'Tier 0 ist die höchste Schutzstufe: Server hier können die gesamte Domäne kontrollieren. Nur Systeme wie PKI, ADFS oder Identitätssynchronisation gehören in Tier 0.',
+      message: t('config.wizards.wizardModel.tier0IsTheHighest'),
     })
   const samErr = groupSamError(input.groupSam, groups)
-  if (samErr) issues.push({ severity: 'Error', message: `Admin-Gruppe: ${samErr}` })
-  if (!input.groupName.trim()) issues.push({ severity: 'Error', message: 'Admin-Gruppe: Name ist erforderlich.' })
-  if (!input.groupOu.trim()) issues.push({ severity: 'Error', message: 'Admin-Gruppe: Ziel-OU ist erforderlich.' })
+  if (samErr) issues.push({ severity: 'Error', message: t('config.wizards.wizardModel.adminGroupSamerr', { samErr }) })
+  if (!input.groupName.trim()) issues.push({ severity: 'Error', message: t('config.wizards.wizardModel.adminGroupNameIsRequired') })
+  if (!input.groupOu.trim()) issues.push({ severity: 'Error', message: t('config.wizards.wizardModel.adminGroupTargetOuIs') })
   else {
     const gt = numericTier(input.groupOu)
-    if (gt !== tx) issues.push({ severity: 'Warning', message: `Die Admin-Gruppe wird in „${shortDn(input.groupOu)}“ angelegt – ${gt === null ? 'keinem Tier zugeordnet' : `Tier ${gt}`}, nicht Tier ${tx}.` })
+    if (gt !== tx) issues.push({ severity: 'Warning', message: t('config.wizards.wizardModel.theAdminGroupIsCreated', { value: shortDn(input.groupOu), value2: gt === null ? t('config.wizards.wizardModel.notAssignedToATier') : t('config.wizards.wizardModel.tierP', { p: gt }), tx }) })
   }
 
   // ---- ous
   const newOus: OuItem[] = [
     { name, path: input.parentPath || DOMAIN, protectFromAccidentalDeletion: true, disableInheritance: false, blockGpoInheritance: input.gpoNames.length > 0, comment: `Tier ${tx}: ${name} server objects` },
   ]
-  sentences.push({ section: 'ous', text: `OU „${name}“ wird unter „${shortDn(toFullDn(input.parentPath || DOMAIN))}“ angelegt (Tier ${tx}${input.gpoNames.length ? ', GPO-Vererbung blockiert' : ''}).` })
+  sentences.push({ section: 'ous', text: t('config.wizards.wizardModel.ouNameIsCreatedUnder', { name, value: shortDn(toFullDn(input.parentPath || DOMAIN)), tx, value2: input.gpoNames.length ? t('config.wizards.wizardModel.gpoInheritanceBlockedSuffix') : '' }) })
   if (input.staging) {
     newOus.push({ name: stagingName(name), path: rel, protectFromAccidentalDeletion: true, disableInheritance: false, blockGpoInheritance: true, comment: `Tier ${tx}: ${name} staging server objects` })
-    sentences.push({ section: 'ous', text: `Staging-OU „${stagingName(name)}“ wird unter „${name}“ angelegt (GPO-Vererbung blockiert).` })
+    sentences.push({ section: 'ous', text: t('config.wizards.wizardModel.stagingOuValueIsCreated', { value: stagingName(name), name }) })
   }
   updated.ous = { ...(contents.ous ?? {}), organizationUnits: [...ous, ...newOus] }
 
@@ -461,7 +462,7 @@ export function buildServerAreaPlan(contents: Contents, input: ServerAreaInput):
     comment: `Created by the server area assistant for OU=${name}`,
   }
   updated.groups = { ...(contents.groups ?? {}), groups: [...groups, group] }
-  sentences.push({ section: 'groups', text: `Gruppe „${group.name}“ (${group.samaccountname}) wird in „${shortDn(input.groupOu)}“ angelegt – global, Sicherheit.` })
+  sentences.push({ section: 'groups', text: t('config.wizards.wizardModel.groupNameSamaccountnameIsCreated', { name: group.name, samaccountname: group.samaccountname, value: shortDn(input.groupOu) }) })
 
   // ---- acls
   const preset = SERVER_RIGHTS_PRESETS.find((p) => p.id === input.presetId) ?? SERVER_RIGHTS_PRESETS[0]
@@ -476,12 +477,12 @@ export function buildServerAreaPlan(contents: Contents, input: ServerAreaInput):
     const sources = gpoSources(contents.gpos, tx, input.parentPath)
     const { target, links } = buildGpoTarget(input.gpoNames, sources, input.gpoSourceKey)
     const map = (contents.gpos?.gpos ?? {}) as Obj
-    if (Object.keys(map).some((k) => lower(k) === lower(dn))) issues.push({ severity: 'Error', message: `Für „${shortDn(dn)}“ gibt es bereits GPO-Verknüpfungen.` })
+    if (Object.keys(map).some((k) => lower(k) === lower(dn))) issues.push({ severity: 'Error', message: t('config.wizards.wizardModel.gpoLinksAlreadyExistFor', { value: shortDn(dn) }) })
     const missing = input.gpoNames.filter((n) => !links.some((l) => lower(l.name) === lower(n)))
-    if (missing.length) issues.push({ severity: 'Error', message: `Unbekannte GPO: ${missing.map((m) => `„${m}“`).join(', ')}.` })
+    if (missing.length) issues.push({ severity: 'Error', message: t('config.wizards.wizardModel.unknownGpoJoin', { join: missing.map((m) => t('common.quoted', { text: m })).join(', ') }) })
     updated.gpos = addTarget(contents.gpos ?? { gpos: {} }, dn, target)
     links.forEach((l) =>
-      sentences.push({ section: 'gpos', text: `GPO „${l.name}“ wird mit „${name}“ verknüpft (Reihenfolge ${l.linkOrder}, ${kindLabels[l.kind]}, Link ${l.linkEnabled ? 'aktiv' : 'deaktiviert'}).` }),
+      sentences.push({ section: 'gpos', text: t('config.wizards.wizardModel.gpoNameIsLinkedTo', { name: l.name, name2: name, linkOrder: l.linkOrder, value: kindLabels[l.kind], value2: l.linkEnabled ? t('config.wizards.wizardModel.linkActive') : t('config.wizards.wizardModel.linkDisabled') }) }),
     )
     for (const l of links) issues.push(...gpoLinkTierIssues(l.name, dn))
   }
@@ -525,27 +526,27 @@ export function buildAdminAccountPlan(contents: Contents, input: AdminAccountInp
   const issues: TierIssue[] = []
   const user = buildAdminUser(input)
   const samErr = userSamError(user.samAccountName, users)
-  if (samErr) issues.push({ severity: 'Error', message: `sAMAccountName: ${samErr}` })
-  if (!input.ouPath.trim()) issues.push({ severity: 'Error', message: 'Ziel-OU ist erforderlich.' })
+  if (samErr) issues.push({ severity: 'Error', message: t('config.wizards.wizardModel.samaccountnameSamerr', { samErr }) })
+  if (!input.ouPath.trim()) issues.push({ severity: 'Error', message: t('config.wizards.wizardModel.targetOuIsRequired') })
   else {
     const ot = numericTier(input.ouPath)
     if (ot !== input.tier)
-      issues.push({ severity: 'Error', message: `Die Ziel-OU „${shortDn(input.ouPath)}“ gehört ${ot === null ? 'zu keinem Tier' : `zu Tier ${ot}`} – Konten für Tier ${input.tier} gehören in eine Tier-${input.tier}-OU.` })
+      issues.push({ severity: 'Error', message: t('config.wizards.wizardModel.theTargetOuValueBelongs', { value: shortDn(input.ouPath), value2: ot === null ? t('config.wizards.wizardModel.toNoTier') : t('config.wizards.wizardModel.toTier', { tier: ot }), tier: input.tier }) })
     else if (!ousOf(contents).some((o) => lower(ouFullDn(o)) === lower(input.ouPath)))
-      issues.push({ severity: 'Warning', message: `Die Ziel-OU „${shortDn(input.ouPath)}“ ist nicht in der Konfiguration enthalten.` })
+      issues.push({ severity: 'Warning', message: t('config.wizards.wizardModel.theTargetOuValueIs', { value: shortDn(input.ouPath) }) })
   }
   const prefix = tierPrefix(input.tier)
   if (user.samAccountName && !user.samAccountName.toLowerCase().startsWith(prefix))
-    issues.push({ severity: 'Warning', message: `Namenskonvention: Admin-Konten für Tier ${input.tier} beginnen üblicherweise mit „${prefix}“.` })
+    issues.push({ severity: 'Warning', message: t('config.wizards.wizardModel.namingConventionAdminAccountsFor', { tier: input.tier, prefix }) })
   if (!input.protectedUsers && input.tier < 2)
-    issues.push({ severity: 'Warning', message: `Tier-${input.tier}-Admin-Konten sollten Mitglied von „Protected Users“ sein (kein NTLM, keine Delegierung, kurze Kerberos-Tickets).` })
+    issues.push({ severity: 'Warning', message: t('config.wizards.wizardModel.tierTierAdminAccountsShould', { tier: input.tier }) })
   issues.push(...userTierIssues(user, buildGroupTierMap(groupsOf(contents))))
 
   const sentences: ChangeSentence[] = [
-    { section: 'users', text: `Konto „${user.samAccountName}“ (${user.displayName}) wird in „${shortDn(user.ouPath)}“ angelegt – ${user.enabled ? 'aktiviert' : 'deaktiviert'}.` },
+    { section: 'users', text: t('config.wizards.wizardModel.accountSamaccountnameDisplaynameIsCreated', { samAccountName: user.samAccountName, displayName: user.displayName, value: shortDn(user.ouPath), value2: user.enabled ? t('config.wizards.wizardModel.accountEnabled') : t('config.wizards.wizardModel.accountDisabled') }) },
   ]
-  if (user.memberOf.length) sentences.push({ section: 'users', text: `„${user.samAccountName}“ wird Mitglied von ${user.memberOf.map((g: string) => `„${g}“`).join(', ')}.` })
-  else sentences.push({ section: 'users', text: `„${user.samAccountName}“ erhält keine Gruppenmitgliedschaften.` })
+  if (user.memberOf.length) sentences.push({ section: 'users', text: t('config.wizards.wizardModel.samaccountnameBecomesAMemberOf', { samAccountName: user.samAccountName, join: user.memberOf.map((g: string) => t('common.quoted', { text: g })).join(', ') }) })
+  else sentences.push({ section: 'users', text: t('config.wizards.wizardModel.samaccountnameGetsNoGroupMemberships', { samAccountName: user.samAccountName }) })
   return {
     updated: { users: { ...(contents.users ?? {}), users: [...users, user] } },
     sentences,
@@ -583,15 +584,15 @@ export function buildDelegationAcl(input: DelegationInput): Obj {
 
 export function delegationIssues(contents: Contents, input: DelegationInput): TierIssue[] {
   const issues: TierIssue[] = []
-  if (!input.principal.trim()) issues.push({ severity: 'Error', message: 'Wer: Ein Prinzipal ist erforderlich.' })
-  if (!input.rights.length) issues.push({ severity: 'Error', message: 'Was: Mindestens ein Recht auswählen.' })
-  if (!input.target.trim()) issues.push({ severity: 'Error', message: 'Wo: Eine Ziel-OU ist erforderlich.' })
+  if (!input.principal.trim()) issues.push({ severity: 'Error', message: t('config.wizards.wizardModel.whoAPrincipalIsRequired') })
+  if (!input.rights.length) issues.push({ severity: 'Error', message: t('config.wizards.wizardModel.whatSelectAtLeastOne') })
+  if (!input.target.trim()) issues.push({ severity: 'Error', message: t('config.wizards.wizardModel.whereATargetOuIs') })
   if (issues.length) return issues
   const acl = buildDelegationAcl(input)
-  if (aclsOf(contents).some((a) => sameAcl(a, acl))) issues.push({ severity: 'Error', message: 'Eine identische Delegation existiert bereits.' })
+  if (aclsOf(contents).some((a) => sameAcl(a, acl))) issues.push({ severity: 'Error', message: t('config.wizards.wizardModel.anIdenticalDelegationAlreadyExists') })
   issues.push(...aclTierIssues(acl, buildGroupTierMap(groupsOf(contents))))
   if (input.allow && input.rights.some((r) => lower(r) === 'genericall') && input.target === DOMAIN)
-    issues.push({ severity: 'Warning', message: 'Vollzugriff auf den Domänenstamm entspricht praktisch Domänen-Admin-Rechten.' })
+    issues.push({ severity: 'Warning', message: t('config.wizards.wizardModel.fullControlOfTheDomain') })
   return dedupe(issues)
 }
 
@@ -609,11 +610,11 @@ export function delegationTierExplanation(contents: Contents, principal: string,
   const p = principalTier(principal, buildGroupTierMap(groupsOf(contents)))
   const tx = target === DOMAIN || /^OU=Domain Controllers,/i.test(target) ? 0 : numericTier(target)
   if (!principal.trim() || !target.trim()) return null
-  const pt = p === null ? 'keinem Tier zugeordnet' : p === BROAD ? 'eine breite Gruppe (unterhalb aller Tiers)' : `Tier ${p}`
-  const tt = tx === null ? 'keinem Tier zugeordnet' : `Tier ${tx}`
-  if (p === null || tx === null) return `Prinzipal: ${pt}, Ziel-OU: ${tt}. Ohne eindeutiges Tier ist keine automatische Prüfung möglich – prüfen Sie die Zuordnung selbst.`
-  if (p <= tx) return `Prinzipal: ${pt}, Ziel-OU: ${tt}. Zulässig – Kontrolle fließt nur vom gleichen oder einem höheren Tier nach unten.`
-  return `Prinzipal: ${pt}, Ziel-OU: ${tt}. Schreibrechte würden einem weniger geschützten Tier die Kontrolle über ein höheres geben. Nur Leserechte oder Verweigern sind hier zulässig.`
+  const pt = p === null ? t('config.wizards.wizardModel.notAssignedToATier') : p === BROAD ? t('config.wizards.wizardModel.aBroadGroupBelowAll') : t('config.wizards.wizardModel.tierP', { p })
+  const tt = tx === null ? t('config.wizards.wizardModel.notAssignedToATier') : t('config.wizards.wizardModel.tierTx', { tx })
+  if (p === null || tx === null) return t('config.wizards.wizardModel.principalPtTargetOuTt', { pt, tt })
+  if (p <= tx) return t('config.wizards.wizardModel.principalPtTargetOuTt2', { pt, tt })
+  return t('config.wizards.wizardModel.principalPtTargetOuTt3', { pt, tt })
 }
 
 function dedupe(issues: TierIssue[]): TierIssue[] {

@@ -209,7 +209,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
               </Command.Group>
             ))}
         </Command.List>
-        <Footer hint={search ? t('layout.commandMenu.lengthObjectsSearched', { length: entries.length }) : t('layout.commandMenu.tipStartTypingToSearch')} />
+        <Footer hint={search ? t('layout.commandMenu.lengthObjectsSearched', { length: entries.length, count: entries.length }) : t('layout.commandMenu.tipStartTypingToSearch')} />
       </Command>
     </Shell>
   )

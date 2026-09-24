@@ -10,8 +10,8 @@ export const MAX_DURATIONS = [15, 30, 60, 120, 240, 480, 720, 1440]
 
 /** "15 Minuten", "1 Stunde", "8 Stunden". */
 export function formatMinutes(minutes: number): string {
-  if (minutes % 60 === 0) return minutes === 60 ? t('jit.jitModel.n1Hour') : t('jit.jitModel.valueHours', { value: minutes / 60 })
-  return t('jit.jitModel.minutesMinutes', { minutes })
+  if (minutes % 60 === 0) return minutes === 60 ? t('jit.jitModel.n1Hour') : t('jit.jitModel.valueHours', { value: minutes / 60, count: minutes / 60 })
+  return t('jit.jitModel.minutesMinutes', { minutes, count: minutes })
 }
 
 /** Durations up to the group's maximum; the maximum itself is always offered. */

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TierModel.Service.Config;
 using TierModel.Service.Data;
+using TierModel.Service.Localization;
 
 namespace TierModel.Service.Transfer;
 
@@ -37,7 +38,7 @@ public record ImportApplyResultDto(List<ImportAppliedSectionDto> Applied);
 
 public record ImportAppliedSectionDto(string Key, string Title, int FromVersion, int ToVersion);
 
-public class ImportPreviewNotFoundException(string message = "Die Vorschau ist abgelaufen oder existiert nicht. Bitte erneut laden.") : Exception(message);
+public class ImportPreviewNotFoundException(string? message = null) : Exception(message ?? L.T("Die Vorschau ist abgelaufen oder existiert nicht. Bitte erneut laden."));
 
 public class ImportConflictException(string message, List<string> keys) : Exception(message)
 {
@@ -109,8 +110,8 @@ public class ImportService(AppDbContext db, ConfigService config, IOptions<TierM
     public static (List<ReplacementRule> Rules, string? Error) NormalizeRules(IEnumerable<ReplacementRule>? rules)
     {
         var list = (rules ?? []).Where(r => !string.IsNullOrEmpty(r.Search)).Select(r => new ReplacementRule(r.Search, r.Replace ?? "")).ToList();
-        if (list.Count > MaxReplacements) return (list, $"Höchstens {MaxReplacements} Ersetzungen.");
-        if (list.Any(r => r.Search.Length > 500 || r.Replace.Length > 500)) return (list, "Suchen und Ersetzen: jeweils höchstens 500 Zeichen.");
+        if (list.Count > MaxReplacements) return (list, L.F("Höchstens {0} Ersetzungen.", MaxReplacements));
+        if (list.Any(r => r.Search.Length > 500 || r.Replace.Length > 500)) return (list, L.T("Suchen und Ersetzen: jeweils höchstens 500 Zeichen."));
         return (list, null);
     }
 
@@ -139,12 +140,12 @@ public class ImportService(AppDbContext db, ConfigService config, IOptions<TierM
             sections.Add(new(def.Key, status, hasCurrent ? cur.Version : null, sourceVersion, normalized, replaced, null));
         }
         foreach (var name in source.UnknownFiles)
-            sections.Add(new(name, ImportStatus.Unknown, null, null, null, 0, "Unbekannt – wird ignoriert."));
+            sections.Add(new(name, ImportStatus.Unknown, null, null, null, 0, L.T("Unbekannt – wird ignoriert.")));
 
         var notices = new List<string>(source.Notices);
         var missing = ConfigCatalog.Sections.Where(d => current.ContainsKey(d.Key) && sections.All(s => s.Key != d.Key)).Select(d => d.Title).ToList();
-        if (missing.Count > 0) notices.Add($"Nicht in der Quelle enthalten (bleiben unverändert): {string.Join(", ", missing)}");
-        if (rules.Count > 0 && sections.Sum(s => s.Replacements) == 0) notices.Add("Die Ersetzungen haben keinen Treffer.");
+        if (missing.Count > 0) notices.Add(L.F("Nicht in der Quelle enthalten (bleiben unverändert): {0}", string.Join(", ", missing)));
+        if (rules.Count > 0 && sections.Sum(s => s.Replacements) == 0) notices.Add(L.T("Die Ersetzungen haben keinen Treffer."));
 
         var preview = new StoredPreview(Guid.NewGuid(), source.Label, sourceKind, user, DateTimeOffset.UtcNow, rules, notices, sections, source, domain.Id);
         Directory.CreateDirectory(Dir);
@@ -194,20 +195,20 @@ public class ImportService(AppDbContext db, ConfigService config, IOptions<TierM
     {
         var p = await LoadAsync(id, ct);
         var comment = r.Comment?.Trim();
-        if (string.IsNullOrEmpty(comment)) throw new ArgumentException("Bitte einen Kommentar angeben.");
+        if (string.IsNullOrEmpty(comment)) throw new ArgumentException(L.T("Bitte einen Kommentar angeben."));
         var keys = (r.Keys ?? []).Select(k => ConfigCatalog.Find(k)?.Key ?? k).Distinct().ToList();
-        if (keys.Count == 0) throw new ArgumentException("Bitte mindestens einen Bereich auswählen.");
+        if (keys.Count == 0) throw new ArgumentException(L.T("Bitte mindestens einen Bereich auswählen."));
         var importable = Importable(p).ToDictionary(s => s.Key);
         var notImportable = keys.Where(k => !importable.ContainsKey(k)).ToList();
-        if (notImportable.Count > 0) throw new ArgumentException($"Nicht übernehmbar (unverändert, ungültig oder unbekannt): {string.Join(", ", notImportable)}");
+        if (notImportable.Count > 0) throw new ArgumentException(L.F("Nicht übernehmbar (unverändert, ungültig oder unbekannt): {0}", string.Join(", ", notImportable)));
 
         var current = await CurrentAsync(ct);
         var stale = keys.Where(k => (current.TryGetValue(k, out var c) ? c.Version : (int?)null) != importable[k].BaseVersion).ToList();
         if (stale.Count > 0)
             throw new ImportConflictException(
-                $"Seit der Vorschau geändert: {string.Join(", ", stale.Select(k => ConfigCatalog.Find(k)!.Title))}. Bitte die Vorschau neu laden.", stale);
+                L.F("Seit der Vorschau geändert: {0}. Bitte die Vorschau neu laden.", string.Join(", ", stale.Select(k => ConfigCatalog.Find(k)!.Title))), stale);
 
-        var fullComment = $"Import aus {p.Label}: {comment}";
+        var fullComment = L.PF("Import aus {0}: {1}", p.Label, comment);
         var applied = new List<ImportAppliedSectionDto>();
         foreach (var def in ConfigCatalog.Sections.Where(d => keys.Contains(d.Key)))
         {
@@ -222,8 +223,8 @@ public class ImportService(AppDbContext db, ConfigService config, IOptions<TierM
             }
             catch (ConfigConflictException)
             {
-                var done = applied.Count == 0 ? "" : $" Bereits übernommen: {string.Join(", ", applied.Select(a => a.Title))}.";
-                throw new ImportConflictException($"„{def.Title}“ wurde gerade geändert.{done} Bitte die Vorschau neu laden.", [def.Key]);
+                var done = applied.Count == 0 ? "" : L.F(" Bereits übernommen: {0}.", string.Join(", ", applied.Select(a => a.Title)));
+                throw new ImportConflictException(L.F("„{0}“ wurde gerade geändert.{1} Bitte die Vorschau neu laden.", def.Title, done), [def.Key]);
             }
         }
         TryDelete(PathOf(id));
@@ -262,7 +263,7 @@ public class ImportService(AppDbContext db, ConfigService config, IOptions<TierM
             ?? throw new ImportPreviewNotFoundException();
         if (preview.DomainId != domain.Id)
             throw new ImportPreviewNotFoundException(
-                $"Die Vorschau wurde für die Domäne „{domains.Find(preview.DomainId)?.DisplayName ?? "?"}“ erstellt. Bitte dorthin wechseln oder die Vorschau neu laden.");
+                L.F("Die Vorschau wurde für die Domäne „{0}“ erstellt. Bitte dorthin wechseln oder die Vorschau neu laden.", domains.Find(preview.DomainId)?.DisplayName ?? "?"));
         return preview;
     }
 

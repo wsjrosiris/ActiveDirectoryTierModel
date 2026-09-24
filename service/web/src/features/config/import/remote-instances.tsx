@@ -14,6 +14,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useCan } from '@/features/auth/auth'
 import { errorMessage } from '@/lib/query'
 import { cn, formatRelative } from '@/lib/utils'
+import { t } from '@/i18n'
 
 export const instancesQuery = { queryKey: ['config', 'remote-instances'], queryFn: transferApi.instances }
 
@@ -71,9 +72,9 @@ export function RemoteInstancePicker({
   })
   const remove = async (i: RemoteInstance) => {
     const ok = await confirm({
-      title: `Instanz „${i.name}“ entfernen?`,
-      description: 'Das gespeicherte API-Token wird gelöscht. Das Token selbst bleibt in der anderen Instanz gültig, bis es dort widerrufen wird.',
-      confirmText: 'Entfernen',
+      title: t('config.import.remoteInstances.removeInstanceName', { name: i.name }),
+      description: t('config.import.remoteInstances.theStoredApiTokenIs'),
+      confirmText: t('common.remove'),
       destructive: true,
     })
     if (!ok) return
@@ -81,9 +82,9 @@ export function RemoteInstancePicker({
       await transferApi.removeInstance(i.id)
       onChange('')
       await qc.invalidateQueries({ queryKey: instancesQuery.queryKey })
-      toast.success('Instanz entfernt')
+      toast.success(t('config.import.remoteInstances.instanceRemoved'))
     } catch (e) {
-      toast.error('Entfernen fehlgeschlagen', { description: errorMessage(e) })
+      toast.error(t('config.import.remoteInstances.removalFailed'), { description: errorMessage(e) })
     }
   }
 
@@ -92,28 +93,28 @@ export function RemoteInstancePicker({
       {instances.length === 0 && !q.isLoading ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center">
           <Server className="size-5 text-muted-foreground" />
-          <p className="text-sm font-medium">Noch keine Instanz hinterlegt</p>
+          <p className="text-sm font-medium">{t('config.import.remoteInstances.noInstanceStoredYet')}</p>
           <p className="max-w-sm text-[13px] text-muted-foreground">
             {isAdmin
-              ? 'Adresse der anderen TierModel-Instanz und ein API-Token (Rolle Betrachter genügt) hinterlegen.'
-              : 'Ein Administrator muss die andere Instanz zuerst hinterlegen.'}
+              ? t('config.import.remoteInstances.storeTheAddressOfThe')
+              : t('config.import.remoteInstances.anAdministratorMustStoreThe')}
           </p>
           {isAdmin && (
             <Button size="sm" variant="outline" className="mt-1" onClick={() => setEditing('new')}>
-              <Plus /> Instanz hinzufügen
+              <Plus /> {t('config.import.remoteInstances.addInstance')}
             </Button>
           )}
         </div>
       ) : (
         <>
-          <Field label="Instanz" htmlFor="imp-instance">
+          <Field label={t('config.import.remoteInstances.instance')} htmlFor="imp-instance">
             <div className="flex flex-wrap items-center gap-2">
               <div className="min-w-0 flex-1 basis-56">
                 <Select
                   id="imp-instance"
                   value={value}
                   onValueChange={onChange}
-                  placeholder={q.isLoading ? 'Wird geladen …' : 'Instanz wählen'}
+                  placeholder={q.isLoading ? t('config.import.remoteInstances.loading') : t('config.import.remoteInstances.selectInstance')}
                   options={instances.map((i) => ({ value: i.id, label: i.name, description: i.url }))}
                 />
               </div>
@@ -121,16 +122,16 @@ export function RemoteInstancePicker({
                 <div className="flex items-center gap-1">
                   {selected && (
                     <>
-                      <Button variant="ghost" size="icon-sm" aria-label="Instanz bearbeiten" onClick={() => setEditing(selected)}>
+                      <Button variant="ghost" size="icon-sm" aria-label={t('config.import.remoteInstances.editInstance')} onClick={() => setEditing(selected)}>
                         <Pencil />
                       </Button>
-                      <Button variant="ghost" size="icon-sm" aria-label="Instanz entfernen" onClick={() => remove(selected)}>
+                      <Button variant="ghost" size="icon-sm" aria-label={t('config.import.remoteInstances.removeInstance')} onClick={() => remove(selected)}>
                         <Trash2 />
                       </Button>
                     </>
                   )}
                   <Button variant="outline" size="sm" onClick={() => setEditing('new')}>
-                    <Plus /> Hinzufügen
+                    <Plus /> {t('common.add')}
                   </Button>
                 </div>
               )}
@@ -142,27 +143,27 @@ export function RemoteInstancePicker({
                 <div className="min-w-0">
                   <p className="truncate font-mono text-xs">{selected.url}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Token {selected.tokenHint} · angelegt von {selected.createdBy}
-                    {selected.lastCheckedAt && <> · zuletzt geprüft {formatRelative(selected.lastCheckedAt)}{selected.lastCheckOk === false && ' (fehlgeschlagen)'}</>}
+                    {t('config.import.remoteInstances.token')} {selected.tokenHint} {t('config.import.remoteInstances.createdBy')} {selected.createdBy}
+                    {selected.lastCheckedAt && <> {t('config.import.remoteInstances.lastChecked')} {formatRelative(selected.lastCheckedAt)}{selected.lastCheckOk === false && t('config.import.remoteInstances.failed')}</>}
                   </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => checkMutation.mutate(selected.id)} loading={checkMutation.isPending}>
-                  {!checkMutation.isPending && <PlugZap />} Verbindung prüfen
+                  {!checkMutation.isPending && <PlugZap />} {t('config.import.remoteInstances.testConnection')}
                 </Button>
               </div>
               {check && <CheckResult result={check} />}
               {onRemoteDomainChange && ((check?.domains?.length ?? 0) > 1 || remoteDomain) && (
-                <Field label="Domäne der Gegenstelle" htmlFor="imp-remote-domain" hint="Aus welcher Domäne der anderen Instanz die Konfiguration übernommen wird.">
+                <Field label={t('config.import.remoteInstances.domainOfTheRemoteInstance')} htmlFor="imp-remote-domain" hint={t('config.import.remoteInstances.theDomainOfTheOther')}>
                   <Combobox
                     id="imp-remote-domain"
                     value={remoteDomain}
                     onChange={onRemoteDomainChange}
                     options={[
-                      { value: '', label: 'Standard-Domäne der Gegenstelle' },
+                      { value: '', label: t('config.import.remoteInstances.defaultDomainOfTheRemote') },
                       ...(check?.domains ?? []).map((d) => ({ value: d.key, label: d.displayName, hint: d.dnsName || d.key })),
                     ]}
-                    placeholder="Standard-Domäne der Gegenstelle"
-                    searchPlaceholder="Domäne suchen …"
+                    placeholder={t('config.import.remoteInstances.defaultDomainOfTheRemote')}
+                    searchPlaceholder={t('config.import.remoteInstances.searchDomain')}
                     allowCustom={false}
                   />
                 </Field>
@@ -201,12 +202,12 @@ function InstanceDialog({ instance, onClose, onSaved }: { instance: RemoteInstan
         : transferApi.createInstance({ name: name.trim(), url: url.trim(), token: token.trim() }),
     onSuccess: async (i) => {
       await qc.invalidateQueries({ queryKey: instancesQuery.queryKey })
-      toast.success(instance ? 'Instanz gespeichert' : 'Instanz hinzugefügt')
+      toast.success(instance ? t('config.import.remoteInstances.instanceSaved') : t('config.import.remoteInstances.instanceAdded'))
       onSaved(i)
     },
     onError: (e) => {
       if (e instanceof ApiError && e.errors) setErrors(e.errors)
-      else toast.error('Speichern fehlgeschlagen', { description: errorMessage(e) })
+      else toast.error(t('config.import.remoteInstances.savingFailed'), { description: errorMessage(e) })
     },
   })
   const test = useMutation({
@@ -219,9 +220,9 @@ function InstanceDialog({ instance, onClose, onSaved }: { instance: RemoteInstan
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{instance ? 'Instanz bearbeiten' : 'Instanz hinzufügen'}</DialogTitle>
+          <DialogTitle>{instance ? t('config.import.remoteInstances.editInstance') : t('config.import.remoteInstances.addInstance')}</DialogTitle>
           <DialogDescription>
-            Eine andere TierModel-Instanz, aus der die Konfiguration übernommen werden kann – etwa die Testumgebung. Das API-Token wird verschlüsselt gespeichert.
+            {t('config.import.remoteInstances.anotherTiermodelInstanceFromWhich')}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -232,30 +233,30 @@ function InstanceDialog({ instance, onClose, onSaved }: { instance: RemoteInstan
             save.mutate()
           }}
         >
-          <Field label="Name" htmlFor="ri-name" required error={err('name')}>
-            <Input id="ri-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="z. B. Test" autoFocus />
+          <Field label={t('common.name')} htmlFor="ri-name" required error={err('name')}>
+            <Input id="ri-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('config.import.remoteInstances.eGTest')} autoFocus />
           </Field>
-          <Field label="Adresse" htmlFor="ri-url" required error={err('url')} hint="Basisadresse der Instanz, z. B. https://tiermodel-test.contoso.com">
+          <Field label={t('config.import.remoteInstances.address')} htmlFor="ri-url" required error={err('url')} hint={t('config.import.remoteInstances.baseAddressOfTheInstance')}>
             <Input id="ri-url" value={url} onChange={(e) => setUrl(e.target.value)} className="font-mono" inputMode="url" autoComplete="off" />
           </Field>
           <Field
-            label="API-Token"
+            label={t('config.import.remoteInstances.apiToken')}
             htmlFor="ri-token"
             required={!instance}
             error={err('token')}
-            hint={instance ? `Leer lassen, um das gespeicherte Token (${instance.tokenHint}) zu behalten.` : 'In der anderen Instanz unter „API-Tokens“ erzeugen (Rolle Betrachter genügt).'}
+            hint={instance ? t('config.import.remoteInstances.leaveEmptyToKeepThe', { tokenHint: instance.tokenHint }) : t('config.import.remoteInstances.createItInTheOther')}
           >
             <Input id="ri-token" type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="tmk_…" className="font-mono" autoComplete="off" />
           </Field>
           {check && <CheckResult result={check} />}
           <DialogFooter className="sm:justify-between">
             <Button type="button" variant="outline" onClick={() => test.mutate()} loading={test.isPending} disabled={!url.trim() || (!instance && !token.trim())}>
-              {!test.isPending && <PlugZap />} Verbindung prüfen
+              {!test.isPending && <PlugZap />} {t('config.import.remoteInstances.testConnection')}
             </Button>
             <div className="flex flex-col-reverse gap-2 sm:flex-row">
-              <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
+              <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
               <Button type="submit" loading={save.isPending} disabled={!name.trim() || !url.trim() || (!instance && !token.trim())}>
-                Speichern
+                {t('common.save')}
               </Button>
             </div>
           </DialogFooter>

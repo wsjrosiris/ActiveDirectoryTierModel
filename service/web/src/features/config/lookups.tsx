@@ -7,6 +7,7 @@ import { MultiCombobox } from '@/components/ui/multi-combobox'
 import { useGroupOptions } from './form-helpers'
 import { useSectionContent } from './draft-store'
 import { sectionQuery } from './queries'
+import { t } from '@/i18n'
 
 /* Suggestions for form fields, so values are picked instead of typed from memory. */
 
@@ -34,12 +35,12 @@ export function useDomainControllerOptions(): ComboOption[] {
   return React.useMemo(() => {
     const opts: ComboOption[] = (data?.items ?? []).map((dc) => ({
       value: dc.name,
-      hint: dc.site ? `Standort ${dc.site}` : 'Domänencontroller',
+      hint: dc.site ? t('config.lookups.siteSite', { site: dc.site }) : t('config.lookups.domainController'),
       icon: <Server className="size-4 text-muted-foreground" />,
     }))
     for (const r of data?.recent ?? [])
       if (!opts.some((o) => o.value.toLowerCase() === r.toLowerCase()))
-        opts.push({ value: r, hint: 'Zuletzt verwendet', icon: <Server className="size-4 text-muted-foreground" /> })
+        opts.push({ value: r, hint: t('config.lookups.lastUsed'), icon: <Server className="size-4 text-muted-foreground" /> })
     return opts
   }, [data])
 }
@@ -76,7 +77,7 @@ export function usePrincipalOptions(search: string, opts: { sidValues?: boolean;
       out.push({
         value,
         label: g.name,
-        hint: opts.sidValues ? g.sid : (g.description ?? g.distinguishedName ?? 'Active Directory'),
+        hint: opts.sidValues ? g.sid : (g.description ?? g.distinguishedName ?? t('config.lookups.activeDirectory')),
         icon: <Building2 className="size-4 text-sky-600" />,
       })
     }
@@ -91,7 +92,7 @@ type ComboProps = React.ComponentProps<typeof Combobox>
 export function PrincipalCombobox({ by, ...props }: Omit<ComboProps, 'options' | 'onSearchChange' | 'loading'> & { by?: 'samaccountname' | 'name' }) {
   const [search, setSearch] = React.useState('')
   const { options, loading } = usePrincipalOptions(search, { by })
-  return <Combobox {...props} options={options} onSearchChange={setSearch} loading={loading} searchPlaceholder={props.searchPlaceholder ?? 'Gruppe suchen (auch im AD) …'} />
+  return <Combobox {...props} options={options} onSearchChange={setSearch} loading={loading} searchPlaceholder={props.searchPlaceholder ?? t('config.lookups.searchGroupAlsoInAd')} />
 }
 
 type MultiProps = React.ComponentProps<typeof MultiCombobox>
@@ -108,24 +109,24 @@ export const principalIcon = <Users className="size-4 text-muted-foreground" />
 /* ---------------------------------------------------------------- ADML languages */
 
 export const COMMON_LANGUAGES: { code: string; name: string }[] = [
-  { code: 'en-US', name: 'Englisch (USA)' },
-  { code: 'de-DE', name: 'Deutsch (Deutschland)' },
-  { code: 'en-GB', name: 'Englisch (Vereinigtes Königreich)' },
-  { code: 'fr-FR', name: 'Französisch (Frankreich)' },
-  { code: 'es-ES', name: 'Spanisch (Spanien)' },
-  { code: 'it-IT', name: 'Italienisch (Italien)' },
-  { code: 'nl-NL', name: 'Niederländisch (Niederlande)' },
-  { code: 'pt-BR', name: 'Portugiesisch (Brasilien)' },
-  { code: 'pl-PL', name: 'Polnisch (Polen)' },
-  { code: 'sv-SE', name: 'Schwedisch (Schweden)' },
-  { code: 'ja-JP', name: 'Japanisch (Japan)' },
-  { code: 'zh-CN', name: 'Chinesisch (vereinfacht)' },
+  { code: 'en-US', name: t('config.lookups.englishUsa') },
+  { code: 'de-DE', name: t('config.lookups.germanGermany') },
+  { code: 'en-GB', name: t('config.lookups.englishUnitedKingdom') },
+  { code: 'fr-FR', name: t('config.lookups.frenchFrance') },
+  { code: 'es-ES', name: t('config.lookups.spanishSpain') },
+  { code: 'it-IT', name: t('config.lookups.italianItaly') },
+  { code: 'nl-NL', name: t('config.lookups.dutchNetherlands') },
+  { code: 'pt-BR', name: t('config.lookups.portugueseBrazil') },
+  { code: 'pl-PL', name: t('config.lookups.polishPoland') },
+  { code: 'sv-SE', name: t('config.lookups.swedishSweden') },
+  { code: 'ja-JP', name: t('config.lookups.japaneseJapan') },
+  { code: 'zh-CN', name: t('config.lookups.chineseSimplified') },
 ]
 
 export const LANGUAGE_RE = /^[a-z]{2,3}-[A-Z]{2,4}$/
 
 export function languageError(v: string): string | null {
-  return !v || LANGUAGE_RE.test(v) ? null : 'Format: Sprache-REGION, z. B. en-US oder de-DE'
+  return !v || LANGUAGE_RE.test(v) ? null : t('config.lookups.formatLanguageRegionEG')
 }
 
 /** ADML languages: those present in the template folder first, then common codes. */
@@ -136,24 +137,24 @@ export function useLanguageOptions(): ComboOption[] {
     const opts: ComboOption[] = available.map((code) => ({
       value: code,
       label: code,
-      hint: `${COMMON_LANGUAGES.find((l) => l.code === code)?.name ?? 'Sprache'} · ${data?.adml?.[code]?.length ?? 0} ADML-Dateien vorhanden`,
+      hint: t('config.lookups.valueValue2AdmlFilesPresent', { value: COMMON_LANGUAGES.find((l) => l.code === code)?.name ?? t('config.lookups.language'), value2: data?.adml?.[code]?.length ?? 0 }),
       icon: <Languages className="size-4 text-emerald-600" />,
     }))
     for (const l of COMMON_LANGUAGES)
       if (!opts.some((o) => o.value.toLowerCase() === l.code.toLowerCase()))
-        opts.push({ value: l.code, label: l.code, hint: `${l.name} · keine Vorlagen vorhanden`, icon: <Languages className="size-4 text-muted-foreground" /> })
+        opts.push({ value: l.code, label: l.code, hint: t('config.lookups.nameNoTemplatesPresent', { name: l.name }), icon: <Languages className="size-4 text-muted-foreground" /> })
     return opts
   }, [data])
 }
 
 /* ---------------------------------------------------------------- object types (guid-mappings) */
 
-export const ALL_OBJECTS_LABEL = '(alle Objekte)'
+export const ALL_OBJECTS_LABEL = t('config.lookups.allObjects')
 
 const categoryLabels: Record<string, string> = {
-  objectClasses: 'Objektklasse',
-  extendedRights: 'Erweitertes Recht',
-  attributes: 'Attribut',
+  objectClasses: t('config.lookups.objectClass'),
+  extendedRights: t('config.lookups.extendedRight'),
+  attributes: t('config.lookups.attribute'),
 }
 
 /** Every name the framework can resolve for objecttype / inheritedobjecttype, from the guid-mappings section. */
@@ -162,7 +163,7 @@ export function useObjectTypeOptions(extra: string[] = []): ComboOption[] {
   const content = useSectionContent('guid-mappings')
   const extraKey = extra.join('|')
   return React.useMemo(() => {
-    const opts: ComboOption[] = [{ value: '', label: ALL_OBJECTS_LABEL, hint: 'Kein Objekttyp – gilt für alle Objekte', icon: <Asterisk className="size-4 text-muted-foreground" /> }]
+    const opts: ComboOption[] = [{ value: '', label: ALL_OBJECTS_LABEL, hint: t('config.lookups.noObjectTypeAppliesTo'), icon: <Asterisk className="size-4 text-muted-foreground" /> }]
     const seen = new Set<string>([''])
     const push = (value: string, hint: string) => {
       if (!value || seen.has(value.toLowerCase())) return
@@ -177,17 +178,17 @@ export function useObjectTypeOptions(extra: string[] = []): ComboOption[] {
         if (!map || typeof map !== 'object') continue
         for (const [name, v] of Object.entries(map)) {
           if (name === 'comment') continue
-          push(name, `${categoryLabels[cat]} · ${kind === 'dynamicMappings' ? 'dynamisch aufgelöst' : String(v)}`)
+          push(name, `${categoryLabels[cat]} · ${kind === 'dynamicMappings' ? t('config.lookups.resolvedDynamically') : String(v)}`)
         }
       }
     }
     const special = content?.specialValues
     if (special && typeof special === 'object')
-      for (const [name, v] of Object.entries(special)) if (name !== 'comment') push(name, `Sonderwert${v ? ` · ${String(v)}` : ''}`)
+      for (const [name, v] of Object.entries(special)) if (name !== 'comment') push(name, t('config.lookups.specialValueValue', { value: v ? ` · ${String(v)}` : '' }))
     const friendly = content?.friendlyNameMappings
     if (friendly && typeof friendly === 'object')
-      for (const [name, v] of Object.entries(friendly)) if (name !== 'comment') push(name, `Alias für ${String(v)}`)
-    for (const e of extra) push(e, 'In der Konfiguration verwendet')
+      for (const [name, v] of Object.entries(friendly)) if (name !== 'comment') push(name, t('config.lookups.aliasForValue', { value: String(v) }))
+    for (const e of extra) push(e, t('config.lookups.usedInTheConfiguration'))
     return opts
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content, extraKey])
