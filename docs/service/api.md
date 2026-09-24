@@ -3,6 +3,26 @@
 Base URL: `/api`. JSON in camelCase, Enums als Strings. Fehler kommen als
 RFC 7807 ProblemDetails (`{ title, detail, status, errors? }`).
 
+## Domäne wählen
+
+Domänengebundene Aufrufe (Konfiguration, Läufe, Zeitpläne, Überwachung, Compliance, AD-Ansicht, Einrichtung,
+Import/Export, Berichte, JIT, domänenbezogene Einstellungen) wirken auf die Domäne aus dem Header
+`X-TierModel-Domain: <key>`; ohne Header gilt die Standard-Domäne (bestehende Skripte funktionieren unverändert).
+Bei `GET` geht auch `?domain=<key>` (Downloads, Berichtsvorschau). Unbekannter Schlüssel → 400, deaktivierte Domäne
+→ 409 bei Änderungen. IDs sind global: Detail-, Abbruch- und Freigabe-Aufrufe per ID wirken auf die Domäne des
+Objekts (`domain` in Laufdetails, `domainId` in Listen). Eine Planung aus einer anderen Domäne lässt sich nicht
+anwenden.
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| GET | `/api/domains` | alle Domänen (alle Rollen) |
+| GET | `/api/domains/overview` | je Domäne letzter Audit/Überwachung und Compliance-Wert |
+| POST/PUT/DELETE | `/api/domains[/{id}]` (Admin) | Pflege; `GET /api/domains/{id}/deletion` sagt, ob Löschen möglich ist |
+| POST | `/api/domains/check` (Admin) | Verbindung zu DC/Domäne prüfen |
+
+`GET/PUT /api/settings` lesen und schreiben `defaultPreferredDc` und `admlLanguage` der aktuellen Domäne; alle anderen
+Einstellungen gelten für die ganze Instanz. Wartungsfenster und Sperrzeiten haben optional `domainIds`.
+
 ## Sicherheit
 
 **API-Tokens:** Skripte melden sich mit `Authorization: Bearer tmk_…` an (Benutzermenü › API-Tokens). Mit Token ist

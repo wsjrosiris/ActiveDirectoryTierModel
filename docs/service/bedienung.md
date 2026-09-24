@@ -39,6 +39,23 @@ zusätzlich bei jedem Aufruf.
 | `Strg` + `Z` / `Strg` + `Y` | Rückgängig / Wiederholen in der Konfiguration |
 | `Strg` + `S` | Konfigurationsänderungen speichern |
 
+## Mehrere Domänen
+
+Ein Dienst kann mehrere Domänen verwalten – auch aus verschiedenen Gesamtstrukturen, sofern das Dienstkonto dort
+berechtigt ist (Vertrauensstellung). Jede Domäne hat ihre **eigene Konfiguration**, eigene Läufe, Zeitpläne,
+Überwachung, JIT-Gruppen, Einrichtung, Standard-DC und ADML-Sprache. Gemeinsam sind Benutzer und Rollen,
+Benachrichtigungskanäle, SIEM, API-Tokens und Wartungsfenster (diese optional auf Domänen beschränkbar).
+
+Sobald mehr als eine Domäne aktiv ist, erscheint oben der **Domänen-Umschalter** (mit Suche). Die Auswahl gilt
+für alle Seiten und wird je Benutzer im Browser gemerkt. Nicht gespeicherte Konfigurationsänderungen bleiben je
+Domäne erhalten; vor dem Umschalten erscheint ein Hinweis (ein Neuladen des Browsers verwirft sie). Das Dashboard
+nennt die aktuelle Domäne und zeigt unter *Alle Domänen* den Compliance-Wert jeder Domäne.
+
+**Administration › Domänen**: Schlüssel (kurz, z. B. `contoso`), Anzeigename, DNS-Name, Standard-DC, ADML-Sprache,
+aktiv, Standard; **Verbindung prüfen** liest die Domäne über den DC. Neue Domänen starten mit der mitgelieferten
+Beispielkonfiguration und eigener Einrichtung. Löschen ist nur ohne Historie möglich, sonst deaktivieren
+(deaktivierte Domänen sind nur lesbar).
+
 ## Dashboard
 
 - **Kennzahlen**: OUs, Gruppen, Konten, ACL-Delegationen, GPOs und GPO-Verknüpfungen der aktuellen Konfiguration

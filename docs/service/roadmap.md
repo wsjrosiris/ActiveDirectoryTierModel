@@ -274,4 +274,4 @@ Geführte Dialoge, die mehrere Bereiche in **einem** Entwurf ändern (bestehende
 | 15 Import (Test → Produktion) | umgesetzt |
 | 16 Git-Anbindung | umgesetzt (https gegen echten Server ungetestet) |
 | 6 Befristeter Zugriff (JIT) | umgesetzt (ohne echtes PAM getestet) |
-| 17 Mehrere Domänen | geplant |
+| 17 Mehrere Domänen | umgesetzt (ein Dienstkonto für alle Domänen) |

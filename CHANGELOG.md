@@ -58,6 +58,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   JIT groups, notifications and monitoring integration (`docs/jit-access.md`).
 - Service: **import** from an export ZIP or another instance with preview, search/replace rules and validation.
 - Service: **Git integration** (LibGit2Sharp): every saved version is committed and pushed; conflict handling.
+- Service: **multiple domains** per instance (header `X-TierModel-Domain`, default domain fallback), domain
+  switcher, per-domain configuration, runs, schedules, monitoring, JIT, setup, Git subfolders; migration assigns
+  existing data to the first domain; PowerShell client `-Domain`.
 - Service: **compliance score** per tier on the dashboard with 30-day history and breakdown.
 - Roadmap for the next features (`docs/service/roadmap.md`).
 

@@ -213,6 +213,21 @@ aktuelle Konfiguration neu schreiben). Der lokale Klon liegt unter `WorkPath\git
 stehen in den Einstellungen und unter *Systemzustand*. Git ist im Dienst enthalten (LibGit2Sharp), auf dem Server
 muss kein Git installiert sein.
 
+## Mehrere Domänen
+
+Das Dienstkonto braucht in jeder verwalteten Domäne dieselben Rechte wie in der ersten (für Deploy Mitglied von
+*Domänen-Admins* der jeweiligen Domäne); andere Gesamtstrukturen nur über eine Vertrauensstellung – getrennte
+Anmeldedaten je Domäne gibt es nicht. Die Warteschlange ist gemeinsam: Läufe verschiedener Domänen laufen
+nacheinander. Beim Update auf diese Version legt die Migration die erste Domäne aus Standard-DC und ADML-Sprache an
+und ordnet ihr alle vorhandenen Daten zu.
+
+**Git:** Die erste Domäne behält den bisherigen Pfad; weitere Domänen liegen unter `<Schlüssel>/<Pfad>/` mit eigener
+`versions.json`, Commits tragen `TierModel-Domain`. Nach einer Schlüsseländerung bleibt der alte Ordner im Repository
+stehen und kann dort gelöscht werden.
+
+**PowerShell-Client:** `Connect-TierModelService -Domain <key>` bzw. `-Domain` je Befehl, `Get-TierModelDomain`;
+`-PreferredDc` ist optional (Standard-DC der Domäne).
+
 ## Häufige Aufgaben
 
 ### Administrator-Passwort zurücksetzen
