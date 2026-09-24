@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   ChevronsLeft,
   Command,
+  Hourglass,
   KeyRound,
   Laptop,
   Loader2,
@@ -122,6 +123,7 @@ function SidebarContent({ collapsed, role }: { collapsed: boolean; role: import(
   const dirty = useDirtyKeys().length > 0
   const { data } = useDashboardQuery()
   const active = (data?.queue.running ?? 0) + (data?.queue.queued ?? 0)
+  const pending = hasRole(role, 'Operator') ? (data?.pendingApprovals?.length ?? 0) : 0
   const admin = adminNav.filter((i) => !i.role || hasRole(role, i.role))
 
   return (
@@ -141,10 +143,24 @@ function SidebarContent({ collapsed, role }: { collapsed: boolean; role: import(
               indicator={
                 item.match === '/konfiguration' && dirty ? (
                   <span className="size-2 rounded-full bg-amber-500 ring-2 ring-sidebar" aria-label="Ungespeicherte Änderungen" />
-                ) : item.to === '/laeufe' && active > 0 ? (
-                  <span className="inline-flex h-5 min-w-5 items-center justify-center gap-1 rounded-full bg-sky-500/15 px-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300">
-                    <Loader2 className="size-3 animate-spin" />
-                    {active}
+                ) : item.to === '/laeufe' && collapsed && pending > 0 ? (
+                  <span className="size-2 rounded-full bg-amber-500 ring-2 ring-sidebar" aria-label={`${pending} Freigaben ausstehend`} />
+                ) : item.to === '/laeufe' && (active > 0 || pending > 0) ? (
+                  <span className="flex items-center gap-1">
+                    {pending > 0 && (
+                      <Tooltip content={`${pending} ${pending === 1 ? 'Freigabe' : 'Freigaben'} ausstehend`} side="right">
+                        <span className="inline-flex h-5 min-w-5 items-center justify-center gap-1 rounded-full bg-amber-500/15 px-1.5 text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+                          <Hourglass className="size-3" />
+                          {pending}
+                        </span>
+                      </Tooltip>
+                    )}
+                    {active > 0 && (
+                      <span className="inline-flex h-5 min-w-5 items-center justify-center gap-1 rounded-full bg-sky-500/15 px-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300">
+                        <Loader2 className="size-3 animate-spin" />
+                        {active}
+                      </span>
+                    )}
                   </span>
                 ) : null
               }
@@ -230,6 +246,7 @@ function Topbar({
   const { data } = useDashboardQuery()
   const running = data?.queue.running ?? 0
   const queued = data?.queue.queued ?? 0
+  const pending = hasRole(user.role, 'Operator') ? (data?.pendingApprovals?.length ?? 0) : 0
 
   return (
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:px-6">
@@ -253,6 +270,18 @@ function Topbar({
       </button>
 
       <div className="ml-auto flex items-center gap-1.5">
+        {pending > 0 && (
+          <Tooltip content={`${pending} ${pending === 1 ? 'Deploy wartet' : 'Deploys warten'} auf Freigabe`}>
+            <button
+              type="button"
+              onClick={() => navigate(pending === 1 ? `/laeufe/${data!.pendingApprovals[0].id}` : '/laeufe?status=AwaitingApproval')}
+              className="hidden h-8 items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-500/15 sm:inline-flex dark:text-amber-300"
+            >
+              <Hourglass className="size-3.5" />
+              {pending} {pending === 1 ? 'Freigabe' : 'Freigaben'}
+            </button>
+          </Tooltip>
+        )}
         {(running > 0 || queued > 0) && (
           <Tooltip content={`${running} laufend, ${queued} in Warteschlange`}>
             <button

@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, KeyRound, Lock, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2, Unlock, UserPlus, Users } from 'lucide-react'
+import { Link } from 'react-router'
+import { Copy, Info, KeyRound, Lock, MonitorCheck, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2, Unlock, UserPlus, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import type { Role, User } from '@/api/types'
@@ -49,6 +50,16 @@ function isLocked(u: User) {
   return !!u.lockedUntil && new Date(u.lockedUntil).getTime() > Date.now()
 }
 
+function AuthTypeBadge({ user }: { user: User }) {
+  return user.authType === 'Windows' ? (
+    <Tooltip content="Anmeldung per Kerberos/NTLM – Rolle aus AD-Gruppen">
+      <Badge variant="info"><MonitorCheck /> Windows</Badge>
+    </Tooltip>
+  ) : (
+    <Badge variant="outline"><KeyRound /> Lokal</Badge>
+  )
+}
+
 function UsersPage() {
   const me = useUser()
   const qc = useQueryClient()
@@ -80,6 +91,7 @@ function UsersPage() {
               <TR>
                 <TH>Benutzer</TH>
                 <TH>Rolle</TH>
+                <TH className="hidden sm:table-cell">Anmeldung</TH>
                 <TH>Status</TH>
                 <TH className="hidden md:table-cell">Letzte Anmeldung</TH>
                 <TH className="hidden xl:table-cell">Angelegt</TH>
@@ -103,13 +115,22 @@ function UsersPage() {
                       </div>
                     </div>
                   </TD>
-                  <TD><Badge variant={roleVariant[u.role]}>{roleLabels[u.role]}</Badge></TD>
+                  <TD>
+                    {u.authType === 'Windows' ? (
+                      <Tooltip content="Wird bei jeder Anmeldung aus den AD-Gruppen bestimmt">
+                        <Badge variant={roleVariant[u.role]}>{roleLabels[u.role]}</Badge>
+                      </Tooltip>
+                    ) : (
+                      <Badge variant={roleVariant[u.role]}>{roleLabels[u.role]}</Badge>
+                    )}
+                  </TD>
+                  <TD className="hidden sm:table-cell"><AuthTypeBadge user={u} /></TD>
                   <TD>
                     <div className="flex flex-wrap gap-1">
                       {!u.isActive ? <Badge variant="muted">Deaktiviert</Badge> : isLocked(u) ? (
                         <Tooltip content={`Gesperrt bis ${formatDateTime(u.lockedUntil)}`}><Badge variant="danger"><Lock /> Gesperrt</Badge></Tooltip>
                       ) : <Badge variant="success">Aktiv</Badge>}
-                      {u.mustChangePassword && <Badge variant="warning">Passwortwechsel</Badge>}
+                      {u.mustChangePassword && u.authType !== 'Windows' && <Badge variant="warning">Passwortwechsel</Badge>}
                     </div>
                   </TD>
                   <TD className="hidden text-[13px] md:table-cell" title={formatDateTime(u.lastLoginAt)}>{u.lastLoginAt ? formatRelative(u.lastLoginAt) : 'Nie'}</TD>
@@ -121,7 +142,7 @@ function UsersPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onSelect={() => setEditing(u)}><Pencil /> Bearbeiten</DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => setResetFor(u)}><KeyRound /> Passwort zurücksetzen</DropdownMenuItem>
+                        {u.authType !== 'Windows' && <DropdownMenuItem onSelect={() => setResetFor(u)}><KeyRound /> Passwort zurücksetzen</DropdownMenuItem>}
                         {isLocked(u) && <DropdownMenuItem onSelect={() => unlock.mutate(u)}><Unlock /> Entsperren</DropdownMenuItem>}
                         {u.id !== me.id && (
                           <>
@@ -208,6 +229,7 @@ function UserSheet({ value, onClose, selfId }: { value: User | 'new' | null; onC
     },
   })
   const self = user?.id === selfId
+  const windows = user?.authType === 'Windows'
   const error = isNew && !username.trim() ? 'Benutzername erforderlich.' : isNew && password.length < 12 ? 'Passwort muss mindestens 12 Zeichen haben.' : null
 
   return (
@@ -215,10 +237,26 @@ function UserSheet({ value, onClose, selfId }: { value: User | 'new' | null; onC
       <SheetContent>
         <form className="flex h-full flex-col" onSubmit={(e) => { e.preventDefault(); if (!error) save.mutate() }}>
           <SheetHeader>
-            <SheetTitle>{isNew ? 'Benutzer anlegen' : `${user?.username} bearbeiten`}</SheetTitle>
-            <SheetDescription>{isNew ? 'Das initiale Passwort muss bei der ersten Anmeldung geändert werden.' : 'Rolle und Status des Kontos.'}</SheetDescription>
+            <SheetTitle>{isNew ? 'Lokalen Benutzer anlegen' : `${user?.username} bearbeiten`}</SheetTitle>
+            <SheetDescription>
+              {isNew
+                ? 'Das initiale Passwort muss bei der ersten Anmeldung geändert werden.'
+                : windows
+                  ? 'Windows-Konto: Anzeigename und Status.'
+                  : 'Rolle und Status des Kontos.'}
+            </SheetDescription>
           </SheetHeader>
           <SheetBody className="grid content-start gap-5">
+            {isNew && (
+              <div className="flex gap-2.5 rounded-lg border bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
+                <Info className="mt-px size-4 shrink-0" />
+                <p>
+                  Hier werden nur lokale Konten angelegt. Windows-Konten entstehen automatisch bei der ersten Windows-Anmeldung;
+                  ihre Rolle folgt aus den AD-Gruppen unter{' '}
+                  <Link to="/admin/windows-anmeldung" className="font-medium text-primary hover:underline" onClick={onClose}>Windows-Anmeldung</Link>.
+                </p>
+              </div>
+            )}
             <Field label="Benutzername" htmlFor="u-username" required={isNew}>
               <Input id="u-username" value={username} onChange={(e) => setUsername(e.target.value)} readOnly={!isNew} autoComplete="off" className="font-mono" autoFocus={isNew} />
             </Field>
@@ -234,7 +272,7 @@ function UserSheet({ value, onClose, selfId }: { value: User | 'new' | null; onC
                     type="button"
                     role="radio"
                     aria-checked={role === r}
-                    disabled={self && r !== 'Admin'}
+                    disabled={windows ? r !== role : self && r !== 'Admin'}
                     onClick={() => setRole(r)}
                     className={cn(
                       'flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45',
@@ -251,7 +289,18 @@ function UserSheet({ value, onClose, selfId }: { value: User | 'new' | null; onC
                   </button>
                 ))}
               </div>
-              {self && <p className="text-xs text-muted-foreground">Die eigene Admin-Rolle kann nicht entzogen werden.</p>}
+              {windows ? (
+                <div className="flex gap-2.5 rounded-lg border border-sky-500/25 bg-sky-500/5 px-3 py-2.5 text-xs text-sky-900 dark:text-sky-200">
+                  <MonitorCheck className="mt-px size-4 shrink-0" />
+                  <p>
+                    Die Rolle eines Windows-Kontos wird bei jeder Anmeldung aus seinen AD-Gruppen bestimmt und kann hier nicht geändert werden.
+                    Die Zuordnung Gruppe → Rolle pflegen Sie unter{' '}
+                    <Link to="/admin/windows-anmeldung" className="font-medium underline underline-offset-2" onClick={onClose}>Windows-Anmeldung</Link>.
+                  </p>
+                </div>
+              ) : self ? (
+                <p className="text-xs text-muted-foreground">Die eigene Admin-Rolle kann nicht entzogen werden.</p>
+              ) : null}
             </div>
             {isNew ? (
               <Field label="Initiales Passwort" htmlFor="u-pw" required>

@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router'
 import { ArrowLeft, Ban, CalendarClock, FileSearch, ListChecks, Search, Terminal, User as UserIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, ApiError } from '@/api/client'
-import type { Finding, RunDetail } from '@/api/types'
+import type { Finding, RunDetail, RunStatus } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -21,6 +21,7 @@ import { useCan } from '@/features/auth/auth'
 import { findingTypeLabels, includeLabels, scopeLabels, sectionFallbackTitles } from '@/lib/labels'
 import { cn, formatDateTime, formatDuration, formatNumber } from '@/lib/utils'
 import { RunLog, useRunLog } from './run-log'
+import { ApprovalOutcome, ApprovalPanel } from './approval-panel'
 import { Component as NotFound } from '@/components/layout/not-found'
 
 export function Component() {
@@ -29,15 +30,30 @@ export function Component() {
   const qc = useQueryClient()
   const canCancel = useCan('Operator')
   const confirm = useConfirm()
+  const [tab, setTab] = React.useState('log')
   const run = useQuery({
     queryKey: ['run', id],
     queryFn: () => api.runs.get(id),
     enabled: Number.isFinite(id),
-    refetchInterval: (q) => (q.state.data && (q.state.data.status === 'Queued' || q.state.data.status === 'Running') ? 5000 : false),
+    // Awaiting approval: someone else may approve/reject at any time, so keep refreshing (a bit slower).
+    refetchInterval: (q) => {
+      const st = q.state.data?.status
+      return st === 'Queued' || st === 'Running' ? 5000 : st === 'AwaitingApproval' ? 8000 : false
+    },
   })
   const log = useRunLog(id, run.data?.status)
-  const status = log.status && run.data && log.status !== run.data.status && ['Queued', 'Running'].includes(run.data.status) ? log.status : run.data?.status
+  // The log poller sees status changes earlier than the detail query – but only ever trust a later lifecycle state.
+  const status = log.status && run.data && statusRank(log.status) > statusRank(run.data.status) ? log.status : run.data?.status
   const active = status === 'Queued' || status === 'Running'
+  const awaiting = status === 'AwaitingApproval'
+  // While awaiting approval there is no log yet: show the pinned configuration; switch to the live log once approved.
+  const wasAwaiting = React.useRef<boolean | null>(null)
+  React.useEffect(() => {
+    if (status === undefined) return
+    if (wasAwaiting.current === null && awaiting) setTab('config')
+    if (wasAwaiting.current && !awaiting) setTab('log')
+    wasAwaiting.current = awaiting
+  }, [status, awaiting])
   const [now, setNow] = React.useState(Date.now())
   React.useEffect(() => {
     if (!active) return
@@ -92,6 +108,7 @@ export function Component() {
                     {r.trigger === 'Schedule' ? `Zeitplan${r.scheduleId ? ` #${r.scheduleId}` : ''}` : r.requestedBy}
                   </span>
                   <span>{formatDateTime(r.createdAt)}</span>
+                  <ApprovalOutcome run={r} />
                 </p>
               </div>
             </div>
@@ -115,6 +132,8 @@ export function Component() {
               </Button>
             )}
           </div>
+
+          {awaiting && <ApprovalPanel run={r} onShowConfig={() => setTab('config')} />}
 
           <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Meta label="Bereich">
@@ -143,12 +162,12 @@ export function Component() {
           </div>
 
           {r.message && (
-            <div className={cn('mb-6 rounded-lg border px-4 py-3 text-[13px]', r.status === 'Failed' ? 'border-rose-500/30 bg-rose-500/5 text-rose-900 dark:text-rose-200' : 'bg-muted/40')}>
+            <div className={cn('mb-6 rounded-lg border px-4 py-3 text-[13px]', r.status === 'Failed' || r.status === 'Rejected' ? 'border-rose-500/30 bg-rose-500/5 text-rose-900 dark:text-rose-200' : 'bg-muted/40')}>
               {r.message}
             </div>
           )}
 
-          <Tabs defaultValue="log">
+          <Tabs value={tab} onValueChange={setTab}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <TabsList>
                 <TabsTrigger value="log"><Terminal /> Protokoll</TabsTrigger>
@@ -162,7 +181,19 @@ export function Component() {
               </TabsList>
             </div>
             <TabsContent value="log">
-              <RunLog lines={log.lines} active={active} loaded={log.loaded} runId={id} />
+              <RunLog
+                lines={log.lines}
+                active={active}
+                loaded={log.loaded}
+                runId={id}
+                emptyText={
+                  awaiting
+                    ? 'Der Lauf startet erst nach der Freigabe – dann erscheint hier die Ausgabe.'
+                    : status === 'Rejected'
+                      ? 'Der Lauf wurde nicht ausgeführt (Freigabe abgelehnt oder abgelaufen).'
+                      : undefined
+                }
+              />
             </TabsContent>
             {isAudit && (
               <TabsContent value="findings">
@@ -170,13 +201,18 @@ export function Component() {
               </TabsContent>
             )}
             <TabsContent value="config">
-              <ConfigVersions versions={r.configVersions} />
+              <ConfigVersions versions={r.configVersions} pinned={r.approvalRequired} />
             </TabsContent>
           </Tabs>
         </>
       )}
     </Page>
   )
+}
+
+const lifecycle: Record<RunStatus, number> = { AwaitingApproval: 0, Queued: 1, Running: 2, Succeeded: 3, Failed: 3, Cancelled: 3, Rejected: 3 }
+function statusRank(s: RunStatus) {
+  return lifecycle[s] ?? 0
 }
 
 function Meta({ label, children }: { label: string; children: React.ReactNode }) {
@@ -188,12 +224,16 @@ function Meta({ label, children }: { label: string; children: React.ReactNode })
   )
 }
 
-function ConfigVersions({ versions }: { versions: Record<string, number> }) {
+function ConfigVersions({ versions, pinned }: { versions: Record<string, number>; pinned?: boolean }) {
   const entries = Object.entries(versions ?? {})
   if (!entries.length) return <Card><EmptyState compact icon={<FileSearch />} title="Keine Versionsangaben" /></Card>
   return (
     <Card className="p-5">
-      <p className="mb-3 text-[13px] text-muted-foreground">Dieser Lauf hat folgende Konfigurationsversionen verwendet:</p>
+      <p className="mb-3 text-[13px] text-muted-foreground">
+        {pinned
+          ? 'Beim Einreichen zur Freigabe festgeschriebene Konfigurationsversionen – genau dieser Stand wird ausgeführt:'
+          : 'Dieser Lauf hat folgende Konfigurationsversionen verwendet:'}
+      </p>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {entries.map(([k, v]) => (
           <Link key={k} to={`/konfiguration/${k}`} className="flex items-center justify-between rounded-lg border px-3 py-2 text-[13px] transition-colors hover:bg-accent/50">

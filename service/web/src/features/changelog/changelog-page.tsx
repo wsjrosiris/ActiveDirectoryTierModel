@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
   User as UserIcon,
   ChevronDown,
+  Bell,
 } from 'lucide-react'
 import { api } from '@/api/client'
 import type { ChangeEntry } from '@/api/types'
@@ -32,6 +33,7 @@ const typeIcon: Record<string, React.ReactNode> = {
   user: <UserIcon />,
   schedule: <CalendarClock />,
   settings: <Settings2 />,
+  notification: <Bell />,
   auth: <KeyRound />,
 }
 
@@ -41,6 +43,7 @@ const typeTone: Record<string, string> = {
   user: 'bg-teal-500/10 text-teal-600 dark:text-teal-300',
   schedule: 'bg-violet-500/10 text-violet-600 dark:text-violet-300',
   settings: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+  notification: 'bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-300',
   auth: 'bg-muted text-muted-foreground',
 }
 
@@ -119,7 +122,7 @@ export function Component() {
 function Entry({ c }: { c: ChangeEntry }) {
   const [open, setOpen] = React.useState(false)
   const hasDetails = c.details !== null && c.details !== undefined
-  const failed = c.action.includes('failed')
+  const failed = c.action.includes('failed') || c.action.includes('denied') || c.action === 'run.reject' || c.action === 'run.approval-expired'
   return (
     <div>
       <button

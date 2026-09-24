@@ -49,6 +49,8 @@ const routes: RouteObject[] = [
         },
         { path: 'admin/benutzer', ...page(() => import('@/features/admin/users-page')) },
         { path: 'admin/einstellungen', ...page(() => import('@/features/admin/settings-page')) },
+        { path: 'admin/windows-anmeldung', ...page(() => import('@/features/admin/windows-auth-page')) },
+        { path: 'admin/benachrichtigungen', ...page(() => import('@/features/admin/notifications-page')) },
         { path: '*', ...page(() => import('@/components/layout/not-found')) },
       ] },
     ],

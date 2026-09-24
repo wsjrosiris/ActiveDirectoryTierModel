@@ -1,7 +1,7 @@
 import * as React from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
-import { AlertTriangle, FlaskConical, Info, Rocket, ShieldAlert, Zap } from 'lucide-react'
+import { AlertTriangle, FlaskConical, Info, Rocket, ShieldAlert, UsersRound, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import type { RunRequest } from '@/api/types'
@@ -14,7 +14,7 @@ import { useCan } from '@/features/auth/auth'
 import { useDirtyKeys } from '@/features/config/draft-store'
 import { scopeLabels } from '@/lib/labels'
 import { cn } from '@/lib/utils'
-import { emptyRunRequest, includesFromRequest, RunRequestFields, runRequestError } from './run-request-form'
+import { emptyRunRequest, includesFromRequest, RunRequestFields, runRequestError, settingsQuery } from './run-request-form'
 
 type Mode = 'plan' | 'apply'
 
@@ -28,6 +28,8 @@ export function Component() {
   const qc = useQueryClient()
   const dirty = useDirtyKeys()
   const error = runRequestError(req)
+  const settings = useQuery(settingsQuery)
+  const needsApproval = mode === 'apply' && !!settings.data?.requireApproval
 
   const deploy = useMutation({
     mutationFn: (confirmApply: boolean) =>
@@ -35,14 +37,41 @@ export function Component() {
     onSuccess: (run) => {
       qc.invalidateQueries({ queryKey: ['runs'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
-      toast.success(`Deploy #${run.id} eingereiht`, { description: run.mode === 'Apply' ? 'Änderungen werden angewendet.' : 'Planungslauf (WhatIf).' })
+      if (run.status === 'AwaitingApproval') {
+        toast.success(`Deploy #${run.id} zur Freigabe eingereicht`, { description: 'Ein zweiter Operator muss den Deploy freigeben, bevor er ausgeführt wird.' })
+      } else {
+        toast.success(`Deploy #${run.id} eingereiht`, { description: run.mode === 'Apply' ? 'Änderungen werden angewendet.' : 'Planungslauf (WhatIf).' })
+      }
       navigate(`/laeufe/${run.id}`)
     },
   })
 
   const submit = async () => {
     if (error) return
-    if (mode === 'apply') {
+    if (mode === 'apply' && needsApproval) {
+      const ok = await confirm({
+        title: 'Deploy zur Freigabe einreichen?',
+        description: (
+          <div className="grid gap-2">
+            <p>
+              Der Deploy wird erst ausgeführt, wenn ein zweiter Operator ihn freigibt
+              {settings.data?.approvalTimeoutHours ? <> (innerhalb von <strong className="text-foreground">{settings.data.approvalTimeoutHours} Stunden</strong>, danach verfällt der Antrag)</> : null}.
+              Die aktuell gespeicherten Konfigurationsversionen werden dabei festgeschrieben.
+            </p>
+            <p>
+              Nach der Freigabe verändert er das Active Directory über <span className="font-mono font-medium text-foreground">{req.preferredDc}</span>.
+            </p>
+            <p className="text-foreground">
+              Bereich: <strong>{req.scope ? scopeLabels[req.scope] : 'Nur Add-ons'}</strong>
+              {includesFromRequest(req).length > 0 && <> · Add-ons: <strong>{includesFromRequest(req).join(', ')}</strong></>}
+            </p>
+          </div>
+        ),
+        confirmText: 'Zur Freigabe einreichen',
+      })
+      if (!ok) return
+      deploy.mutate(true)
+    } else if (mode === 'apply') {
       const ok = await confirm({
         title: 'Änderungen im Active Directory anwenden?',
         description: (
@@ -116,7 +145,7 @@ export function Component() {
                       onSelect={() => setMode('apply')}
                       icon={<Zap />}
                       title="Anwenden"
-                      description={canApply ? 'Änderungen werden ins AD geschrieben' : 'Nur für Operatoren'}
+                      description={!canApply ? 'Nur für Operatoren' : settings.data?.requireApproval ? 'Ins AD schreiben – nach Freigabe durch eine zweite Person' : 'Änderungen werden ins AD geschrieben'}
                       tone="rose"
                       disabled={!canApply}
                     />
@@ -152,23 +181,31 @@ export function Component() {
                 <Row label="Add-ons">{includesFromRequest(req).join(', ') || '–'}</Row>
                 {req.admlLanguage && <Row label="ADML-Sprache"><span className="font-mono">{req.admlLanguage}</span></Row>}
               </dl>
-              {mode === 'apply' && (
+              {needsApproval ? (
+                <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
+                  <UsersRound className="size-4 shrink-0" />
+                  <span>
+                    <span className="font-medium">Vier-Augen-Prinzip aktiv.</span> Der Deploy wird zur Freigabe eingereicht und erst ausgeführt,
+                    wenn ein zweiter Operator ihn freigibt.
+                  </span>
+                </div>
+              ) : mode === 'apply' ? (
                 <div className="flex gap-2 rounded-lg border border-rose-500/25 bg-rose-500/5 p-3 text-xs text-rose-800 dark:text-rose-200">
                   <ShieldAlert className="size-4 shrink-0" />
                   Dieser Lauf ändert das Active Directory. Sie müssen die Ausführung mit „ANWENDEN“ bestätigen.
                 </div>
-              )}
+              ) : null}
               {error && canEdit && <p className="text-xs text-muted-foreground">{error}</p>}
               <Button
                 type="submit"
                 size="lg"
-                variant={mode === 'apply' ? 'destructive' : 'default'}
+                variant={mode === 'apply' && !needsApproval ? 'destructive' : 'default'}
                 disabled={!canEdit || !!error}
                 loading={deploy.isPending}
                 className="w-full"
               >
-                {!deploy.isPending && (mode === 'apply' ? <Zap /> : <FlaskConical />)}
-                {mode === 'apply' ? 'Deploy anwenden …' : 'Planungslauf starten'}
+                {!deploy.isPending && (needsApproval ? <UsersRound /> : mode === 'apply' ? <Zap /> : <FlaskConical />)}
+                {needsApproval ? 'Zur Freigabe einreichen …' : mode === 'apply' ? 'Deploy anwenden …' : 'Planungslauf starten'}
               </Button>
             </CardContent>
           </Card>

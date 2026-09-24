@@ -2,11 +2,15 @@
 
 export type Role = 'Viewer' | 'Editor' | 'Operator' | 'Admin'
 
+export type AuthType = 'Local' | 'Windows'
+
 export interface User {
   id: string
   username: string
   displayName: string
   role: Role
+  /** Windows: name "DOMÄNE\\konto", no password, role derived from AD groups. */
+  authType: AuthType
   isActive: boolean
   mustChangePassword: boolean
   lastLoginAt: string | null
@@ -16,6 +20,10 @@ export interface User {
 
 export interface MeResponse {
   user: User | null
+}
+
+export interface AuthOptions {
+  windowsAuth: boolean
 }
 
 export interface LoginRequest {
@@ -131,7 +139,7 @@ export interface DeployRequest extends RunRequest {
 }
 
 export type RunKind = 'Deploy' | 'Audit'
-export type RunStatus = 'Queued' | 'Running' | 'Succeeded' | 'Failed' | 'Cancelled'
+export type RunStatus = 'AwaitingApproval' | 'Queued' | 'Running' | 'Succeeded' | 'Failed' | 'Cancelled' | 'Rejected'
 
 export interface RunSummary {
   id: number
@@ -151,6 +159,22 @@ export interface RunSummary {
   driftCount: number | null
   errorCount: number | null
   message: string | null
+  // Vier-Augen-Prinzip (nur Deploy/Anwenden, wenn in den Einstellungen aktiviert)
+  approvalRequired: boolean
+  /** On rejection: who rejected / when. */
+  approvedBy: string | null
+  approvedAt: string | null
+  approvalComment: string | null
+  /** Only while 'AwaitingApproval'. */
+  approvalExpiresAt: string | null
+}
+
+export interface ApproveRequest {
+  comment?: string
+}
+
+export interface RejectRequest {
+  comment: string
 }
 
 export interface Finding {
@@ -230,6 +254,8 @@ export interface Dashboard {
   recentRuns: RunSummary[]
   recentChanges: ChangeEntry[]
   queue: { running: number; queued: number }
+  /** All runs with status 'AwaitingApproval', oldest first. */
+  pendingApprovals: RunSummary[]
   validation: { errors: number; warnings: number }
 }
 
@@ -239,11 +265,83 @@ export interface Settings {
   defaultPreferredDc: string
   admlLanguage: string
   runRetentionDays: number
+  requireApproval: boolean
+  approvalTimeoutHours: number
+  publicBaseUrl: string
   frameworkPath: string
   pwshPath: string
 }
 
-export type SettingsUpdate = Pick<Settings, 'defaultPreferredDc' | 'admlLanguage' | 'runRetentionDays'>
+export type SettingsUpdate = Omit<Settings, 'frameworkPath' | 'pwshPath'>
+
+// ---------- Windows-Anmeldung ----------
+
+export interface GroupRef {
+  name: string
+  sid: string
+}
+
+export interface WindowsAuthSettings {
+  enabled: boolean
+  roleGroups: Record<Role, GroupRef[]>
+  /** false when the server does not support Windows authentication (read-only). */
+  available: boolean
+}
+
+export interface WindowsAuthUpdate {
+  enabled: boolean
+  /** Per entry "DOMÄNE\\Gruppe" or a SID (S-1-5-…). */
+  roleGroups: Record<Role, string[]>
+}
+
+// ---------- Benachrichtigungen ----------
+
+export type ChannelType = 'Email' | 'Teams' | 'Webhook'
+
+export interface ChannelEvents {
+  drift: boolean
+  failure: boolean
+  apply: boolean
+  approval: boolean
+}
+
+export interface NotificationChannel {
+  id: number
+  name: string
+  type: ChannelType
+  enabled: boolean
+  /** Email: recipients, comma separated · Teams/Webhook: URL (masked in responses: scheme + host + "…"). */
+  target: string
+  events: ChannelEvents
+  lastSentAt: string | null
+  lastError: string | null
+  createdAt: string
+}
+
+export interface ChannelInput {
+  name: string
+  type: ChannelType
+  enabled: boolean
+  /** On update: null = unchanged. */
+  target: string | null
+  events: ChannelEvents
+}
+
+export type SmtpSecurity = 'None' | 'StartTls' | 'SslOnConnect'
+
+export interface SmtpSettings {
+  host: string
+  port: number
+  security: SmtpSecurity
+  username: string
+  from: string
+  /** Read-only. */
+  hasPassword: boolean
+  /** Write-only; omit = unchanged, "" = remove. */
+  password?: string
+}
+
+export type SmtpUpdate = Omit<SmtpSettings, 'hasPassword'>
 
 // ---------- Fehler ----------
 

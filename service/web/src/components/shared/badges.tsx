@@ -1,4 +1,4 @@
-import { Ban, CheckCircle2, Clock, Loader2, XCircle, Rocket, ScanSearch, CalendarClock } from 'lucide-react'
+import { Ban, CheckCircle2, Clock, Loader2, XCircle, Rocket, ScanSearch, CalendarClock, Hourglass, ShieldX } from 'lucide-react'
 import type { RunKind, RunStatus, RunSummary } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { statusLabels } from '@/lib/labels'
@@ -36,11 +36,13 @@ export function TierDot({ tier, className }: { tier: Tier; className?: string })
 }
 
 const statusStyle: Record<RunStatus, { variant: 'success' | 'danger' | 'info' | 'muted' | 'warning'; icon: React.ReactNode }> = {
+  AwaitingApproval: { variant: 'warning', icon: <Hourglass /> },
   Queued: { variant: 'muted', icon: <Clock /> },
   Running: { variant: 'info', icon: <Loader2 className="animate-spin" /> },
   Succeeded: { variant: 'success', icon: <CheckCircle2 /> },
   Failed: { variant: 'danger', icon: <XCircle /> },
-  Cancelled: { variant: 'warning', icon: <Ban /> },
+  Cancelled: { variant: 'muted', icon: <Ban /> },
+  Rejected: { variant: 'danger', icon: <ShieldX /> },
 }
 
 export function RunStatusBadge({ status, className }: { status: RunStatus; className?: string }) {
