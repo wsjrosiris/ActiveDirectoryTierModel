@@ -10,15 +10,18 @@ import {
   Pencil,
   Play,
   ScanSearch,
+  ShieldUser,
   Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
-import type { RunRequest, Schedule, ScheduleInput } from '@/api/types'
+import type { RunRequest, Schedule, ScheduleInput, ScheduleKind } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Combobox } from '@/components/ui/combobox'
+import { Segmented } from '@/components/ui/segmented'
+import { useDomainControllerOptions } from '@/features/config/lookups'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
   DropdownMenu,
@@ -41,7 +44,7 @@ import { useCan } from '@/features/auth/auth'
 import { scopeLabels } from '@/lib/labels'
 import { cn, formatDateTime, formatRelative } from '@/lib/utils'
 import { cronPresets, describeCron, timeZones } from './cron'
-import { emptyRunRequest, includesFromRequest, RunRequestFields, runRequestError } from './run-request-form'
+import { emptyRunRequest, includesFromRequest, RunRequestFields, runRequestError, settingsQuery } from './run-request-form'
 import { RunsTable } from './runs-table'
 
 export function Component() {
@@ -52,7 +55,7 @@ export function Component() {
   const canEdit = useCan('Editor')
   const canOperate = useCan('Operator')
   const [startOpen, setStartOpen] = React.useState(false)
-  const [editing, setEditing] = React.useState<Schedule | 'new' | null>(null)
+  const [editing, setEditing] = React.useState<Schedule | 'new' | 'new-monitor' | null>(null)
 
   React.useEffect(() => {
     if (params.get('start') === '1') {
@@ -61,7 +64,14 @@ export function Component() {
       p.delete('start')
       setParams(p, { replace: true })
     }
-  }, [params, setParams, canEdit])
+    // From "Privilegierte Zugriffe": create a monitor schedule.
+    if (params.get('neu') === 'ueberwachung') {
+      if (canOperate) setEditing('new-monitor')
+      const p = new URLSearchParams(params)
+      p.delete('neu')
+      setParams(p, { replace: true })
+    }
+  }, [params, setParams, canEdit, canOperate])
 
   return (
     <Page wide>
@@ -140,7 +150,7 @@ function StartAuditSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
 
 function toInput(s: Schedule): ScheduleInput {
   return {
-    name: s.name, cron: s.cron, timeZone: s.timeZone, enabled: s.enabled,
+    kind: s.kind ?? 'Audit', name: s.name, cron: s.cron, timeZone: s.timeZone, enabled: s.enabled,
     preferredDc: s.preferredDc, scope: s.scope, includeMsa: s.includeMsa, includeGmsa: s.includeGmsa,
     includeDmsa: s.includeDmsa, includeWinLaps: s.includeWinLaps,
     ...(s.admlLanguage ? { admlLanguage: s.admlLanguage } : {}),
@@ -170,7 +180,7 @@ function Schedules({ onEdit }: { onEdit: (s: Schedule) => void }) {
     mutationFn: (s: Schedule) => api.schedules.run(s.id),
     onSuccess: (run) => {
       qc.invalidateQueries({ queryKey: ['runs'] })
-      toast.success(`Audit #${run.id} eingereiht`, { action: { label: 'Öffnen', onClick: () => navigate(`/laeufe/${run.id}`) } })
+      toast.success(`${run.kind === 'Monitor' ? 'Überwachung' : 'Audit'} #${run.id} eingereiht`, { action: { label: 'Öffnen', onClick: () => navigate(`/laeufe/${run.id}`) } })
     },
   })
   const remove = useMutation({
@@ -189,7 +199,7 @@ function Schedules({ onEdit }: { onEdit: (s: Schedule) => void }) {
         <EmptyState
           icon={<CalendarClock />}
           title="Keine Zeitpläne"
-          description="Planen Sie regelmäßige Audits, um Drift frühzeitig zu erkennen."
+          description="Planen Sie regelmäßige Audits, um Drift frühzeitig zu erkennen, und eine Überwachung der privilegierten Gruppen (empfohlen: alle 15 Minuten)."
           action={canOperate && <Button size="sm" onClick={() => onEdit({} as Schedule)}><CalendarPlus /> Zeitplan anlegen</Button>}
         />
       </Card>
@@ -202,7 +212,7 @@ function Schedules({ onEdit }: { onEdit: (s: Schedule) => void }) {
           <TR>
             <TH>Name</TH>
             <TH>Zeitplan</TH>
-            <TH className="hidden md:table-cell">Bereich</TH>
+            <TH className="hidden md:table-cell">Art / Bereich</TH>
             <TH>Nächster Lauf</TH>
             <TH className="hidden lg:table-cell">Letzter Lauf</TH>
             <TH className="w-20">Aktiv</TH>
@@ -215,7 +225,10 @@ function Schedules({ onEdit }: { onEdit: (s: Schedule) => void }) {
             return (
               <TR key={s.id} className={cn(!s.enabled && 'text-muted-foreground')}>
                 <TD>
-                  <p className="font-medium text-foreground">{s.name}</p>
+                  <p className="flex items-center gap-1.5 font-medium text-foreground">
+                    {s.kind === 'Monitor' ? <ShieldUser className="size-3.5 shrink-0 text-teal-600 dark:text-teal-300" aria-label="Überwachung" /> : <ScanSearch className="size-3.5 shrink-0 text-sky-600 dark:text-sky-300" aria-label="Audit" />}
+                    {s.name}
+                  </p>
                   <p className="font-mono text-xs text-muted-foreground">{s.preferredDc}</p>
                 </TD>
                 <TD>
@@ -223,8 +236,8 @@ function Schedules({ onEdit }: { onEdit: (s: Schedule) => void }) {
                   <p className="font-mono text-xs text-muted-foreground">{s.cron} · {s.timeZone}</p>
                 </TD>
                 <TD className="hidden text-[13px] md:table-cell">
-                  {s.scope ? scopeLabels[s.scope] : 'Nur Add-ons'}
-                  {includesFromRequest(s).length > 0 && <span className="text-xs text-muted-foreground"> + {includesFromRequest(s).join(', ')}</span>}
+                  {s.kind === 'Monitor' ? 'Überwachung privilegierter Gruppen' : s.scope ? scopeLabels[s.scope] : 'Nur Add-ons'}
+                  {s.kind !== 'Monitor' && includesFromRequest(s).length > 0 && <span className="text-xs text-muted-foreground"> + {includesFromRequest(s).join(', ')}</span>}
                 </TD>
                 <TD className="text-[13px]">
                   {s.enabled && s.nextRunAt ? (
@@ -276,29 +289,49 @@ function Schedules({ onEdit }: { onEdit: (s: Schedule) => void }) {
   )
 }
 
-const defaultSchedule = (): ScheduleInput => ({
+const MONITOR_CRON = '*/15 * * * *'
+
+const defaultSchedule = (kind: ScheduleKind = 'Audit'): ScheduleInput => ({
   ...emptyRunRequest(),
-  name: '',
-  cron: '0 2 * * *',
+  kind,
+  name: kind === 'Monitor' ? 'Überwachung privilegierter Gruppen' : '',
+  cron: kind === 'Monitor' ? MONITOR_CRON : '0 2 * * *',
   timeZone: 'Europe/Berlin',
   enabled: true,
 })
 
-function ScheduleSheet({ value, onClose }: { value: Schedule | 'new' | null; onClose: () => void }) {
+function ScheduleSheet({ value, onClose }: { value: Schedule | 'new' | 'new-monitor' | null; onClose: () => void }) {
   const open = value !== null
-  const isNew = value === 'new' || (value !== null && !value.id)
+  const isNew = value === 'new' || value === 'new-monitor' || (value !== null && !value.id)
   const [form, setForm] = React.useState<ScheduleInput>(defaultSchedule)
   const qc = useQueryClient()
   const tzOptions = React.useMemo(() => timeZones().map((z) => ({ value: z })), [])
+  const dcOptions = useDomainControllerOptions()
+  const monitor = form.kind === 'Monitor'
+  const settings = useQuery(settingsQuery).data
 
   React.useEffect(() => {
     if (!open) return
-    setForm(isNew ? defaultSchedule() : toInput(value as Schedule))
+    // Monitor schedules only need the domain controller: prefilled from the settings like in the run forms.
+    setForm(isNew ? { ...defaultSchedule(value === 'new-monitor' ? 'Monitor' : 'Audit'), preferredDc: settings?.defaultPreferredDc ?? '' } : toInput(value as Schedule))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value])
 
+  const setKind = (kind: ScheduleKind) => setForm((f) => ({
+    ...f,
+    kind,
+    // Switching a new schedule also switches the suggested defaults.
+    cron: isNew && f.cron === (kind === 'Monitor' ? '0 2 * * *' : MONITOR_CRON) ? (kind === 'Monitor' ? MONITOR_CRON : '0 2 * * *') : f.cron,
+    name: isNew && (f.name === '' || f.name === 'Überwachung privilegierter Gruppen') ? (kind === 'Monitor' ? 'Überwachung privilegierter Gruppen' : '') : f.name,
+  }))
+
+  // Settings may arrive after the sheet opened.
+  React.useEffect(() => {
+    if (open && settings?.defaultPreferredDc) setForm((f) => (f.preferredDc ? f : { ...f, preferredDc: settings.defaultPreferredDc }))
+  }, [open, settings, value])
+
   const cron = describeCron(form.cron)
-  const reqError = runRequestError(form)
+  const reqError = monitor ? (form.preferredDc.trim() ? null : 'Bitte einen Domain Controller angeben.') : runRequestError(form)
   const error = !form.name.trim() ? 'Name ist erforderlich.' : cron.error ? 'Cron-Ausdruck prüfen.' : reqError
 
   const save = useMutation({
@@ -319,9 +352,26 @@ function ScheduleSheet({ value, onClose }: { value: Schedule | 'new' | null; onC
         <form className="flex h-full flex-col" onSubmit={(e) => { e.preventDefault(); if (!error) save.mutate() }}>
           <SheetHeader>
             <SheetTitle>{isNew ? 'Neuer Zeitplan' : 'Zeitplan bearbeiten'}</SheetTitle>
-            <SheetDescription>Geplante Audits laufen automatisch im Hintergrund.</SheetDescription>
+            <SheetDescription>Geplante Audits und Überwachungen laufen automatisch im Hintergrund.</SheetDescription>
           </SheetHeader>
           <SheetBody className="grid content-start gap-6">
+            <Field label="Art" htmlFor="s-kind">
+              <Segmented<ScheduleKind>
+                aria-label="Art des Zeitplans"
+                className="w-fit max-w-full"
+                value={form.kind}
+                onValueChange={setKind}
+                options={[
+                  { value: 'Audit', label: 'Audit', icon: <ScanSearch /> },
+                  { value: 'Monitor', label: 'Überwachung privilegierter Gruppen', icon: <ShieldUser /> },
+                ]}
+              />
+              <p className="text-xs text-muted-foreground">
+                {monitor
+                  ? 'Prüft Mitglieder der geschützten und Tier-0-Gruppen, Konten-Hygiene und Angriffspfade und meldet Änderungen. Empfohlen: alle 15 Minuten.'
+                  : 'Vergleicht das Active Directory mit der Soll-Konfiguration.'}
+              </p>
+            </Field>
             <Field label="Name" htmlFor="s-name" required>
               <Input id="s-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="z. B. Nächtliches Audit" autoFocus />
             </Field>
@@ -330,7 +380,7 @@ function ScheduleSheet({ value, onClose }: { value: Schedule | 'new' | null; onC
                 <Input id="s-cron" className="font-mono" value={form.cron} onChange={(e) => setForm({ ...form, cron: e.target.value })} aria-invalid={cron.error || undefined} placeholder="0 2 * * *" />
               </Field>
               <div className="flex flex-wrap gap-1.5">
-                {cronPresets.map((p) => (
+                {(monitor ? [{ label: 'Alle 15 Minuten', cron: MONITOR_CRON }, { label: 'Alle 5 Minuten', cron: '*/5 * * * *' }, ...cronPresets.slice(0, 2)] : cronPresets).map((p) => (
                   <button
                     key={p.cron}
                     type="button"
@@ -361,7 +411,22 @@ function ScheduleSheet({ value, onClose }: { value: Schedule | 'new' | null; onC
               </Field>
             </div>
             <div className="border-t pt-6">
-              <RunRequestFields value={form} onChange={(r) => setForm({ ...form, ...r })} idPrefix="sched" compact />
+              {monitor ? (
+                <Field label="Domain Controller" htmlFor="sched-mon-dc" required hint={settings ? `Standard: ${settings.defaultPreferredDc || '–'}` : undefined}>
+                  <Combobox
+                    id="sched-mon-dc"
+                    mono
+                    value={form.preferredDc}
+                    onChange={(v) => setForm({ ...form, preferredDc: v })}
+                    options={dcOptions}
+                    placeholder="dc01.contoso.local"
+                    searchPlaceholder="DC suchen oder FQDN eingeben …"
+                    emptyText="Keine Domain Controller gefunden – FQDN eingeben"
+                  />
+                </Field>
+              ) : (
+                <RunRequestFields value={form} onChange={(r) => setForm({ ...form, ...r })} idPrefix="sched" compact />
+              )}
             </div>
           </SheetBody>
           <SheetFooter>

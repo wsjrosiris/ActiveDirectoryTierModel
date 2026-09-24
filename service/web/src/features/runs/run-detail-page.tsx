@@ -1,10 +1,10 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useParams } from 'react-router'
-import { ArrowLeft, Ban, CalendarClock, ClipboardList, FileSearch, FlaskConical, ListChecks, Search, Terminal, User as UserIcon } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router'
+import { ArrowLeft, ArrowRight, Ban, CalendarClock, ClipboardList, FileSearch, FlaskConical, HeartPulse, ListChecks, Route, Search, ShieldUser, Terminal, User as UserIcon, UserX, Users, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, ApiError } from '@/api/client'
-import type { Finding, RunDetail, RunStatus } from '@/api/types'
+import type { Finding, MonitorSummary, RunDetail, RunStatus } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -15,10 +15,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { RunKindIcon, RunStatusBadge, DriftBadge } from '@/components/shared/badges'
+import { RunKindIcon, RunStatusBadge, DriftBadge, SeverityBadge } from '@/components/shared/badges'
 import { Page } from '@/components/shared/page-header'
 import { useCan } from '@/features/auth/auth'
-import { findingTypeLabels, includeLabels, scopeLabels, sectionFallbackTitles } from '@/lib/labels'
+import { areaLabels, areaPlanLabels, findingArea, findingTypeLabels, includeLabels, scopeLabels, sectionFallbackTitles } from '@/lib/labels'
+import { Tooltip } from '@/components/ui/tooltip'
 import { cn, formatDateTime, formatDuration, formatNumber } from '@/lib/utils'
 import { RunLog, useRunLog } from './run-log'
 import { ApprovalOutcome, ApprovalPanel } from './approval-panel'
@@ -83,6 +84,7 @@ export function Component() {
 
   const r = run.data
   const isAudit = r?.kind === 'Audit'
+  const isMonitor = r?.kind === 'Monitor'
 
   return (
     <Page wide>
@@ -104,7 +106,7 @@ export function Component() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-xl font-semibold tracking-tight">
-                    {r.kind === 'Deploy' ? (r.mode === 'Apply' ? 'Deploy' : 'Deploy (Planung)') : 'Audit'}{' '}
+                    {r.kind === 'Deploy' ? (r.mode === 'Apply' ? 'Deploy' : 'Deploy (Planung)') : r.kind === 'Monitor' ? 'Überwachung' : 'Audit'}{' '}
                     <span className="font-mono text-muted-foreground">#{r.id}</span>
                   </h1>
                   <RunStatusBadge status={status ?? r.status} />
@@ -152,7 +154,7 @@ export function Component() {
 
           <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Meta label="Bereich">
-              {r.scope ? scopeLabels[r.scope] : 'Nur Add-ons'}
+              {isMonitor ? 'Privilegierte Gruppen' : r.scope ? scopeLabels[r.scope] : 'Nur Add-ons'}
               {r.includes.length > 0 && (
                 <div className="mt-1 flex flex-wrap gap-1">{r.includes.map((i) => <Badge key={i} variant="secondary">{includeLabels[i] ?? i}</Badge>)}</div>
               )}
@@ -164,10 +166,10 @@ export function Component() {
                 {r.startedAt ? `Start ${formatDateTime(r.startedAt)}` : 'Noch nicht gestartet'}
               </p>
             </Meta>
-            <Meta label={isAudit ? 'Ergebnis' : 'Exit-Code'}>
-              {isAudit ? (
+            <Meta label={isAudit || isMonitor ? 'Ergebnis' : 'Exit-Code'}>
+              {isAudit || isMonitor ? (
                 <div className="flex flex-wrap items-center gap-2">
-                  <DriftBadge count={r.driftCount} />
+                  <DriftBadge count={r.driftCount} monitor={isMonitor} />
                   {!!r.errorCount && <Badge variant="danger">{r.errorCount} Fehler</Badge>}
                 </div>
               ) : (
@@ -181,6 +183,8 @@ export function Component() {
               {r.message}
             </div>
           )}
+
+          {isMonitor && r.status === 'Succeeded' && r.summary && <MonitorResult summary={r.summary as unknown as MonitorSummary} />}
 
           <Tabs value={tab} onValueChange={setTab}>
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -321,7 +325,10 @@ const summaryTiles: { key: string; label: string; type?: string }[] = [
 function Findings({ run }: { run: RunDetail }) {
   const [type, setType] = React.useState('all')
   const [res, setRes] = React.useState('all')
+  const [area, setArea] = React.useState('all')
   const [q, setQ] = React.useState('')
+  const canOperate = useCan('Operator')
+  const remediate = useRemediation(run)
   const findings = run.findings ?? []
   const types = React.useMemo(() => [...new Set(findings.map((f) => f.type))].sort(), [findings])
   const resTypes = React.useMemo(() => [...new Set(findings.map((f) => f.resourceType))].sort(), [findings])
@@ -334,10 +341,13 @@ function Findings({ run }: { run: RunDetail }) {
           .map(([k, v]) => ({ key: k, label: k, value: v })),
       ]
     : types.map((t) => ({ key: t, label: findingTypeLabels[t] ?? t, type: t, value: findings.filter((f) => f.type === t).length }))
+  const areas = React.useMemo(() => [...new Set(findings.map((f) => findingArea(f)).filter((a): a is string => !!a))], [findings])
+  const hasSeverity = findings.some((f) => f.severity)
   const filtered = findings.filter(
     (f: Finding) =>
       (type === 'all' || f.type === type) &&
       (res === 'all' || f.resourceType === res) &&
+      (area === 'all' || findingArea(f) === area) &&
       (!q || `${f.identifier} ${f.details} ${f.resourceType}`.toLowerCase().includes(q.toLowerCase())),
   )
 
@@ -362,6 +372,7 @@ function Findings({ run }: { run: RunDetail }) {
           ))}
         </div>
       )}
+      {run.status === 'Succeeded' && <RemediationPanel run={run} findings={findings} onFilter={setArea} />}
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
           <div className="relative w-full max-w-xs">
@@ -374,6 +385,11 @@ function Findings({ run }: { run: RunDetail }) {
           <div className="w-48">
             <Select size="sm" aria-label="Ressourcentyp" value={res} onValueChange={setRes} options={[{ value: 'all', label: 'Alle Ressourcen' }, ...resTypes.map((t) => ({ value: t, label: t }))]} />
           </div>
+          {areas.length > 0 && (
+            <div className="w-44">
+              <Select size="sm" aria-label="Bereich" value={area} onValueChange={setArea} options={[{ value: 'all', label: 'Alle Bereiche' }, ...areas.map((a) => ({ value: a, label: areaLabels[a] ?? a }))]} />
+            </div>
+          )}
           <span className="ml-auto text-xs text-muted-foreground">{filtered.length} von {findings.length}</span>
         </div>
         {findings.length === 0 ? (
@@ -385,9 +401,11 @@ function Findings({ run }: { run: RunDetail }) {
             <THead>
               <TR>
                 <TH>Typ</TH>
+                {hasSeverity && <TH>Schweregrad</TH>}
                 <TH>Ressource</TH>
                 <TH>Bezeichner</TH>
                 <TH>Details</TH>
+                {canOperate && run.status === 'Succeeded' && <TH className="w-10"><span className="sr-only">Behebung</span></TH>}
               </TR>
             </THead>
             <TBody>
@@ -398,9 +416,27 @@ function Findings({ run }: { run: RunDetail }) {
                       {findingTypeLabels[f.type] ?? f.type}
                     </span>
                   </TD>
+                  {hasSeverity && <TD>{f.severity ? <SeverityBadge severity={f.severity} /> : <span className="text-muted-foreground">–</span>}</TD>}
                   <TD className="text-[13px] text-muted-foreground">{f.resourceType}</TD>
                   <TD className="max-w-[360px]"><span className="block truncate font-mono text-[12px]" title={f.identifier}>{f.identifier}</span></TD>
                   <TD className="text-[13px] text-muted-foreground">{f.details}</TD>
+                  {canOperate && run.status === 'Succeeded' && (
+                    <TD>
+                      {findingArea(f) && (
+                        <Tooltip content={`Planung für ${areaLabels[findingArea(f)!]} starten`}>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label={`Planung für ${areaLabels[findingArea(f)!]} starten`}
+                            disabled={remediate.isPending}
+                            onClick={() => remediate.mutate(findingArea(f)!)}
+                          >
+                            <Wrench />
+                          </Button>
+                        </Tooltip>
+                      )}
+                    </TD>
+                  )}
                 </TR>
               ))}
             </TBody>
@@ -408,5 +444,111 @@ function Findings({ run }: { run: RunDetail }) {
         )}
       </Card>
     </div>
+  )
+}
+
+/** Monitor runs: the evaluation in numbers; details live on the "Privilegierte Zugriffe" page. */
+function MonitorResult({ summary: s }: { summary: MonitorSummary }) {
+  const changes = (s.addedCount ?? 0) + (s.removedCount ?? 0)
+  const tiles = [
+    { label: 'Gruppen', value: s.groupCount, sub: `${formatNumber(s.memberCount)} Mitgliedschaften`, icon: <Users />, to: '/privilegiert' },
+    {
+      label: 'Änderungen',
+      value: changes,
+      sub: s.baseline ? 'Erste Momentaufnahme' : changes ? `${s.addedCount} hinzugefügt, ${s.removedCount} entfernt` : 'Keine seit der letzten Prüfung',
+      icon: <ListChecks />,
+      to: '/privilegiert/aenderungen',
+      alert: changes > 0,
+    },
+    { label: 'Nicht erwartet', value: s.unexpectedCount, sub: 'Mitglieder ohne Soll-Eintrag', icon: <UserX />, to: '/privilegiert/gruppen?nur=unerwartet', alert: s.unexpectedCount > 0 },
+    { label: 'Hygiene', value: s.hygieneCount, sub: s.hygieneHighCount ? `${s.hygieneHighCount} mit hohem Schweregrad` : 'Keine hohen Befunde', icon: <HeartPulse />, to: '/privilegiert/hygiene', alert: s.hygieneHighCount > 0 },
+    { label: 'Angriffspfade', value: s.attackPathCount, sub: 'Rechte auf Tier-0-Objekte', icon: <Route />, to: '/privilegiert/angriffspfade', alert: s.attackPathCount > 0 },
+  ]
+  return (
+    <Card className="mb-6 overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
+        <p className="flex items-center gap-2 text-sm font-semibold"><ShieldUser className="size-4 text-muted-foreground" /> Ergebnis der Überwachung</p>
+        <Button variant="outline" size="xs" asChild>
+          <Link to="/privilegiert">Privilegierte Zugriffe öffnen <ArrowRight /></Link>
+        </Button>
+      </div>
+      <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3 xl:grid-cols-5">
+        {tiles.map((t) => (
+          <Link key={t.label} to={t.to} className="bg-card px-4 py-3 transition-colors outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset">
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground [&_svg]:size-3.5">{t.icon} {t.label}</p>
+            <p className={cn('mt-1 text-2xl font-semibold tabular', t.alert && 'text-rose-600 dark:text-rose-400')}>{formatNumber(t.value)}</p>
+            <p className="truncate text-xs text-muted-foreground">{t.sub}</p>
+          </Link>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+/** Remediation by click: a planning run for the area of audit findings (Operator). */
+function useRemediation(run: RunDetail) {
+  const navigate = useNavigate()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (area: string) => api.runs.remediate(run.id, area),
+    onSuccess: (plan, area) => {
+      qc.invalidateQueries({ queryKey: ['runs'] })
+      toast.success(`Planung #${plan.id} für ${areaLabels[area] ?? area} gestartet`, { description: 'Es werden noch keine Änderungen vorgenommen.' })
+      navigate(`/laeufe/${plan.id}`)
+    },
+  })
+}
+
+function RemediationPanel({ run, findings, onFilter }: { run: RunDetail; findings: Finding[]; onFilter: (area: string) => void }) {
+  const canOperate = useCan('Operator')
+  const remediate = useRemediation(run)
+  const byArea = new Map<string, Finding[]>()
+  for (const f of findings) {
+    const a = findingArea(f)
+    if (!a) continue
+    if (!byArea.has(a)) byArea.set(a, [])
+    byArea.get(a)!.push(f)
+  }
+  if (byArea.size === 0) return null
+  const order = Object.keys(areaLabels)
+  const areas = [...byArea.entries()].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
+  return (
+    <Card className="overflow-hidden">
+      <div className="border-b px-5 py-3">
+        <p className="flex items-center gap-2 text-sm font-semibold"><Wrench className="size-4 text-muted-foreground" /> Behebung</p>
+        <p className="text-xs text-muted-foreground">
+          {canOperate
+            ? 'Startet einen Planungslauf nur für den Bereich, mit demselben Domain Controller und derselben ADML-Sprache wie dieses Audit. Angewendet wird erst nach Prüfung des Plans.'
+            : 'Planungsläufe zur Behebung können Operatoren starten.'}
+        </p>
+      </div>
+      <ul className="divide-y">
+        {areas.map(([area, list]) => {
+          const high = list.filter((f) => f.severity === 'High').length
+          return (
+            <li key={area} className="flex flex-wrap items-center gap-3 px-5 py-2.5">
+              <button type="button" onClick={() => onFilter(area)} className="min-w-0 flex-1 text-left outline-none focus-visible:underline">
+                <p className="text-[13px] font-medium">{areaLabels[area]}</p>
+                <p className="text-xs text-muted-foreground">
+                  {list.length} {list.length === 1 ? 'Befund' : 'Befunde'}
+                  {high > 0 && <span className="text-rose-700 dark:text-rose-400"> · {high} hoch</span>} · Planung „{areaPlanLabels[area]}“
+                </p>
+              </button>
+              {canOperate && (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  loading={remediate.isPending && remediate.variables === area}
+                  disabled={remediate.isPending}
+                  onClick={() => remediate.mutate(area)}
+                >
+                  {!(remediate.isPending && remediate.variables === area) && <FlaskConical />} Planung für diesen Bereich starten
+                </Button>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </Card>
   )
 }

@@ -34,6 +34,8 @@ import { sectionQuery } from '@/features/config/queries'
 import { actionLabels, includeLabels, scopeLabels } from '@/lib/labels'
 import { cn, formatDuration, formatNumber, formatRelative } from '@/lib/utils'
 
+import { ComplianceTiles } from './compliance-tiles'
+
 const DriftChart = React.lazy(() => import('./drift-chart'))
 
 export function Component() {
@@ -66,6 +68,8 @@ export function Component() {
 
       <KpiRow data={data} loading={isLoading} />
 
+      <ComplianceTiles />
+
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <AuditCard data={data} loading={isLoading} />
         <DeployCard data={data} loading={isLoading} />
@@ -92,12 +96,12 @@ export function Component() {
             )}
           </CardContent>
         </Card>
-        <RecentRuns runs={data?.recentRuns} loading={isLoading} className="xl:col-span-2" />
+        <RecentRuns runs={data?.recentRuns} loading={isLoading} className="min-w-0 xl:col-span-2" />
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-5">
-        <OuTreeCard className="xl:col-span-3" />
-        <RecentChanges changes={data?.recentChanges} loading={isLoading} className="xl:col-span-2" />
+        <OuTreeCard className="min-w-0 xl:col-span-3" />
+        <RecentChanges changes={data?.recentChanges} loading={isLoading} className="min-w-0 xl:col-span-2" />
       </div>
     </Page>
   )
@@ -436,7 +440,7 @@ function RecentChanges({ changes, loading, className }: { changes?: ChangeEntry[
         ) : !changes?.length ? (
           <EmptyState compact icon={<FileClock />} title="Keine Änderungen" />
         ) : (
-          <ol className="relative grid gap-4 before:absolute before:top-2 before:bottom-2 before:left-[5px] before:w-px before:bg-border">
+          <ol className="relative grid grid-cols-[minmax(0,1fr)] gap-4 before:absolute before:top-2 before:bottom-2 before:left-[5px] before:w-px before:bg-border">
             {changes.map((c) => (
               <li key={c.id} className="relative flex gap-3 pl-5">
                 <span className={cn('absolute top-1.5 left-0 size-[11px] rounded-full border-2 border-card', dotColor(c.action))} aria-hidden />

@@ -20,6 +20,7 @@ import {
   Undo2,
   Webhook,
   XCircle,
+  ShieldUser,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, ApiError } from '@/api/client'
@@ -73,6 +74,7 @@ const eventMeta: { key: keyof ChannelEvents; label: string; description: string;
   { key: 'failure', label: 'Fehler', description: 'Ein Deploy oder Audit ist fehlgeschlagen.', icon: <XCircle /> },
   { key: 'apply', label: 'Angewendet', description: 'Ein Deploy im Modus „Anwenden“ wurde erfolgreich abgeschlossen.', icon: <Rocket /> },
   { key: 'approval', label: 'Freigabe', description: 'Ein Deploy wartet auf die Freigabe durch eine zweite Person (mit den Zählern der Planung).', icon: <Hourglass /> },
+  { key: 'privileged', label: 'Privilegierte Gruppen', description: 'Die Überwachung hat neue oder entfernte Mitglieder, ein nicht erwartetes Mitglied, einen neuen hohen Hygiene-Befund oder einen neuen Angriffspfad gefunden.', icon: <ShieldUser /> },
   { key: 'certificate', label: 'Zertifikat', description: 'Das HTTPS-Zertifikat des Dienstes läuft in weniger als 30 Tagen ab (tägliche Prüfung).', icon: <KeySquare /> },
 ]
 
@@ -87,7 +89,7 @@ function NotificationsPage() {
       <PageHeader
         icon={<Bell />}
         title="Benachrichtigungen"
-        description="E-Mail, Microsoft Teams oder Webhooks bei Drift, Fehlern, Anwendungen und Freigaben."
+        description="E-Mail, Microsoft Teams oder Webhooks bei Drift, Fehlern, Anwendungen, Freigaben und Änderungen an privilegierten Gruppen."
         actions={<Button onClick={() => setEditing('new')}><Plus /> Kanal hinzufügen</Button>}
       />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
@@ -245,7 +247,7 @@ function ChannelCard({ channel: c, onEdit, smtpMissing }: { channel: Notificatio
   )
 }
 
-const emptyEvents: ChannelEvents = { drift: true, failure: true, apply: false, approval: false, certificate: true }
+const emptyEvents: ChannelEvents = { drift: true, failure: true, apply: false, approval: false, certificate: true, privileged: true }
 
 const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+$/
 

@@ -170,6 +170,8 @@ interface LogLine { seq: number; at: string; stream: 'stdout' | 'stderr' | 'syst
 | POST | `/api/runs/deploy` | `DeployRequest` → `RunSummary` (202) |
 | POST | `/api/runs/audit` | `RunRequest` → `RunSummary` (202) |
 | GET  | `/api/runs/{id}` | → `RunDetail` |
+| POST | `/api/runs/monitor` | `{ preferredDc }` → `RunSummary` (202, Operator) – Überwachungslauf (`kind: 'Monitor'`) |
+| POST | `/api/runs/{id}/remediate` | `{ area }` → `RunSummary` (Operator) – Planungslauf für den Bereich eines Audit-Befunds (`ous`→`OuOnly`, `groups`→`GroupOnly`, `users`→`UserOnly`, `gpos`→`GposOnly`, `acls`→`OuAclsOnly`, `admx`→`AdmxOnly`, `msa`/`gmsa`/`dmsa`/`winlaps`→ nur das Add-on) |
 | GET  | `/api/runs/{id}/plan` | → `DeployPlan`; 404 ohne Planung |
 | GET  | `/api/runs/plan-candidates?preferredDc&scope&includeMsa&…&admlLanguage` | → `{ requirePlan, maxAgeHours, candidate: { id, requestedBy, finishedAt, expiresAt, summary, changes } \| null, latestPlanRunId, reason }` – passende Planung zum Anwenden |
 | GET  | `/api/runs/{id}/log?after=0` | → `{ status: RunStatus, lines: LogLine[] }` (Zeilen mit `seq > after`, max. 2000) |
@@ -187,11 +189,20 @@ Planungslauf muss erfolgreich sein und in Bereich, Add-ons, DC (ohne Groß-/Klei
 Konfigurationsversionen mit dem aktuellen Stand übereinstimmen und darf nicht älter als `planMaxAgeHours` sein;
 sonst 400 mit Meldung zu `planRunId`. Der Anwenden-Lauf übernimmt die Versionen des Planungslaufs (auch bei Freigabe).
 
+## Privilegierte Zugriffe und Compliance (alle angemeldeten Benutzer)
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| GET | `/api/privileged` | letzte Überwachung: Gruppen mit Mitgliedern und Bewertung, nicht erwartete Mitglieder, Hygiene-Befunde, Angriffspfade, Zähler |
+| GET | `/api/privileged/changes?limit=` | hinzugefügte/entfernte Mitglieder je Überwachungslauf |
+| GET | `/api/compliance` | Wert je Tier mit Abzügen, Tagesverlauf (30 Tage, UTC) und die verwendeten Gewichte |
+
 ## Zeitpläne (geplante Audits)
 
 ```ts
 interface Schedule extends RunRequest {
   id: number; name: string; cron: string   // 5-Feld-Cron, z. B. "0 2 * * *"
+  kind: 'Audit' | 'Monitor'                // Standard 'Audit'; 'Monitor' ignoriert Bereich und Add-ons
   timeZone: string                         // IANA, z. B. "Europe/Berlin"
   enabled: boolean
   nextRunAt: string | null; lastRunAt: string | null; lastRunId: number | null
@@ -254,6 +265,8 @@ interface Settings {
   publicBaseUrl: string           // z. B. https://tiermodel01.contoso.com:8443 – für Links in Benachrichtigungen; leer erlaubt
   requirePlanBeforeApply: boolean // Anwenden nur aus passendem Planungslauf (Standard true)
   planMaxAgeHours: number         // 1–720, Gültigkeit einer Planung (Standard 24)
+  staleDays: number               // Hygiene: Konto ohne Anmeldung (Standard 90)
+  passwordMaxAgeDays: number      // Hygiene: Passwortalter (Standard 365)
   frameworkPath: string           // nur lesen
   pwshPath: string                // nur lesen
 }
@@ -285,7 +298,7 @@ type ChannelType = 'Email' | 'Teams' | 'Webhook'
 interface NotificationChannel {
   id: number; name: string; type: ChannelType; enabled: boolean
   target: string       // Email: Empfänger, durch Komma getrennt · Teams/Webhook: URL (in Antworten gekürzt: nur Schema+Host+"…")
-  events: { drift: boolean; failure: boolean; apply: boolean; approval: boolean; certificate: boolean }
+  events: { drift: boolean; failure: boolean; apply: boolean; approval: boolean; certificate: boolean; privileged: boolean }
   lastSentAt: string | null; lastError: string | null; createdAt: string
 }
 interface SmtpSettings {

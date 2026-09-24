@@ -150,6 +150,10 @@ Solange **Fehler** bestehen, startet kein Deploy im Modus *Anwenden*.
 
 Anschließend öffnet sich der Lauf mit Live-Protokoll.
 
+**Behebung aus einem Audit:** In den Befunden eines Audits startet **Planung für diesen Bereich starten** einen
+Planungslauf genau für den betroffenen Bereich (z. B. nur OUs oder nur GPOs; bei MSA/gMSA/dMSA/LAPS das passende
+Add-on) mit demselben DC. Aus dieser Planung wird wie gewohnt angewendet.
+
 ### Geplante Änderungen prüfen und anwenden
 
 Nach einem Planungslauf zeigt der Lauf den Reiter **Geplante Änderungen**: Zähler je Aktionsart (Anlegen, Ändern,
@@ -202,6 +206,54 @@ Läuft der vorherige Lauf eines Zeitplans noch, wird der nächste Termin übersp
 einen Zeitplan sofort.
 
 ![Zeitpläne](img/schedules-light.png)
+
+## Privilegierte Zugriffe
+
+Die Seite zeigt den Ist-Zustand der privilegierten Zugriffe im AD. Grundlage ist ein **Überwachungslauf**
+(`Watch-TierModelPrivilegedGroups.ps1`, nur lesend): **Jetzt prüfen** (Operator) oder ein Zeitplan vom Typ
+*Überwachung* (empfohlen alle 15 Minuten, unter *Audits › Zeitpläne*).
+
+| Reiter | Inhalt |
+|---|---|
+| **Gruppen** | geschützte Gruppen (z. B. Domänen-Admins, Organisations-Admins, Sicherungs-Operatoren – gefunden über die SID, daher auch in deutschen Domänen) und alle Tier-0-Gruppen der Konfiguration mit ihren Mitgliedern: direkt oder verschachtelt (über welche Gruppe), aktiv/deaktiviert, Bewertung |
+| **Änderungen** | Verlauf über alle Überwachungsläufe: wer wurde wann hinzugefügt oder entfernt |
+| **Hygiene** | Befunde zu Konten in Tier 0 und Tier 1 |
+| **Angriffspfade** | gefährliche Rechte von Nicht-Tier-0-Principals auf Tier-0-Objekten, als Satz mit den Mitgliedern, die das Recht über eine Gruppe erhalten |
+
+![Privilegierte Zugriffe](img/privileged-light.png)
+
+**Nicht erwartet** ist ein Mitglied, das weder eine Tier-0-Gruppe noch ein Tier-0-Konto der Konfiguration ist und
+nicht in einer Tier-0-OU liegt. Ausgenommen sind die Standard-Verschachtelungen von Windows (z. B. Domänen-Admins in
+Administratoren), das integrierte Administratorkonto und Domänencontroller in ihren Gruppen.
+
+Hygiene-Regeln (Schwellwerte unter *Einstellungen*):
+
+| Regel | Schwere |
+|---|---|
+| Benutzer mit SPN (Kerberoasting) | Hoch, wenn privilegiert, sonst Mittel |
+| „Konto ist vertraulich und kann nicht delegiert werden“ fehlt | Hoch in Tier 0, sonst Mittel |
+| Tier-0-Benutzer nicht in *Protected Users* | Mittel |
+| Passwort älter als *N* Tage (Standard 365) | Mittel |
+| Deaktiviert, aber noch Mitglied einer privilegierten Gruppe | Mittel |
+| Keine Anmeldung seit *N* Tagen (Standard 90) | Niedrig |
+| Passwort läuft nie ab | Niedrig |
+| `adminCount` verwaist (nicht mehr in einer geschützten Gruppe) | Niedrig |
+
+Änderungen, neue nicht erwartete Mitglieder und neue Befunde mit hohem Schweregrad lösen die Benachrichtigung
+*Privilegierte Zugriffe* aus.
+
+### Compliance-Wert
+
+Das Dashboard zeigt je Tier einen Wert von 0 bis 100 mit Verlauf der letzten 30 Tage. Abgezogen werden:
+
+| Grundlage | Abzug |
+|---|---|
+| Audit-Befund (Tier aus dem Objekt) | Hoch 10, Mittel 5, Niedrig 2 |
+| nicht erwartetes Mitglied (Tier 0) | 15 |
+| Hygiene-Befund (Tier des Kontos) | Hoch 8, Mittel 4, Niedrig 1 |
+| Angriffspfad (Tier 0) | 20 |
+
+**Aufschlüsselung** listet die einzelnen Abzüge.
 
 ## Läufe
 
@@ -257,6 +309,7 @@ wählen, bei welchen Ereignissen er benachrichtigt wird:
 | Anwenden | ein Deploy hat Änderungen im AD angewendet |
 | Freigabe | ein Deploy wartet auf Freigabe |
 | Zertifikat | das HTTPS-Zertifikat läuft in weniger als 30 Tagen ab (täglich geprüft) |
+| Privilegierte Zugriffe | Mitglieder geschützter Gruppen geändert, neues nicht erwartetes Mitglied oder neuer Befund mit hohem Schweregrad |
 
 ![Benachrichtigungen](img/notifications-light.png)
 
@@ -273,6 +326,8 @@ wählen, bei welchen Ereignissen er benachrichtigt wird:
 | Freigabefrist (Stunden) | danach verfällt ein Antrag automatisch |
 | Anwenden nur nach Planung | *Anwenden* nur aus einem passenden, erfolgreichen Planungslauf (Standard: an) |
 | Gültigkeit einer Planung (Stunden) | so lange lässt sich eine Planung anwenden (Standard 24) |
+| Inaktiv nach (Tage) | Hygiene: Konto ohne Anmeldung (Standard 90) |
+| Maximales Passwortalter (Tage) | Hygiene: Passwort zu alt (Standard 365) |
 | Öffentliche Adresse | z. B. `https://tiermodel01.contoso.com:8443` – für Links in Benachrichtigungen |
 | Aufbewahrung von Läufen (Tage) | Protokollzeilen und Arbeitsverzeichnisse älterer Läufe werden gelöscht; Status, Ergebnis und Befunde bleiben. `0` = unbegrenzt |
 

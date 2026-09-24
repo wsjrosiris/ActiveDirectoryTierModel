@@ -255,4 +255,10 @@ Geführte Dialoge, die mehrere Bereiche in **einem** Entwurf ändern (bestehende
 | 3 Anwenden nur nach Planung | umgesetzt |
 | 13 Tier-Regeln | umgesetzt |
 | 21 Systemzustand | umgesetzt |
-| Phase 2–5 | geplant |
+| 7 Tier-0-Mitgliedschaften überwachen | umgesetzt |
+| 8 Hygiene-Prüfungen | umgesetzt |
+| 9 Angriffspfade (direkte Rechte + Mitglieder der berechtigten Gruppe) | umgesetzt |
+| 5 Behebung per Klick | umgesetzt |
+| 24 Compliance-Wert | umgesetzt |
+| 10 Authentication Silos | in Arbeit |
+| Phase 3–5 (übrige) | geplant |

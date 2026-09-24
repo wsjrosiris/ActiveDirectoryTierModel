@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FlaskConical, FolderCog, Globe, Lock, Save, Settings2, Terminal, UsersRound } from 'lucide-react'
+import { FlaskConical, FolderCog, Globe, Lock, Save, Settings2, ShieldUser, Terminal, UsersRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import type { Settings, SettingsUpdate } from '@/api/types'
@@ -47,9 +47,11 @@ function SettingsPage() {
   const retentionInvalid = form ? !Number.isInteger(form.runRetentionDays) || (form.runRetentionDays < 0 || form.runRetentionDays > 3650) : false
   const timeoutInvalid = form ? !Number.isInteger(form.approvalTimeoutHours) || form.approvalTimeoutHours < 1 || form.approvalTimeoutHours > 720 : false
   const planAgeInvalid = form ? !Number.isInteger(form.planMaxAgeHours) || form.planMaxAgeHours < 1 || form.planMaxAgeHours > 720 : false
+  const staleInvalid = form ? !Number.isInteger(form.staleDays) || form.staleDays < 1 || form.staleDays > 3650 : false
+  const pwAgeInvalid = form ? !Number.isInteger(form.passwordMaxAgeDays) || form.passwordMaxAgeDays < 1 || form.passwordMaxAgeDays > 3650 : false
   const urlError = form ? publicUrlError(form.publicBaseUrl) : null
   const langError = form ? (form.admlLanguage.trim() ? languageError(form.admlLanguage.trim()) : 'Bitte eine Sprache wählen.') : null
-  const invalid = retentionInvalid || timeoutInvalid || planAgeInvalid || !!urlError || !!langError
+  const invalid = retentionInvalid || timeoutInvalid || planAgeInvalid || staleInvalid || pwAgeInvalid || !!urlError || !!langError
 
   return (
     <Page className="max-w-3xl">
@@ -191,6 +193,32 @@ function SettingsPage() {
                   />
                 </Field>
               </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle className="flex items-center gap-2"><ShieldUser className="size-4 text-muted-foreground" /> Überwachung privilegierter Zugriffe</CardTitle>
+                <CardDescription>Schwellwerte der Hygiene-Prüfungen für Admin-Konten in Tier 0 und Tier 1. Sie gelten ab der nächsten Überwachung.</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-5 sm:grid-cols-2">
+              <Field
+                label="Inaktiv ab (Tage ohne Anmeldung)"
+                htmlFor="st-stale"
+                error={staleInvalid ? 'Bitte eine ganze Zahl von 1 bis 3650 angeben.' : undefined}
+                hint="Aktivierte Konten, die sich länger nicht angemeldet haben, werden gemeldet. Standard: 90."
+              >
+                <Input id="st-stale" type="number" min={1} max={3650} value={Number.isNaN(form.staleDays) ? '' : form.staleDays} onChange={(e) => setForm({ ...form, staleDays: e.target.valueAsNumber })} aria-invalid={staleInvalid || undefined} />
+              </Field>
+              <Field
+                label="Maximales Passwortalter (Tage)"
+                htmlFor="st-pwage"
+                error={pwAgeInvalid ? 'Bitte eine ganze Zahl von 1 bis 3650 angeben.' : undefined}
+                hint="Ältere Passwörter privilegierter Benutzer werden gemeldet. Standard: 365."
+              >
+                <Input id="st-pwage" type="number" min={1} max={3650} value={Number.isNaN(form.passwordMaxAgeDays) ? '' : form.passwordMaxAgeDays} onChange={(e) => setForm({ ...form, passwordMaxAgeDays: e.target.valueAsNumber })} aria-invalid={pwAgeInvalid || undefined} />
+              </Field>
             </CardContent>
           </Card>
           <Card>

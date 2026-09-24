@@ -32,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Service: **tier rules** in validation and as live hints in the forms (lower tier with write access to a higher tier,
   cross-tier group membership, LAPS groups, GPO links).
 - Service: **system status** page (`/api/health/details`) and a daily certificate-expiry notification.
+- `Watch-TierModelPrivilegedGroups.ps1`: read-only snapshot of protected and Tier 0 groups, privileged account
+  attributes, adminCount orphans and dangerous ACEs on Tier 0 objects (`docs/privileged-access-monitoring.md`).
+- Service: **privileged access monitoring** (run kind Monitor, schedules of kind Monitor): members by SID, change
+  history, unexpected members, account hygiene, attack paths; notification on changes.
+- Service: **remediation by click** – a plan run for the area of an audit finding.
+- Service: **compliance score** per tier on the dashboard with 30-day history and breakdown.
 - Roadmap for the next features (`docs/service/roadmap.md`).
 
 ### Fixed
