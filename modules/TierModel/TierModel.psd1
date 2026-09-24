@@ -14,6 +14,7 @@
     FunctionsToExport = @(
         'Copy-TierModelAdmx',
         'Export-TierModelPlan',
+        'Export-TierModelPrivilegedSnapshot',
         'Get-TierModel',
         'Get-TierModelAdmx',
         'Get-TierModelConfig',
@@ -28,6 +29,7 @@
         'Get-TierModelOuAcl',
         'Get-TierModelOuAclFd',
         'Get-TierModelPlan',
+        'Get-TierModelPrivilegedSnapshot',
         'Get-TierModelUser',
         'Get-TierModelUserFd',
         'Get-TierModelWellKnownPrincipal',
