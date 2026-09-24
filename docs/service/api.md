@@ -239,6 +239,32 @@ Nur auf einem Windows-Server in der Domäne; sonst `available: false`. Ergebniss
 | GET/PUT | `/api/reports/schedules` (Admin) | E-Mail-Versand wöchentlich/monatlich |
 | POST | `/api/reports/schedules/{id}/send` (Admin) | sofort senden |
 
+## Import (Bearbeiter) und Git (Admin)
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| POST | `/api/config/import/file` | ZIP als Rohdaten → Vorschau (max. 20 MB, 500 Einträge; Pfade außerhalb werden abgelehnt) |
+| POST | `/api/config/import/remote` | `{ instanceId }` → Vorschau aus einer anderen Instanz |
+| GET | `/api/config/import/{id}` | Vorschau je Bereich (unverändert, geändert, neu), Validierung |
+| POST | `/api/config/import/{id}/replacements` | Suchen → Ersetzen-Regeln anwenden |
+| POST | `/api/config/import/{id}/validate` | Validierung der Auswahl |
+| POST | `/api/config/import/{id}/apply` | `{ sections, comment }` → neue Versionen; 409, wenn sich ein Bereich seit der Vorschau geändert hat |
+| GET/POST/PUT/DELETE | `/api/config/remote-instances[/{id}]`, `POST …/{id}/check` | andere Instanzen (Pflege: Admin) |
+| GET/PUT | `/api/settings/git` | Git-Einstellungen und Status |
+| POST | `/api/settings/git/sync`, `/api/settings/git/resolve` | jetzt synchronisieren; Konflikt durch Übernahme des Remote-Stands lösen |
+
+## Befristeter Zugriff (JIT)
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| GET | `/api/jit/overview`, `/api/jit/requests` | Übersicht, Voraussetzungen; Anfragen (Operatoren alle, sonst eigene) |
+| POST | `/api/jit/requests` | `{ groupId, minutes, member?, justification }` |
+| POST | `/api/jit/requests/{id}/approve \| reject \| withdraw \| revoke` | Freigabe durch einen anderen Operator; Zurückziehen; vorzeitig entziehen |
+| POST | `/api/jit/prerequisite/check` (Operator) | PAM-Feature und Gesamtstrukturebene prüfen |
+| GET/POST/PUT/DELETE | `/api/jit/groups[/{id}]` (Admin) | JIT-Gruppen |
+
+`RunKind` kennt zusätzlich `Jit` (Aufnahme bzw. Entzug als Lauf mit Protokoll).
+
 ## Zeitpläne (geplante Audits)
 
 ```ts

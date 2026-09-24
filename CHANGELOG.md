@@ -53,6 +53,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Service: **SIEM** channels Syslog (RFC 5424, CEF, UDP/TCP/TLS) and Azure Monitor Log Analytics; change-log forwarding.
 - Service: **Entra ID sign-in** (OIDC with PKCE, roles by group object IDs or app roles).
 - Service: **reports** (desired/actual, changes in a period, privileged access) as PDF or HTML, e-mail schedules.
+- **JIT access**: `Grant-TierModelJitAccess.ps1` (grant/revoke/check/list, TTL group membership via the PAM feature;
+  never enables PAM) and the service page *Befristeter Zugriff* with four-eyes approval, countdown, early revoke,
+  JIT groups, notifications and monitoring integration (`docs/jit-access.md`).
+- Service: **import** from an export ZIP or another instance with preview, search/replace rules and validation.
+- Service: **Git integration** (LibGit2Sharp): every saved version is committed and pushed; conflict handling.
 - Service: **compliance score** per tier on the dashboard with 30-day history and breakdown.
 - Roadmap for the next features (`docs/service/roadmap.md`).
 

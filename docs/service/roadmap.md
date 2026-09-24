@@ -271,4 +271,7 @@ Geführte Dialoge, die mehrere Bereiche in **einem** Entwurf ändern (bestehende
 | 22 Berichte (PDF/HTML, E-Mail-Versand) | umgesetzt |
 | 23 Manipulationssicheres Änderungsprotokoll | umgesetzt |
 | 25 Oberfläche auf Englisch | geplant |
-| Phase 5 | geplant |
+| 15 Import (Test → Produktion) | umgesetzt |
+| 16 Git-Anbindung | umgesetzt (https gegen echten Server ungetestet) |
+| 6 Befristeter Zugriff (JIT) | umgesetzt (ohne echtes PAM getestet) |
+| 17 Mehrere Domänen | geplant |

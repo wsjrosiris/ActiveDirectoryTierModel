@@ -190,7 +190,7 @@ export function Component() {
                 variant={mode === 'apply' && !needsApproval ? 'destructive' : 'default'}
                 disabled={!canEdit || !!error || blockedByPlan || (mode === 'apply' && applyPlan.frozen)}
                 loading={deploy.isPending || applyPlan.isPending}
-                className="w-full"
+                className="h-auto min-h-10 w-full py-2 whitespace-normal"
               >
                 {!(deploy.isPending || applyPlan.isPending) && (blockedByPlan ? <Lock /> : needsApproval ? <UsersRound /> : mode === 'apply' ? <Zap /> : <FlaskConical />)}
                 {blockedByPlan || (mode === 'apply' && applyPlan.frozen)

@@ -201,6 +201,18 @@ Get-TierModelCompliance
 Weitere Befehle: `Start-TierModelMonitor`, `Start-TierModelDeploy -Plan` / `-Apply -PlanRunId`,
 `Get-TierModelRunLog`, `Get-TierModelPrivileged`, `Get-TierModelConfigSection`, `Disconnect-TierModelService`.
 
+## Git-Anbindung
+
+*Einstellungen › Git*: Repository (https), Branch, Benutzer und Token, Pfad im Repository (Standard `config`),
+Absender für Commits. Jede gespeicherte Version wird als Commit geschrieben (Autor = speichernde Person,
+Nachricht = Kommentar mit den Zeilen `TierModel-Section`, `TierModel-Version`, `TierModel-Instance`) und gepusht;
+`versions.json` liegt neben dem Konfigurationsordner wie im Export. Fehlgeschlagene Pushes werden mit wachsendem
+Abstand (30 s bis 15 min) wiederholt. Hat jemand im Repository dieselben Dateien geändert, meldet der Dienst einen
+**Konflikt** und pusht nicht mehr, bis ein Administrator **Remote übernehmen** wählt (lokalen Stand verwerfen,
+aktuelle Konfiguration neu schreiben). Der lokale Klon liegt unter `WorkPath\git\repo`; Status und letzter Commit
+stehen in den Einstellungen und unter *Systemzustand*. Git ist im Dienst enthalten (LibGit2Sharp), auf dem Server
+muss kein Git installiert sein.
+
 ## Häufige Aufgaben
 
 ### Administrator-Passwort zurücksetzen

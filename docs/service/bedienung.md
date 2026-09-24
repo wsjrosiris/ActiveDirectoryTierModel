@@ -150,6 +150,15 @@ bleiben die Entwürfe erhalten: in einem neuen Tab anmelden und erneut speichern
 aktuellen Stand vergleichen (lesbare Änderungsliste) und **wiederherstellen** – das erzeugt eine neue
 Version, es geht nichts verloren.
 
+### Import (Test → Produktion)
+
+**Import** im Kopf der Konfiguration (Bearbeiter): Quelle ist eine **Export-ZIP** oder eine **andere Instanz**
+(Adresse und API-Token mindestens mit Rolle Betrachter; Instanzen pflegen Administratoren). Die **Vorschau** zeigt je
+Bereich die Änderungen als lesbare Liste, neue und unveränderte Bereiche sowie die Validierung des Ergebnisses.
+Optional ersetzen **Suchen → Ersetzen**-Regeln Werte (z. B. DC-Namen) in den übernommenen Inhalten. Übernommen
+werden die ausgewählten Bereiche mit einem Kommentar als neue Versionen; hat sich ein Bereich seit der Vorschau
+geändert, bricht der Import ohne Teiländerung ab. Vorschauen verfallen nach 24 Stunden.
+
 ### Validierung und Export
 
 **Validierung** prüft die Querverweise der gespeicherten Konfiguration:
@@ -297,6 +306,21 @@ Das Dashboard zeigt je Tier einen Wert von 0 bis 100 mit Verlauf der letzten 30 
 | Angriffspfad (Tier 0) | 20 |
 
 **Aufschlüsselung** listet die einzelnen Abzüge.
+
+## Befristeter Zugriff (Just-in-Time)
+
+Statt dauerhafter Mitgliedschaft in Admin-Gruppen beantragt man Zugriff auf Zeit (*Befristeter Zugriff*):
+**Zugriff beantragen** → Gruppe (nur freigegebene JIT-Gruppen, mit Tier und Höchstdauer), Dauer, Konto (vorbelegt
+mit dem eigenen AD-Konto) und Begründung. Ein **anderer Operator** gibt frei oder lehnt ab; danach nimmt der Dienst
+das Konto mit Ablaufzeit in die Gruppe auf (AD-Funktion *Privileged Access Management*, Mitgliedschaft mit TTL).
+Der Reiter **Aktiv** zeigt die Restzeit; **Entziehen** beendet den Zugriff vorzeitig. Nach Ablauf entfernt das AD
+die Mitgliedschaft selbst.
+
+Voraussetzung ist das PAM-Feature der Gesamtstruktur (Gesamtstrukturebene 2016). Der Dienst prüft das
+(**Voraussetzungen prüfen**), schaltet es aber **nicht** ein – das Einschalten lässt sich nicht rückgängig machen,
+siehe [JIT-Zugriff](../jit-access.md). Administratoren pflegen unter **JIT-Gruppen**, welche Gruppen beantragt werden
+können (Höchstdauer, Freigabe nötig, Mindestrolle, berechtigte Benutzer). Wartungsfenster gelten für JIT nicht.
+In der Überwachung erscheinen aktive JIT-Mitglieder als *Erwartet (JIT bis …)*.
 
 ## Läufe
 

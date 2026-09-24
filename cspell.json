@@ -229,7 +229,11 @@
     "wpftmp",
     "wwwroot",
     "xpress",
-    "ZZZNOMATCH"
+    "ZZZNOMATCH",
+    "nopam",
+    "jitfail",
+    "LibGit",
+    "Umgebungs"
   ],
   "flagWords": []
 }
