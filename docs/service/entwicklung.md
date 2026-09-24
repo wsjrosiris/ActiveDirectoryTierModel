@@ -114,7 +114,7 @@ Alle Zeitstempel werden in UTC gespeichert (`timestamptz`).
 1. Datei im Framework unter `config/` anlegen.
 2. Eintrag in `Config/ConfigCatalog.cs` (Schlüssel, Dateiname, Titel, optional die Eigenschaft mit der Liste).
 3. Optional Prüfregeln in `Config/ConfigValidator.cs` und ein Formular in `web/src/features/config/`;
-   ohne Formular erscheint der Bereich automatisch im JSON-Editor.
+   ohne eigenes Formular erscheint der Bereich automatisch im generischen strukturierten Formular (`object-form.tsx`).
 
 Beim nächsten Start importiert der Dienst die neue Datei als Version 1.
 

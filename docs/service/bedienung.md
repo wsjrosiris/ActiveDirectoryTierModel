@@ -66,8 +66,17 @@ Principals aus den konfigurierten Gruppen.
 
 Felder, die das Formular nicht kennt, bleiben beim Speichern unverändert erhalten.
 
-Die übrigen Bereiche (**GPOs, ADMX, ADML, Metadaten, GUID-Zuordnungen, Abhängigkeiten**) werden im JSON-Editor
-bearbeitet (Syntaxprüfung, Formatieren). Für GPOs gibt es zusätzlich eine Übersicht „OU → verknüpfte GPOs“.
+Auch alle übrigen Bereiche haben eigene Formulare – nirgends muss JSON getippt werden:
+
+- **GPOs**: links die Verknüpfungsziele (OUs, Domänenstamm), rechts pro Ziel die Listen *Nur importieren* und
+  *Importieren & konfigurieren*. Die GPO-Sicherung wird aus den Backups unter `config\gpo` ausgewählt,
+  Benutzerrechte, Gruppen, Filter und Verknüpfungsreihenfolge über Auswahlfelder gepflegt.
+- **ADMX / ADML**: Vorlagendateien werden aus `config\admx` ausgewählt, die MD5-Prüfsumme wird automatisch übernommen.
+- **GUID-Zuordnungen** und **Abhängigkeiten**: Tabellen mit Auswahl der bekannten Einträge.
+- **Metadaten** und sonstige Bereiche: ein strukturiertes Formular mit Text-, Zahl-, Ja/Nein- und Listenfeldern.
+
+Wo es sinnvoll ist, schlagen Suchfelder Werte vor: OUs und Gruppen aus der Konfiguration, auf einem
+Windows-Server zusätzlich Domain Controller und AD-Gruppen direkt aus dem Active Directory.
 
 ### OU umbenennen oder verschieben
 
@@ -80,7 +89,8 @@ kollidiert das neue Ziel mit einer vorhandenen GPO-Verknüpfung, wird die Änder
 ### Speichern
 
 Änderungen sind zunächst ein **Entwurf** (Leiste „Ungespeicherte Änderungen“), auch über mehrere Bereiche hinweg.
-**Speichern** zeigt für jeden geänderten Bereich einen Diff und verlangt einen **Kommentar**. Jeder gespeicherte
+**Speichern** zeigt für jeden geänderten Bereich eine lesbare Änderungsliste (hinzugefügt, geändert, entfernt – mit
+Feldnamen statt JSON-Pfaden) und verlangt einen **Kommentar**. Jeder gespeicherte
 Bereich erhält eine neue Version.
 
 Hat jemand anderes denselben Bereich inzwischen gespeichert, erscheint ein **Konflikt** – auch dann, wenn die
@@ -88,13 +98,13 @@ Oberfläche die neue Version im Hintergrund schon geladen hat:
 *Neu laden* verwirft den eigenen Entwurf; *Weiter bearbeiten* behält ihn, und der nächste Diff zeigt, welche
 Änderungen der anderen Person das eigene Speichern zurücknehmen würde.
 
-Enthält der JSON-Editor gerade ungültiges JSON, ist Speichern gesperrt. Läuft die Sitzung während des Speicherns ab,
+Läuft die Sitzung während des Speicherns ab,
 bleiben die Entwürfe erhalten: in einem neuen Tab anmelden und erneut speichern.
 
 ### Versionen
 
 **Versionen** zeigt alle Stände eines Bereichs mit Autor, Zeit und Kommentar. Jede Version lässt sich mit dem
-aktuellen Stand vergleichen (einheitlich oder nebeneinander) und **wiederherstellen** – das erzeugt eine neue
+aktuellen Stand vergleichen (lesbare Änderungsliste) und **wiederherstellen** – das erzeugt eine neue
 Version, es geht nichts verloren.
 
 ### Validierung und Export

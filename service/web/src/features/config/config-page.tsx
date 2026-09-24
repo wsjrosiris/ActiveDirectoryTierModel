@@ -1,12 +1,11 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link, NavLink, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router'
+import { Link, NavLink, useBlocker, useNavigate, useParams } from 'react-router'
 import {
   CheckCircle2,
   Download,
   FileQuestion,
   History,
-  Loader2,
   Redo2,
   RotateCcw,
   Save,
@@ -32,10 +31,11 @@ import { sectionFallbackTitles, sectionGroups } from '@/lib/labels'
 import { cn, downloadUrl, formatDateTime, formatNumber, formatRelative, modKey } from '@/lib/utils'
 import { draftStore, useDirtyKeys, useHistoryAvailability, useSectionContent } from './draft-store'
 import { sectionQuery, sectionsQuery } from './queries'
-import { AclsEditor, GpoOverview, GroupsEditor, OusEditor, UsersEditor, WinLapsEditor, type EditorProps } from './editors'
+import { AclsEditor, GroupsEditor, OusEditor, UsersEditor, WinLapsEditor, type EditorProps } from './editors'
 import { AdmxEditor } from './admx-editor'
 import { DependenciesEditor } from './dependencies-editor'
 import { GuidMappingsEditor } from './guid-editor'
+import { GposEditor } from './gpo-editor'
 import { ObjectFormEditor } from './object-form'
 import { SaveDialog } from './save-dialog'
 import { VersionsSheet } from './versions-sheet'
@@ -53,26 +53,14 @@ const FORM_EDITORS: Record<string, React.ComponentType<EditorProps>> = {
   'guid-mappings': GuidMappingsEditor,
   dependencies: DependenciesEditor,
   metadata: ObjectFormEditor,
+  gpos: GposEditor,
 }
 
 /** Editor for a section: a dedicated form, the ADML form for every language, else the generic structured form. */
-function editorFor(key: string): React.ComponentType<EditorProps> | null {
+function editorFor(key: string): React.ComponentType<EditorProps> {
   if (FORM_EDITORS[key]) return FORM_EDITORS[key]
   if (key.startsWith('adml-')) return AdmxEditor
-  if (key === 'gpos') return null
   return ObjectFormEditor
-}
-
-/** Shown for the GPO section until its dedicated editor is registered. */
-function GpoPlaceholder({ content, focus }: { content: unknown; focus: string | null }) {
-  return (
-    <div className="grid gap-4">
-      <Card className="flex items-center gap-3 px-5 py-4 text-[13px] text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" /> Editor wird geladen …
-      </Card>
-      <GpoOverview content={content} focus={focus} />
-    </div>
-  )
 }
 
 export function Component() {
@@ -87,7 +75,6 @@ export function Component() {
   const { canUndo, canRedo } = useHistoryAvailability()
   const [saveOpen, setSaveOpen] = React.useState(false)
   const [versionsOpen, setVersionsOpen] = React.useState(false)
-  const [params] = useSearchParams()
 
   const summary = sections.data?.find((s) => s.key === key)
   const title = summary?.title || section.data?.title || sectionFallbackTitles[key] || key
@@ -275,10 +262,8 @@ export function Component() {
                   <div className="mb-4 flex gap-2"><Skeleton className="h-8 w-64" /><Skeleton className="h-8 w-72" /></div>
                   <div className="grid gap-2">{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-10" />)}</div>
                 </Card>
-              ) : FormEditor ? (
-                <FormEditor key={key} sectionKey={key} content={content} setContent={setContent} readOnly={!canEdit} />
               ) : (
-                <GpoPlaceholder content={content} focus={params.get('ou')} />
+                <FormEditor key={key} sectionKey={key} content={content} setContent={setContent} readOnly={!canEdit} />
               )}
             </>
           )}

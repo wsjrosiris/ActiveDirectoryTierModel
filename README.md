@@ -80,7 +80,7 @@ Beim TierModel Service gelten diese Anforderungen für das **Dienstkonto**.
 | Bereich | Funktionen |
 |---|---|
 | **Dashboard** | Kennzahlen, letzter Audit-/Deploy-Status, Drift-Verlauf, OU-Baum mit Tier-Farben, letzte Läufe und Änderungen |
-| **Konfiguration** | Formulare für OUs, Gruppen, Konten, ACL-Delegationen, MSA/gMSA/dMSA und Windows LAPS; JSON-Editor für GPOs, ADMX und Co.; Rückgängig/Wiederholen, Diff vor dem Speichern, Versionen und Wiederherstellung, Validierung, OUs umbenennen und verschieben mit Anpassung aller Verweise, Export |
+| **Konfiguration** | Formulare für OUs, Gruppen, Konten, ACL-Delegationen, MSA/gMSA/dMSA und Windows LAPS; Formulare auch für GPOs, ADMX/ADML, GUID-Zuordnungen und Abhängigkeiten (kein JSON-Editor, Auswahlfelder mit Suche und Vorschlägen aus Konfiguration und AD); Rückgängig/Wiederholen, Diff vor dem Speichern, Versionen und Wiederherstellung, Validierung, OUs umbenennen und verschieben mit Anpassung aller Verweise, Export |
 | **Deploy** | Planen (WhatIf) oder Anwenden – Anwenden nur für Operatoren, mit Bestätigung und nur ohne Validierungsfehler |
 | **Audits** | sofort oder per Zeitplan (Cron + Zeitzone), Befunde je Lauf |
 | **Läufe** | Warteschlange, Live-Protokoll, Abbrechen, verwendete Konfigurationsversionen |

@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Notifications**: e-mail (SMTP), Microsoft Teams (Adaptive Cards) and webhooks for drift, failed runs, applied
   deploys and approval requests; secrets encrypted at rest; test message per channel.
 - New setting `publicBaseUrl` for links in notifications (installer pre-fills it).
+- **Form-only configuration editing**: GPOs, ADMX/ADML, GUID mappings, dependencies and metadata now have dedicated
+  forms; the JSON editor is gone. Pickers with search and suggestions (GPO backups, template files with MD5, domain
+  controllers, AD groups via `/api/lookup/*`).
+- Save dialog, versions and change log show a readable list of changes instead of a JSON diff.
 
 ## [1.4.0] - 2026-09-24
 
