@@ -13,6 +13,7 @@
     )
     FunctionsToExport = @(
         'Copy-TierModelAdmx',
+        'Export-TierModelPlan',
         'Get-TierModel',
         'Get-TierModelAdmx',
         'Get-TierModelConfig',
@@ -29,7 +30,9 @@
         'Get-TierModelPlan',
         'Get-TierModelUser',
         'Get-TierModelUserFd',
+        'Get-TierModelWellKnownPrincipal',
         'Import-TierModelGpo',
+        'Merge-TierModelAuditResult',
         'New-TierModelGpo',
         'New-TierModelGPOLink',
         'New-TierModelGptTmplContent',

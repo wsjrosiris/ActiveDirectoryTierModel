@@ -113,10 +113,12 @@ Das Original von Microsoft verlangt eine englische Umgebung. In diesem Fork gilt
   Französisch, Spanisch, Italienisch, Niederländisch, Portugiesisch, Türkisch, Japanisch, Koreanisch, Chinesisch,
   Polnisch, Russisch, Schwedisch, Dänisch, Finnisch, Griechisch, Tschechisch, Ungarisch. Andere Sprachen werden
   weiterhin abgelehnt.
-- **Active Directory:** Die Sprache der Domäne wird anhand der integrierten Gruppen (per SID) erkannt und im
-  Ergebnis der Voraussetzungsprüfung festgehalten (`AdLanguage`, `AdGroupNames`). Sie wird aber **noch nicht
-  verwendet**: Die Konfiguration und die Prüfung auf „Domain Admins“ arbeiten mit den **englischen** Gruppennamen.
-  **Domänen mit lokalisierten Gruppennamen (z. B. „Domänen-Admins“) werden daher derzeit nicht unterstützt.**
+- **Active Directory:** Domänen mit lokalisierten Gruppennamen (z. B. „Domänen-Admins“) werden unterstützt.
+  Die Konfiguration bleibt englisch; integrierte Benutzer und Gruppen werden über ihre festen SIDs bzw. RIDs
+  aufgelöst (`Get-TierModelWellKnownPrincipal`), nicht über den Namen – Schema-/Organisations-Admins,
+  Enterprise Key Admins und Enterprise-RODCs über die SID der Stammdomäne, sodass auch untergeordnete Domänen
+  funktionieren. Die erkannte Sprache der Domäne (`AdLanguage`, `AdGroupNames`) wird nur zur Information im
+  Ergebnis der Voraussetzungsprüfung festgehalten.
 
 Die Pester-Tests der Sprachprüfung (`tests/Unit.Prerequisites.Tests.ps1`) beschreiben noch das frühere
 Englisch-Verhalten und müssen angepasst werden.

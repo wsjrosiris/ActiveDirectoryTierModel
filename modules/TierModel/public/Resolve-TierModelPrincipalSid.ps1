@@ -10,6 +10,12 @@ function Resolve-TierModelPrincipalSid {
     Converts security principal names (users, groups, well-known principals) to SIDs.
     Supports caching for performance and handles well-known SIDs directly.
     
+    Built-in principals are resolved language-independently through the well-known table
+    (Get-TierModelWellKnownPrincipal) BEFORE any lookup by name: absolute SIDs for BUILTIN /
+    NT AUTHORITY, <domain SID>-<RID> for domain groups ("Domain Admins" -> -512, also when the
+    group is called "Domänen-Admins"), and <forest root domain SID>-<RID> for Schema Admins,
+    Enterprise Admins, Enterprise Key Admins and Enterprise Read-only Domain Controllers.
+    
     Special handling for "Administrator" account:
     - When resolving "Administrator", first attempts to find the built-in Administrator account (RID 500)
     - This handles scenarios where the Administrator account has been renamed (e.g., to "Root")
@@ -120,9 +126,11 @@ function Resolve-TierModelPrincipalSid {
             }
         }
         
-        # Try well-known SIDs first
-        $wellKnownSid = Get-WellKnownSid -Principal $Principal
-        if ($wellKnownSid) {
+        # Try well-known principals first (language independent: fixed SIDs / domain RIDs).
+        # Absolute SIDs (BUILTIN, NT AUTHORITY, Everyone) need no AD access and are cached.
+        $wellKnownEntry = Get-TierModelWellKnownPrincipal -Name $Principal
+        if ($wellKnownEntry -and $wellKnownEntry.Sid) {
+            $wellKnownSid = $wellKnownEntry.Sid
             Write-Verbose "Resolved well-known SID for '$Principal': $wellKnownSid (CorrelationId: $CorrelationId)"
             $result = @{
                 Sid = $wellKnownSid
@@ -145,9 +153,32 @@ function Resolve-TierModelPrincipalSid {
             }
         }
         
+        # Domain-relative built-in principals (e.g. "Domain Admins" = <domain SID>-512) are built
+        # from the domain SID - or, for Schema/Enterprise Admins, Enterprise Key Admins and
+        # Enterprise RODCs, from the forest ROOT domain SID - so they resolve on localized domains
+        # ("Domänen-Admins") and in child domains. Not cached: the result depends on the DC's domain.
+        if ($wellKnownEntry -and $null -ne $wellKnownEntry.Rid) {
+            try {
+                $ridSid = Resolve-TierModelWellKnownPrincipalSid -Name $Principal -DomainController $DomainController
+                if ($ridSid) {
+                    Write-Verbose "Resolved well-known RID for '$Principal': $ridSid (ForestRoot: $($wellKnownEntry.ForestRoot)) (CorrelationId: $CorrelationId)"
+                    return [PSCustomObject]@{
+                        Principal = $Principal
+                        Sid = $ridSid
+                        Source = if ($wellKnownEntry.ForestRoot) { "WellKnownForestRootRid" } else { "WellKnownRid" }
+                        Cached = $false
+                        Success = $true
+                        Error = $null
+                    }
+                }
+            } catch {
+                Write-Verbose "Well-known RID resolution failed for '$Principal': $($_.Exception.Message) - falling back to AD name lookup (CorrelationId: $CorrelationId)"
+            }
+        }
+        
         # Try AD resolution
         try {
-            $adResult = Resolve-ADPrincipalSid -Principal $Principal -CorrelationId $CorrelationId
+            $adResult = Resolve-ADPrincipalSid -Principal $Principal -DomainController $DomainController -CorrelationId $CorrelationId
             
             if ($adResult.Success) {
                 Write-Verbose "Resolved AD SID for '$Principal': $($adResult.Sid) (CorrelationId: $CorrelationId)"
@@ -249,66 +280,12 @@ function Get-WellKnownSid {
         [string]$Principal
     )
     
-    # Well-known SID mappings
-    $wellKnownSids = @{
-        # Built-in groups
-        "BUILTIN\Administrators" = "S-1-5-32-544"
-        "BUILTIN\Users" = "S-1-5-32-545"
-        "BUILTIN\Guests" = "S-1-5-32-546"
-        "BUILTIN\Power Users" = "S-1-5-32-547"
-        "BUILTIN\Account Operators" = "S-1-5-32-548"
-        "BUILTIN\Server Operators" = "S-1-5-32-549"
-        "BUILTIN\Print Operators" = "S-1-5-32-550"
-        "BUILTIN\Backup Operators" = "S-1-5-32-551"
-        "BUILTIN\Replicator" = "S-1-5-32-552"
-        "BUILTIN\Network Configuration Operators" = "S-1-5-32-556"
-        "BUILTIN\Performance Monitor Users" = "S-1-5-32-558"
-        "BUILTIN\Performance Log Users" = "S-1-5-32-559"
-        "BUILTIN\Distributed COM Users" = "S-1-5-32-562"
-        "BUILTIN\IIS_IUSRS" = "S-1-5-32-568"
-        "BUILTIN\Event Log Readers" = "S-1-5-32-573"
-        
-        # NT Authority
-        "NT AUTHORITY\SYSTEM" = "S-1-5-18"
-        "NT AUTHORITY\LOCAL SERVICE" = "S-1-5-19"
-        "NT AUTHORITY\NETWORK SERVICE" = "S-1-5-20"
-        "NT AUTHORITY\Authenticated Users" = "S-1-5-11"
-        "NT AUTHORITY\ANONYMOUS LOGON" = "S-1-5-7"
-        "NT AUTHORITY\BATCH" = "S-1-5-3"
-        "NT AUTHORITY\INTERACTIVE" = "S-1-5-4"
-        "NT AUTHORITY\SERVICE" = "S-1-5-6"
-        "NT AUTHORITY\DIALUP" = "S-1-5-1"
-        "NT AUTHORITY\NETWORK" = "S-1-5-2"
-        "NT AUTHORITY\TERMINAL SERVER USER" = "S-1-5-13"
-        "NT AUTHORITY\REMOTE INTERACTIVE LOGON" = "S-1-5-14"
-        "NT AUTHORITY\Local account" = "S-1-5-113"
-        "NT AUTHORITY\Local account and member of Administrators group" = "S-1-5-114"
-        
-        # Everyone and other common principals
-        "Everyone" = "S-1-1-0"
-        "CREATOR OWNER" = "S-1-3-0"
-        "CREATOR GROUP" = "S-1-3-1"
-        
-        # Short names (case-insensitive lookups)
-        "Administrators" = "S-1-5-32-544"
-        "Users" = "S-1-5-32-545"
-        "Guests" = "S-1-5-32-546"
-        "SYSTEM" = "S-1-5-18"
-        "Authenticated Users" = "S-1-5-11"
-        "ANONYMOUS LOGON" = "S-1-5-7"
-        "Local account" = "S-1-5-113"
-        "IUSR" = "S-1-5-17"
-    }
-    
-    # Try exact match first
-    if ($wellKnownSids.ContainsKey($Principal)) {
-        return $wellKnownSids[$Principal]
-    }
-    
-    # Try case-insensitive match
-    $matchingKey = $wellKnownSids.Keys | Where-Object { $_ -ieq $Principal } | Select-Object -First 1
-    if ($matchingKey) {
-        return $wellKnownSids[$matchingKey]
+    # Absolute well-known SIDs (BUILTIN, NT AUTHORITY, Everyone, ...) from the shared table.
+    # Domain-relative principals (Domain Admins, ...) need a domain SID - see
+    # Resolve-TierModelWellKnownPrincipalSid.
+    $entry = Get-TierModelWellKnownPrincipal -Name $Principal
+    if ($entry -and $entry.Sid) {
+        return $entry.Sid
     }
     
     return $null
@@ -320,13 +297,20 @@ function Resolve-ADPrincipalSid {
     Resolves security principal using Active Directory
     
     .DESCRIPTION
-    Attempts to resolve security principal to SID using AD cmdlets
+    Attempts to resolve security principal to SID using AD cmdlets against the given
+    domain controller (-Server is passed to every AD cmdlet).
+    
+    .PARAMETER DomainController
+    The domain controller used for all AD queries.
     #>
     
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
         [string]$Principal,
+        
+        [Parameter(Mandatory)]
+        [string]$DomainController,
         
         [string]$CorrelationId
     )
@@ -440,7 +424,12 @@ function Get-TierModelConditionalGroupNames {
         foreach ($condition in $ConditionalGroup.conditions) {
             if ($condition.type -eq 'groupExists' -and $condition.operator -eq 'exists') {
                 try {
-                    $adGroup = Get-ADGroup -Identity $name -Server $DomainController -ErrorAction Stop
+                    if (Get-TierModelWellKnownPrincipal -Name $name) {
+                        # Built-in group: look it up by SID so localized names are found too
+                        $adGroup = Get-TierModelADGroupByName -Name $name -DomainController $DomainController
+                    } else {
+                        $adGroup = Get-ADGroup -Identity $name -Server $DomainController -ErrorAction Stop
+                    }
                 } catch {
                     $adGroup = $null
                 }

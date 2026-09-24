@@ -93,6 +93,19 @@ function Test-TierModelWinLapsAcl {
             } | Out-Null
         }
 
+        # SIDs of principals that legitimately hold LAPS rights (exempt from "unexpected holder"
+        # drift): SELF, SYSTEM, BUILTIN\Administrators, Domain Admins (<domain SID>-512) and
+        # Enterprise Admins (<forest root SID>-519). Compared by SID so localized names match.
+        $exemptHolderSids = @('S-1-5-10', 'S-1-5-18', 'S-1-5-32-544')
+        foreach ($exemptName in @('Domain Admins', 'Enterprise Admins')) {
+            try {
+                $exemptSid = Resolve-TierModelWellKnownPrincipalSid -Name $exemptName -DomainController $DomainController
+                if ($exemptSid) { $exemptHolderSids += $exemptSid }
+            } catch {
+                Write-Verbose "Could not resolve SID for '$exemptName': $($_.Exception.Message)"
+            }
+        }
+
         # Pre-compute LAPS attribute schema GUIDs for SELF ACE detection (mirrors Get-TierModelWinLapsAcl planner).
         # When GUIDs cannot be resolved the filter falls back to any non-inherited SELF ACE, which is safe.
         $lapsSchemaGUIDs = @()
@@ -130,21 +143,28 @@ function Test-TierModelWinLapsAcl {
             $readGroupNames = @($delegation.readGroup)
             $resetGroupNames = @($delegation.resetGroup)
 
-            # Resolve group sAMAccountNames for matching
+            # Resolve group sAMAccountNames (and SIDs) for matching
+            $expectedHolderSids = @()
             $readSamNames = @()
             foreach ($gName in $readGroupNames) {
                 try {
-                    $escapedName = $gName -replace "'", "''"
-                    $adGroup = Get-ADGroup -Filter "Name -eq '$escapedName'" -Server $DomainController -Properties sAMAccountName -ErrorAction Stop
-                    if ($adGroup) { $readSamNames += $adGroup.sAMAccountName }
+                    $adGroup = Get-TierModelADGroupByName -Name $gName -DomainController $DomainController -Properties sAMAccountName
+                    if ($adGroup) {
+                        $readSamNames += $adGroup.sAMAccountName
+                        $groupSid = Get-TierModelSidString $adGroup.SID
+                        if ($groupSid) { $expectedHolderSids += $groupSid }
+                    }
                 } catch { $readSamNames += $gName }
             }
             $resetSamNames = @()
             foreach ($gName in $resetGroupNames) {
                 try {
-                    $escapedName = $gName -replace "'", "''"
-                    $adGroup = Get-ADGroup -Filter "Name -eq '$escapedName'" -Server $DomainController -Properties sAMAccountName -ErrorAction Stop
-                    if ($adGroup) { $resetSamNames += $adGroup.sAMAccountName }
+                    $adGroup = Get-TierModelADGroupByName -Name $gName -DomainController $DomainController -Properties sAMAccountName
+                    if ($adGroup) {
+                        $resetSamNames += $adGroup.sAMAccountName
+                        $groupSid = Get-TierModelSidString $adGroup.SID
+                        if ($groupSid) { $expectedHolderSids += $groupSid }
+                    }
                 } catch { $resetSamNames += $gName }
             }
 
@@ -231,7 +251,13 @@ function Test-TierModelWinLapsAcl {
 
                             # Detect unexpected principals holding LAPS read/reset rights (drift).
                             # Well-known/administrative principals are legitimately present and skipped.
+                            # They are compared by SID first (language independent: a German domain
+                            # reports "CONTOSO\Domänen-Admins"), then by the English names as fallback.
                             foreach ($holder in $holders) {
+                                $holderSid = ConvertTo-TierModelSid -Identity $holder -DomainController $DomainController
+                                if ($holderSid -and ($exemptHolderSids -contains $holderSid -or $expectedHolderSids -contains $holderSid)) {
+                                    continue
+                                }
                                 if ($holder -eq 'NT AUTHORITY\SELF' -or
                                     $holder -eq 'NT AUTHORITY\SYSTEM' -or
                                     $holder -eq 'BUILTIN\Administrators' -or

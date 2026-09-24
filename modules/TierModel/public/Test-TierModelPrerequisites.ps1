@@ -326,11 +326,12 @@ function Test-TierModelPrerequisites {
                 Import-Module ActiveDirectory -ErrorAction SilentlyContinue -Verbose:$false | Out-Null
                 if (Get-Module ActiveDirectory) {
                     $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent()
-                    $domainAdmins = Get-ADGroup -Identity "Domain Admins" -Server $PreferredDc -ErrorAction SilentlyContinue
+                    # Domain Admins is located by its SID (<domain SID>-512), not by name, so the
+                    # check also works on localized domains ("Domänen-Admins", "Admins du domaine").
+                    $daCheck = Test-TierModelDomainAdminMembership -DomainController $PreferredDc -UserSid ([string]$currentUser.User.Value)
                     
-                    if ($domainAdmins) {
-                        $isDomainAdmin = Get-ADGroupMember -Identity $domainAdmins -Server $PreferredDc -Recursive -ErrorAction SilentlyContinue | 
-                            Where-Object { $_.SID -eq $currentUser.User }
+                    if ($daCheck.GroupFound) {
+                        $isDomainAdmin = $daCheck.IsMember
                         
                         $result.EnvironmentSnapshot.IsDomainAdmin = [bool]$isDomainAdmin
                         
@@ -402,7 +403,9 @@ function Test-TierModelPrerequisites {
                         
                         # Check for Enterprise Admins group (may not exist in child domains)
                         try {
-                            $enterpriseAdmins = Get-ADGroup -Identity "Enterprise Admins" -Server $PreferredDc -ErrorAction SilentlyContinue
+                            # Located by SID (<forest root domain SID>-519) on the forest root domain,
+                            # so localized names and child domains are handled.
+                            $enterpriseAdmins = Get-TierModelADGroupByName -Name 'Enterprise Admins' -DomainController $PreferredDc
                             $result.EnvironmentSnapshot.HasEnterpriseAdmins = [bool]$enterpriseAdmins
                         }
                         catch {
@@ -828,5 +831,64 @@ function Test-TierModelPrerequisites {
         
         # Ensure we return exactly one object
         Write-Output $result
+    }
+}
+
+function Test-TierModelDomainAdminMembership {
+    <#
+    .SYNOPSIS
+    Checks whether a user SID is a (recursive) member of the Domain Admins group.
+
+    .DESCRIPTION
+    Locates Domain Admins by its well-known RID (<domain SID>-512) instead of the English name,
+    so the check works on domains with localized group names (e.g. "Domänen-Admins").
+
+    .PARAMETER DomainController
+    Domain controller used for all AD queries.
+
+    .PARAMETER UserSid
+    SID of the user to check (e.g. the current Windows identity).
+
+    .OUTPUTS
+    PSCustomObject with GroupFound, IsMember, GroupSid and GroupName.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$DomainController,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$UserSid
+    )
+
+    $groupSid = Resolve-TierModelWellKnownPrincipalSid -Name 'Domain Admins' -DomainController $DomainController
+    $group = Get-TierModelADGroupByName -Name 'Domain Admins' -DomainController $DomainController
+
+    if (-not $group) {
+        return [PSCustomObject]@{
+            GroupFound = $false
+            IsMember   = $false
+            GroupSid   = $groupSid
+            GroupName  = $null
+        }
+    }
+
+    $isMember = $false
+    if (-not [string]::IsNullOrWhiteSpace($UserSid)) {
+        $members = @(Get-ADGroupMember -Identity $group -Server $DomainController -Recursive -ErrorAction SilentlyContinue)
+        foreach ($member in $members) {
+            if ($null -ne $member -and (Get-TierModelSidString $member.SID) -eq $UserSid) {
+                $isMember = $true
+                break
+            }
+        }
+    }
+
+    return [PSCustomObject]@{
+        GroupFound = $true
+        IsMember   = $isMember
+        GroupSid   = $groupSid
+        GroupName  = [string]$group.Name
     }
 }

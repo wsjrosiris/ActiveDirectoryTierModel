@@ -64,6 +64,13 @@ Base filename for generated deployment reports and logs (without extension or ti
 The actual filename will include a timestamp and appropriate extension.
 Used when Logging is enabled or when generating deployment reports.
 
+.PARAMETER PlanOutputPath
+Planning mode only (no -ConfirmApply): write the deployment plan as JSON to this file.
+When omitted but -Logging, -LogPath and -OutputFileBase are set, the plan is written to
+<LogPath>/<OutputFileBase>-plan.json. The file (UTF-8 without BOM) contains metadata,
+summary, phases, actions (with flattened details), warnings and errors - see
+Export-TierModelPlan for the contract. Console output is not affected.
+
 .EXAMPLE
 .\Deploy-TierModel.ps1 -PreferredDc "DC01.contoso.com" -OuOnly
 Generate deployment plan for organizational units only (planning mode).
@@ -113,7 +120,10 @@ param(
     [string]$LogPath,
     
     [Parameter()]
-    [string]$OutputFileBase
+    [string]$OutputFileBase,
+    
+    [Parameter()]
+    [string]$PlanOutputPath
 )
 
 Set-StrictMode -Version Latest
@@ -171,6 +181,16 @@ if ($Logging) {
     $logDir = Split-Path $script:LogFilePath -Parent
     if (-not (Test-Path $logDir)) {
         New-Item -Path $logDir -ItemType Directory -Force | Out-Null
+    }
+}
+
+# Determine the JSON plan output file (planning mode only)
+$script:PlanOutputFile = $null
+if (-not $ConfirmApply) {
+    if (-not [string]::IsNullOrWhiteSpace($PlanOutputPath)) {
+        $script:PlanOutputFile = $PlanOutputPath
+    } elseif ($Logging -and -not [string]::IsNullOrWhiteSpace($LogPath) -and -not [string]::IsNullOrWhiteSpace($OutputFileBase)) {
+        $script:PlanOutputFile = Join-Path $LogPath "$OutputFileBase-plan.json"
     }
 }
 
@@ -745,6 +765,8 @@ function Invoke-UserDeployment {
         $result = [PSCustomObject]@{
             EntityType = 'User'
             Actions = $plan.Actions
+            Summary = if ($plan.PSObject.Properties.Name -contains 'Summary') { $plan.Summary } else { $null }
+            Warnings = if ($plan.PSObject.Properties.Name -contains 'Warnings') { $plan.Warnings } else { @() }
             Applied = @()
             Skipped = @()
             Errors = if ($hasErrors) { $plan.Errors } else { @() }
@@ -870,6 +892,8 @@ function Invoke-OuAclDeployment {
         $result = [PSCustomObject]@{
             EntityType = 'OuAcl'
             Actions = $plan.Actions  # Include Actions for planning mode count display
+            Summary = if ($plan.PSObject.Properties.Name -contains 'Summary') { $plan.Summary } else { $null }
+            Warnings = if ($plan.PSObject.Properties.Name -contains 'Warnings') { $plan.Warnings } else { @() }
             Applied = @()
             Skipped = @()
             Errors = if ($hasErrors) { $plan.Errors } else { @() }
@@ -2614,6 +2638,133 @@ if (-not $FullDeployment -and -not $ConfirmApply) {
         Write-Host ""
         Write-Host "Use -ConfirmApply to execute the deployment plan" -ForegroundColor DarkCyan
         Write-Host ""
+    }
+}
+
+# === JSON plan output (planning mode only; -PlanOutputPath or -Logging with -LogPath/-OutputFileBase) ===
+if ($script:PlanOutputFile -and -not $ConfirmApply) {
+    try {
+        function Get-DeployPlanProperty {
+            param($Object, [string]$Name)
+            if ($null -eq $Object) { return $null }
+            if ($Object -is [System.Collections.IDictionary]) { if ($Object.Contains($Name)) { return $Object[$Name] } else { return $null } }
+            if ($Object.PSObject.Properties[$Name]) { return $Object.$Name }
+            return $null
+        }
+        function Get-DeployPlanExistingCount {
+            param($PlanObject)
+            $summary = Get-DeployPlanProperty $PlanObject 'Summary'
+            if ($null -eq $summary) { return 0 }
+            $existing = Get-DeployPlanProperty $summary 'ExistingCount'
+            if ($null -ne $existing) { return [int]$existing }
+            $total = Get-DeployPlanProperty $summary 'TotalInConfig'
+            $toCreate = Get-DeployPlanProperty $summary 'ToCreate'
+            if ($null -ne $total -and $null -ne $toCreate) { return [Math]::Max(0, [int]$total - [int]$toCreate) }
+            return 0
+        }
+
+        $planPhases = @()
+        $planWarnings = @()
+        $planErrors = @()
+        $planIncludes = @()
+        if ($IncludeMsa) { $planIncludes += 'Msa' }
+        if ($IncludeGmsa) { $planIncludes += 'Gmsa' }
+        if ($IncludeDmsa) { $planIncludes += 'Dmsa' }
+        if ($IncludeWinLaps) { $planIncludes += 'WinLaps' }
+
+        # Collect Warnings/Errors of every plan object that was produced in this run
+        $planSources = @()
+        foreach ($varName in @('ouResult', 'groupResult', 'userResult', 'ouAclResult', 'gpoResult', 'gpoLinkResult',
+                               'msaFdPlan', 'gmsaFdPlan', 'dmsaFdPlan', 'winLapsFdPlan',
+                               'msaPlan', 'gmsaPlan', 'dmsaPlan', 'winLapsPlan')) {
+            $v = Get-Variable -Name $varName -ValueOnly -ErrorAction SilentlyContinue
+            if ($null -ne $v) { $planSources += , $v }
+        }
+        if ($GposOnly -and $null -ne (Get-Variable -Name gpoResult -ValueOnly -ErrorAction SilentlyContinue)) {
+            $gpoInnerPlan = Get-DeployPlanProperty $gpoResult 'Plan'
+            if ($null -ne $gpoInnerPlan) { $planSources += , $gpoInnerPlan }
+        }
+        foreach ($src in $planSources) {
+            $w = Get-DeployPlanProperty $src 'Warnings'
+            if ($w) { $planWarnings += @($w) }
+            $e = Get-DeployPlanProperty $src 'Errors'
+            if ($e -and $e -isnot [int]) { $planErrors += @($e) }
+        }
+        foreach ($admxVarName in @('admxResult', 'admxPlan')) {
+            $admxObj = Get-Variable -Name $admxVarName -ValueOnly -ErrorAction SilentlyContinue
+            $admxAnalysis = Get-DeployPlanProperty $admxObj 'Analysis'
+            if ($admxAnalysis) {
+                $admxErrors = Get-DeployPlanProperty $admxAnalysis 'Errors'
+                if ($admxErrors) { $planErrors += @($admxErrors) }
+            }
+        }
+
+        $planScope = if ($FullDeployment) { 'FullDeployment' }
+            elseif ($OuOnly) { 'OuOnly' } elseif ($GroupOnly) { 'GroupOnly' } elseif ($UserOnly) { 'UserOnly' }
+            elseif ($GposOnly) { 'GposOnly' } elseif ($OuAclsOnly) { 'OuAclsOnly' } elseif ($AdmxOnly) { 'AdmxOnly' }
+            else { 'IncludeOnly' }
+
+        if ($FullDeployment) {
+            $fdAreaByPhase = @{ 1 = 'ous'; 2 = 'groups'; 3 = 'users'; 4 = 'acls'; 5 = 'gpos'; 6 = 'admx'; 7 = 'msa'; 8 = 'gmsa'; 9 = 'dmsa'; 10 = 'winlaps' }
+            foreach ($p in @($deploymentPlan.Phases)) {
+                $planPhases += @{
+                    Phase         = [int]$p.Phase
+                    Area          = $fdAreaByPhase[[int]$p.Phase]
+                    Actions       = Get-DeployPlanProperty $p 'Actions'
+                    AdmxPlan      = Get-DeployPlanProperty $p 'Result'
+                    ExistingCount = Get-DeployPlanProperty $p 'ExistingCount'
+                }
+            }
+        } elseif ($activeScopeCount -eq 1) {
+            $single = switch ($planScope) {
+                'OuOnly'     { @{ Area = 'ous';    Source = (Get-Variable ouResult -ValueOnly -ErrorAction SilentlyContinue) } }
+                'GroupOnly'  { @{ Area = 'groups'; Source = (Get-Variable groupResult -ValueOnly -ErrorAction SilentlyContinue) } }
+                'UserOnly'   { @{ Area = 'users';  Source = (Get-Variable userResult -ValueOnly -ErrorAction SilentlyContinue) } }
+                'OuAclsOnly' { @{ Area = 'acls';   Source = (Get-Variable ouAclResult -ValueOnly -ErrorAction SilentlyContinue) } }
+                'GposOnly'   {
+                    $g = Get-Variable gpoResult -ValueOnly -ErrorAction SilentlyContinue
+                    $inner = Get-DeployPlanProperty $g 'Plan'
+                    @{ Area = 'gpos'; Source = $(if ($null -ne $inner) { $inner } else { $g }) }
+                }
+                'AdmxOnly'   { @{ Area = 'admx';   Source = $null } }
+            }
+            if ($planScope -eq 'AdmxOnly') {
+                $admxPlanObj = Get-Variable admxPlan -ValueOnly -ErrorAction SilentlyContinue
+                $admxExisting = if ($admxPlanObj -and $admxPlanObj.Summary) { [int]$admxPlanObj.Summary.FilesUpToDate } else { 0 }
+                $planPhases += @{ Phase = 1; Area = 'admx'; Actions = @(); AdmxPlan = $admxPlanObj; ExistingCount = $admxExisting }
+            } elseif ($single) {
+                $planPhases += @{
+                    Phase         = 1
+                    Area          = $single.Area
+                    Actions       = Get-DeployPlanProperty $single.Source 'Actions'
+                    ExistingCount = Get-DeployPlanExistingCount $single.Source
+                }
+            }
+        } else {
+            # -Include* only
+            $includeAreaByName = @{
+                'MSA ACL Delegations' = 'msa'; 'gMSA ACL Delegations' = 'gmsa'
+                'dMSA ACL Delegations' = 'dmsa'; 'Windows LAPS ACL Delegations' = 'winlaps'
+            }
+            foreach ($p in @($standaloneDeploymentPlan.Phases)) {
+                $planPhases += @{
+                    Phase         = [int]$p.Phase
+                    Area          = $includeAreaByName[[string]$p.Name]
+                    Name          = [string]$p.Name
+                    Actions       = Get-DeployPlanProperty $p 'Actions'
+                    ExistingCount = Get-DeployPlanProperty $p 'ExistingCount'
+                }
+            }
+        }
+
+        $writtenPlan = Export-TierModelPlan -Phases $planPhases -Scope $planScope -PreferredDc $PreferredDc `
+            -Includes $planIncludes -Warnings $planWarnings -Errors $planErrors -Path $script:PlanOutputFile
+        Write-Verbose "Deployment plan written: $writtenPlan"
+        if ($Logging) {
+            Write-TierModelLog -LogPath $script:LogFilePath -Level 'Info' -Message "Deployment plan JSON written: $writtenPlan"
+        }
+    } catch {
+        Write-Warning "Could not write deployment plan JSON to '$($script:PlanOutputFile)': $($_.Exception.Message)"
     }
 }
 

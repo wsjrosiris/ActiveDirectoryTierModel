@@ -951,23 +951,24 @@ if ($FullDeployment) {
         Write-Host "${entityType}:" -ForegroundColor Cyan
         Write-Host "  Checked: $entityChecked, Drift: $entityDrift, Errors: $entityErrors" -ForegroundColor Gray
         
-        # Show drift findings safely
-        $driftFindings = @()
+        # Show drift findings safely (per-entity display list; the report list is accumulated
+        # across all entities below via Merge-TierModelAuditResult)
+        $entityDriftFindings = @()
         if ($result.PSObject.Properties.Name -contains 'DriftFindings' -and $result.DriftFindings) {
             $driftCount = Get-SafePropertyValue $result 'DriftFindings'
             if ($driftCount -gt 0) { 
-                $driftFindings += $result.DriftFindings 
+                $entityDriftFindings += $result.DriftFindings 
             }
         }
         if ($result.PSObject.Properties.Name -contains 'Findings' -and $result.Findings) {
             $driftFromFindings = $result.Findings | Where-Object {
                 ($_.PSObject.Properties.Name -contains 'Type') -and $_.Type -eq 'Drift'
             }
-            if ($driftFromFindings) { $driftFindings += $driftFromFindings }
+            if ($driftFromFindings) { $entityDriftFindings += $driftFromFindings }
         }
         
-        if ($driftFindings.Count -gt 0) {
-            $driftFindings | ForEach-Object {
+        if ($entityDriftFindings.Count -gt 0) {
+            $entityDriftFindings | ForEach-Object {
                 $color = if ($_.Type -eq 'Missing') { 'Red' } else { 'Yellow' }
                 Write-Host "    [$($_.Type)] $($_.Identifier): $($_.Details)" -ForegroundColor $color
             }
@@ -981,6 +982,12 @@ if ($FullDeployment) {
             }
         }
     }
+    
+    # Report data: findings of ALL entities (each tagged with Area/Severity) and a summary computed
+    # from them. Previously only the last entity's findings reached the report and the summary stayed 0.
+    $mergedAudit = Merge-TierModelAuditResult -AuditResults $auditResults -Config $config
+    $auditSummary = $mergedAudit.Summary
+    $driftFindings = @($mergedAudit.Findings)
 }
 else {
     # Single-entity operations show immediate reports
@@ -997,7 +1004,8 @@ else {
                 $auditSummary.MismatchCount = $ouResult.Summary.MismatchCount
             }
             if ($ouResult -and $ouResult.DriftFindings) {
-                $driftFindings = @($ouResult.DriftFindings)
+                # Same findings as before, tagged with Area/Severity
+                $driftFindings = @((Merge-TierModelAuditResult -AuditResults @($ouResult) -Config $config).Findings)
             }
         } catch {
             Write-Host "Error during OU audit: $($_.Exception.Message)" -ForegroundColor Red
@@ -1016,7 +1024,8 @@ else {
             $auditSummary.MismatchCount = $groupResult.Summary.MismatchCount
         }
         if ($groupResult -and $groupResult.DriftFindings) {
-            $driftFindings = @($groupResult.DriftFindings)
+            # Same findings as before, tagged with Area/Severity
+            $driftFindings = @((Merge-TierModelAuditResult -AuditResults @($groupResult) -Config $config).Findings)
         }
     }
     if ($UserOnly) { 
@@ -1031,7 +1040,8 @@ else {
             $auditSummary.MismatchCount = $userResult.Summary.MismatchCount
         }
         if ($userResult -and $userResult.DriftFindings) {
-            $driftFindings = @($userResult.DriftFindings)
+            # Same findings as before, tagged with Area/Severity
+            $driftFindings = @((Merge-TierModelAuditResult -AuditResults @($userResult) -Config $config).Findings)
         }
     }
     if ($OuAclsOnly) { 
@@ -1046,23 +1056,9 @@ else {
             $auditSummary.CompliantCount = $ouAclResult.Summary.Compliant
         }
         if ($ouAclResult -and $ouAclResult.Findings) {
-            # Convert OU ACL findings to match expected drift findings format
-            $driftFindings = @($ouAclResult.Findings | ForEach-Object {
-                [PSCustomObject]@{
-                    Type = if ($_.Type -eq 'Drift') { 
-                        if ($_.ActualValue -eq 'Missing' -or $_.Details -like "*missing*" -or $_.Details -like "*No Access Control Entry*") { 
-                            'Missing' 
-                        } else { 
-                            'Mismatch' 
-                        }
-                    } else { 
-                        'Error' 
-                    }
-                    ResourceType = $_.ResourceType
-                    Identifier = $_.Identifier
-                    Details = $_.Details
-                }
-            })
+            # Convert OU ACL findings to the drift findings format (Type Missing/Mismatch/Error,
+            # ResourceType, Identifier, Details) and tag them with Area/Severity
+            $driftFindings = @((Merge-TierModelAuditResult -AuditResults @($ouAclResult) -Config $config).Findings)
         }
     }
     if ($GposOnly) { 
@@ -1077,14 +1073,9 @@ else {
             $auditSummary.CompliantCount = $gpoResult.Summary.Compliant
         }
         if ($gpoResult -and $gpoResult.Findings) {
-            # Convert GPO findings to match expected drift findings format
-            $driftFindings = @($gpoResult.Findings | ForEach-Object {
-                [PSCustomObject]@{
-                    Type = $_.Type
-                    Identifier = $_.GpoName
-                    Details = $_.Message
-                }
-            })
+            # Convert GPO findings to the drift findings format (Type, Identifier, Details) and tag
+            # them with Area/Severity
+            $driftFindings = @((Merge-TierModelAuditResult -AuditResults @($gpoResult) -Config $config).Findings)
         }
     }
     if ($AdmxOnly) {
@@ -1094,6 +1085,11 @@ else {
         
         # Add entity type to audit result for consolidated reporting
         $admxAudit | Add-Member -NotePropertyName 'EntityType' -NotePropertyValue 'ADMX' -Force
+        
+        # Report data (findings tagged with Area/Severity, summary computed from them)
+        $admxMerged = Merge-TierModelAuditResult -AuditResults @($admxAudit) -Config $config
+        $auditSummary = $admxMerged.Summary
+        $driftFindings = @($admxMerged.Findings)
         
         Write-Host "" # Blank line for spacing
         # Display audit summary with consistent format
@@ -1162,6 +1158,27 @@ if ($activeScopeCount -eq 0 -and $activeIncludeCount -gt 0) {
     $standaloneTotalChecked = 0
     $standaloneTotalDrift = 0
     $standaloneTotalErrors = 0
+    $standaloneAuditResults = @()
+    
+    # Wraps a flat -Include* audit result like the FullDeployment wrappers (EntityType + Summary)
+    # so the report can consolidate it.
+    function ConvertTo-IncludeAuditEntity {
+        param([Parameter(Mandatory)] $Audit, [Parameter(Mandatory)] [string]$EntityType)
+        [PSCustomObject]@{
+            EntityType = $EntityType
+            Summary = @{
+                TotalAcls  = $Audit.TotalChecked
+                Compliant  = $Audit.Compliant
+                Missing    = $Audit.Missing
+                Mismatched = $Audit.Mismatched
+                Errors     = $Audit.Errors
+                Drift      = $Audit.Drift
+            }
+            Findings      = $Audit.Findings
+            DurationMs    = $Audit.DurationMs
+            CorrelationId = $Audit.CorrelationId
+        }
+    }
     
     if ($IncludeMsa) {
         try {
@@ -1170,6 +1187,7 @@ if ($activeScopeCount -eq 0 -and $activeIncludeCount -gt 0) {
                 $standaloneTotalChecked += $msaAudit.TotalChecked
                 $standaloneTotalDrift += $msaAudit.Drift
                 $standaloneTotalErrors += $msaAudit.Errors
+                $standaloneAuditResults += ConvertTo-IncludeAuditEntity -Audit $msaAudit -EntityType 'MSA ACL'
             }
         } catch {
             Write-Host "  ❌ MSA ACL audit failed: $($_.Exception.Message)" -ForegroundColor Red
@@ -1183,6 +1201,7 @@ if ($activeScopeCount -eq 0 -and $activeIncludeCount -gt 0) {
                 $standaloneTotalChecked += $gmsaAudit.TotalChecked
                 $standaloneTotalDrift += $gmsaAudit.Drift
                 $standaloneTotalErrors += $gmsaAudit.Errors
+                $standaloneAuditResults += ConvertTo-IncludeAuditEntity -Audit $gmsaAudit -EntityType 'gMSA ACL'
             }
         } catch {
             Write-Host "  ❌ gMSA ACL audit failed: $($_.Exception.Message)" -ForegroundColor Red
@@ -1196,6 +1215,7 @@ if ($activeScopeCount -eq 0 -and $activeIncludeCount -gt 0) {
                 $standaloneTotalChecked += $dmsaAudit.TotalChecked
                 $standaloneTotalDrift += $dmsaAudit.Drift
                 $standaloneTotalErrors += $dmsaAudit.Errors
+                $standaloneAuditResults += ConvertTo-IncludeAuditEntity -Audit $dmsaAudit -EntityType 'dMSA ACL'
             }
         } catch {
             Write-Host "  ❌ dMSA ACL audit failed: $($_.Exception.Message)" -ForegroundColor Red
@@ -1209,6 +1229,7 @@ if ($activeScopeCount -eq 0 -and $activeIncludeCount -gt 0) {
                 $standaloneTotalChecked += $winLapsAclAudit.TotalChecked
                 $standaloneTotalDrift   += $winLapsAclAudit.Drift
                 $standaloneTotalErrors  += $winLapsAclAudit.Errors
+                $standaloneAuditResults += ConvertTo-IncludeAuditEntity -Audit $winLapsAclAudit -EntityType 'WinLaps ACL'
             }
         } catch {
             Write-Host "  ❌ WinLaps ACL audit failed: $($_.Exception.Message)" -ForegroundColor Red
@@ -1219,11 +1240,17 @@ if ($activeScopeCount -eq 0 -and $activeIncludeCount -gt 0) {
                 $standaloneTotalChecked += $winLapsDecryptorAudit.TotalChecked
                 $standaloneTotalDrift   += $winLapsDecryptorAudit.Drift
                 $standaloneTotalErrors  += $winLapsDecryptorAudit.Errors
+                $standaloneAuditResults += ConvertTo-IncludeAuditEntity -Audit $winLapsDecryptorAudit -EntityType 'WinLaps Decryptor'
             }
         } catch {
             Write-Host "  ❌ WinLaps Decryptor audit failed: $($_.Exception.Message)" -ForegroundColor Red
         }
     }
+    
+    # Report data for the -Include* audits (findings tagged with Area/Severity, summary from findings)
+    $standaloneMerged = Merge-TierModelAuditResult -AuditResults $standaloneAuditResults -Config $config
+    $auditSummary = $standaloneMerged.Summary
+    $driftFindings = @($standaloneMerged.Findings)
     
     Write-Host "`n=== $standaloneLabelStr Audit Results ===" -ForegroundColor Magenta
     Write-Host "Overall Status: $(if ($standaloneTotalDrift -eq 0) { '✅ COMPLIANT' } else { "❌ $standaloneTotalDrift DRIFT ITEMS" })" -ForegroundColor $(if ($standaloneTotalDrift -eq 0) { 'Green' } else { 'Red' })
