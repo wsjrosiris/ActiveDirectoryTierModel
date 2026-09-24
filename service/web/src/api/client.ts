@@ -1,4 +1,8 @@
 import type {
+  AdGroups,
+  DomainControllers,
+  GpoBackup,
+  TemplateFiles,
   ApproveRequest,
   AuthOptions,
   ChangeEntry,
@@ -193,6 +197,12 @@ export const api = {
       post<void>(`/api/users/${enc(id)}/reset-password`, { newPassword }),
     unlock: (id: string) => post<void>(`/api/users/${enc(id)}/unlock`),
     remove: (id: string) => del<void>(`/api/users/${enc(id)}`),
+  },
+  lookup: {
+    gpoBackups: () => get<GpoBackup[]>('/api/lookup/gpo-backups'),
+    templateFiles: () => get<TemplateFiles>('/api/lookup/template-files'),
+    domainControllers: () => get<DomainControllers>('/api/lookup/domain-controllers'),
+    adGroups: (q: string, signal?: AbortSignal) => request<AdGroups>(`/api/lookup/ad-groups?q=${enc(q)}`, { signal }),
   },
   config: {
     sections: () => get<SectionSummary[]>('/api/config/sections'),

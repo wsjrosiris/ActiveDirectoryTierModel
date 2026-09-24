@@ -352,3 +352,12 @@ export interface ProblemDetails {
   status?: number
   errors?: Record<string, string[]>
 }
+
+// ---------------------------------------------------------------- lookups (suggestions for form fields)
+
+export interface GpoBackup { path: string; displayName: string; folder: string; backupId: string; backupTime: string | null }
+export interface TemplateFile { name: string; md5: string; size: number; modified: string }
+export interface TemplateFiles { admx: TemplateFile[]; adml: Record<string, TemplateFile[]>; languages: string[] }
+export interface DomainControllers { available: boolean; items: { name: string; site: string | null }[]; recent: string[] }
+export interface AdGroup { name: string; samAccountName: string; sid: string; distinguishedName: string | null; description: string | null }
+export interface AdGroups { available: boolean; items: AdGroup[] }

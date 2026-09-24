@@ -110,6 +110,7 @@ app.MapRunEndpoints();
 app.MapMiscEndpoints();
 app.MapWindowsAuthSettings();
 app.MapNotificationEndpoints();
+app.MapLookupEndpoints();
 app.Map("/api/{**rest}", () => Results.Problem(title: "Nicht gefunden", statusCode: 404));
 app.MapFallbackToFile("index.html", new StaticFileOptions { OnPrepareResponse = CacheHeaders });
 

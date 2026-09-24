@@ -45,6 +45,12 @@ public static partial class WindowsAuth
         }
         if (!OperatingSystem.IsWindows())
             return (null, $"'{value}': Namen können nur unter Windows aufgelöst werden – bitte die SID angeben.");
+        return ResolveNameOnWindows(value);
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static (GroupRef? Group, string? Error) ResolveNameOnWindows(string value)
+    {
         try
         {
             var sid = (SecurityIdentifier)new NTAccount(value).Translate(typeof(SecurityIdentifier));
@@ -64,7 +70,7 @@ public static partial class WindowsAuth
         if (OperatingSystem.IsWindows() && principal.Identity is WindowsIdentity wi)
         {
             userSid = wi.User?.Value;
-            if (wi.Groups is { } groups) sids.AddRange(groups.Select(g => g.Value));
+            if (wi.Groups is { } groups) foreach (var g in groups) sids.Add(g.Value);
         }
         userSid ??= principal.FindFirstValue(ClaimTypes.PrimarySid) ?? principal.FindFirstValue(ClaimTypes.Sid);
         sids.AddRange(principal.FindAll(ClaimTypes.GroupSid).Select(c => c.Value));

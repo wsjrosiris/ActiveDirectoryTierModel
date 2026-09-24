@@ -24,6 +24,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="System.DirectoryServices" Version="10.0.12" />
     <PackageReference Include="TimeZoneConverter" Version="7.2.0" />
   </ItemGroup>
 

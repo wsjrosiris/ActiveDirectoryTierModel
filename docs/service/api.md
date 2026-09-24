@@ -283,6 +283,17 @@ interface SmtpSettings {
 Ereignisse: **drift** (Audit mit Abweichungen), **failure** (Lauf fehlgeschlagen), **apply** (Deploy/Anwenden erfolgreich
 abgeschlossen), **approval** (Freigabe angefordert). Geheimnisse (SMTP-Passwort, Webhook-URLs) werden verschlüsselt gespeichert.
 
+## Vorschläge für Eingabefelder (alle angemeldeten Benutzer)
+
+Damit keine Werte aus dem Gedächtnis getippt oder als JSON eingegeben werden müssen, liefert der Dienst Vorschläge:
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| GET | `/api/lookup/gpo-backups` | `{ path, displayName, folder, backupId, backupTime }[]` – GPO-Sicherungen unter `framework\config\gpo` (Wert für `importPath`) |
+| GET | `/api/lookup/template-files` | `{ admx: File[], adml: { "<xx-XX>": File[] }, languages: string[] }` mit `File = { name, md5, size, modified }` – ADMX/ADML-Dateien samt MD5 |
+| GET | `/api/lookup/domain-controllers` | `{ available, items: { name, site }[], recent: string[] }` – DCs der Domäne (live, nur auf dem Windows-Server) und zuletzt verwendete |
+| GET | `/api/lookup/ad-groups?q=…` | `{ available, items: { name, samAccountName, sid, distinguishedName, description }[] }` – AD-Gruppensuche ab 2 Zeichen, max. 25 (nur auf dem Windows-Server) |
+
 ## Sonstiges
 
 - `GET /healthz`: 200 wenn die Datenbank erreichbar ist.
