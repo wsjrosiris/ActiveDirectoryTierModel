@@ -13,7 +13,7 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
     public static DateTimeOffset? NextOccurrence(string cron, string timeZone, DateTimeOffset after)
     {
         var expr = CronExpression.Parse(cron, CronFormat.Standard);
-        var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZone);
+        var tz = TimeZoneConverter.TZConvert.GetTimeZoneInfo(timeZone);
         return expr.GetNextOccurrence(after, tz)?.ToUniversalTime();
     }
 
@@ -30,7 +30,7 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
         }
         try
         {
-            TimeZoneInfo.FindSystemTimeZoneById(timeZone);
+            TimeZoneConverter.TZConvert.GetTimeZoneInfo(timeZone);
         }
         catch (Exception)
         {
@@ -47,6 +47,7 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
             try
             {
                 await QueueDueAsync(stoppingToken);
+                await ExpireApprovalsAsync(stoppingToken);
                 if (DateTimeOffset.UtcNow - _lastCleanup > TimeSpan.FromDays(1))
                 {
                     await CleanupAsync(stoppingToken);
@@ -99,6 +100,13 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
             }
         }
         await db.SaveChangesAsync(ct);
+    }
+
+    private async Task ExpireApprovalsAsync(CancellationToken ct)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var n = await scope.ServiceProvider.GetRequiredService<RunService>().ExpireOverdueAsync(ct);
+        if (n > 0) logger.LogInformation("{Count} approval request(s) expired", n);
     }
 
     private async Task CleanupAsync(CancellationToken ct)

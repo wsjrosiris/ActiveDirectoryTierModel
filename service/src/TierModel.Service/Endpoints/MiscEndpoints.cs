@@ -58,17 +58,26 @@ public static class MiscEndpoints
         api.MapPut("/settings", async (UpdateSettingsRequest r, HttpContext ctx, SettingsService s, ChangeLogService log, AppDbContext db) =>
         {
             var errors = new Dictionary<string, string[]>();
+            r = r with { DefaultPreferredDc = r.DefaultPreferredDc?.Trim() ?? "", AdmlLanguage = r.AdmlLanguage?.Trim() ?? "" };
             if (!string.IsNullOrWhiteSpace(r.DefaultPreferredDc)
                 && RunValidation.Validate(new RunRequest(r.DefaultPreferredDc.Trim(), DeployScope.FullDeployment, false, false, false, false, null)).ContainsKey("preferredDc"))
                 errors["defaultPreferredDc"] = ["Ungültiger Hostname."];
-            if (RunValidation.Validate(new RunRequest("dc", DeployScope.FullDeployment, false, false, false, false, r.AdmlLanguage)).ContainsKey("admlLanguage"))
+            // An empty language would be passed as -AdmlLanguage "" and fail every run at parameter binding.
+            if (r.AdmlLanguage.Length == 0 || RunValidation.Validate(new RunRequest("dc", DeployScope.FullDeployment, false, false, false, false, r.AdmlLanguage)).ContainsKey("admlLanguage"))
                 errors["admlLanguage"] = ["Sprache im Format xx-XX angeben."];
             if (r.RunRetentionDays is < 0 or > 3650) errors["runRetentionDays"] = ["0 bis 3650 Tage (0 = unbegrenzt)."];
+            if (r.ApprovalTimeoutHours is < 1 or > 720) errors["approvalTimeoutHours"] = ["1 bis 720 Stunden."];
+            if (!string.IsNullOrWhiteSpace(r.PublicBaseUrl)
+                && !(Uri.TryCreate(r.PublicBaseUrl.Trim(), UriKind.Absolute, out var url) && url.Scheme is "https" or "http"))
+                errors["publicBaseUrl"] = ["Vollständige Adresse angeben, z. B. https://tiermodel01.contoso.com:8443"];
             if (errors.Count > 0) return Results.ValidationProblem(errors);
 
+            var before = await s.GetAsync();
             await s.UpdateAsync(r);
+            var approvalText = r.RequireApproval is { } ra && ra != before.RequireApproval
+                ? ra ? ", Vier-Augen-Prinzip EIN" : ", Vier-Augen-Prinzip AUS" : "";
             log.Add(ctx.User.UserName(), "settings.update", "settings", null,
-                $"Einstellungen geändert: DC '{r.DefaultPreferredDc}', ADML {r.AdmlLanguage}, Aufbewahrung {r.RunRetentionDays} Tage");
+                $"Einstellungen geändert: DC '{r.DefaultPreferredDc}', ADML {r.AdmlLanguage}, Aufbewahrung {r.RunRetentionDays} Tage{approvalText}");
             await db.SaveChangesAsync();
             return Results.Ok(await s.GetAsync());
         }).RequireAuthorization(nameof(Role.Admin));
@@ -117,6 +126,8 @@ public static class MiscEndpoints
                 driftTrend = trend.AsEnumerable().Reverse(),
                 recentRuns = recentRuns.Select(RunSummaryDto.From),
                 recentChanges = recentChanges.Select(ChangeEntryDto.From),
+                pendingApprovals = (await db.Runs.AsNoTracking().Where(r => r.Status == RunStatus.AwaitingApproval).OrderBy(r => r.Id).ToListAsync(ct))
+                    .Select(RunSummaryDto.From),
                 queue = new
                 {
                     running = await db.Runs.CountAsync(r => r.Status == RunStatus.Running, ct),

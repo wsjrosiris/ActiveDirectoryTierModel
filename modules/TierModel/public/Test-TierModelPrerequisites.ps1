@@ -140,9 +140,9 @@ function Test-TierModelPrerequisites {
         # running this script by reading the static InstallLanguage LCID from
         # HKLM\SYSTEM\CurrentControlSet\Control\Nls\Language. Supported primary
         # language IDs: 0x09 (English), 0x07 (German), 0x0c (French), 0x0a (Spanish),
-        # 0x10 (Italian), 0x13 (Dutch), 0x16 (Portuguese), 0x14 (Turkish),
+        # 0x10 (Italian), 0x13 (Dutch), 0x16 (Portuguese), 0x1f (Turkish),
         # 0x11 (Japanese), 0x12 (Korean), 0x04 (Chinese), 0x15 (Polish),
-        # 0x19 (Russian), 0x1d (Swedish), 0x06 (Danish), 0x14 (Norwegian),
+        # 0x19 (Russian), 0x1d (Swedish), 0x06 (Danish),
         # 0x0b (Finnish), 0x08 (Greek), 0x05 (Czech), 0x0e (Hungarian).
         try {
             $hostInstallLanguage = Get-ItemPropertyValue -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Nls\Language' -Name 'InstallLanguage' -ErrorAction Stop
@@ -156,7 +156,7 @@ function Test-TierModelPrerequisites {
                 0x10,  # Italian
                 0x13,  # Dutch
                 0x16,  # Portuguese
-                0x14,  # Turkish
+                0x1f,  # Turkish
                 0x11,  # Japanese
                 0x12,  # Korean
                 0x04,  # Chinese
@@ -488,8 +488,8 @@ function Test-TierModelPrerequisites {
                             'zh-CN' = '账户操作员'
                             'pl-PL' = 'Operatorzy kont'
                             'ru-RU' = 'Операторы счетов'
-                            'sv-SE' = 'Kontooperaörer'
-                            'da-DK' = 'Kontooperaörer'
+                            'sv-SE' = 'Kontooperatörer'
+                            'da-DK' = 'Kontooperatører'
                             'fi-FI' = 'Tilin operaattorit'
                             'el-GR' = 'Χειριστές λογαριασμών'
                             'cs-CZ' = 'Operátoři účtů'
@@ -528,7 +528,8 @@ function Test-TierModelPrerequisites {
                         foreach ($lang in @('de-DE','fr-FR','es-ES','it-IT','nl-NL','pt-BR','tr-TR','ja-JP','ko-KR','zh-CN','pl-PL','ru-RU','sv-SE','da-DK','fi-FI','el-GR','cs-CZ','hu-HU')) {
                             $matchCount = 0
                             foreach ($sid in @('S-1-5-32-549','S-1-5-32-548')) {
-                                if ($knownGroupNames.ContainsKey($sid) -and $knownGroupNames[$sid].ContainsKey($lang)) {
+                                # Names identical to the English ones (e.g. ja-JP keeps "Server Operators") cannot identify a language.
+                                if ($knownGroupNames.ContainsKey($sid) -and $knownGroupNames[$sid].ContainsKey($lang) -and $knownGroupNames[$sid][$lang] -cne $knownGroupNames[$sid]['en-US']) {
                                     $resolvedSidName = $null
                                     foreach ($key in $resolvedGroupNames.Keys) {
                                         if ($resolvedGroupNames[$key] -eq $knownGroupNames[$sid][$lang]) {

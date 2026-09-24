@@ -28,6 +28,11 @@ namespace TierModel.Service.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AuthType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -53,8 +58,8 @@ namespace TierModel.Service.Data.Migrations
 
                     b.Property<string>("NormalizedUsername")
                         .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -69,14 +74,20 @@ namespace TierModel.Service.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Sid")
+                        .HasColumnType("text");
+
                     b.Property<string>("Username")
                         .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("NormalizedUsername")
+                        .IsUnique();
+
+                    b.HasIndex("Sid")
                         .IsUnique();
 
                     b.ToTable("users", (string)null);
@@ -190,6 +201,61 @@ namespace TierModel.Service.Data.Migrations
                     b.ToTable("config_versions", (string)null);
                 });
 
+            modelBuilder.Entity("TierModel.Service.Data.NotificationChannel", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("LastSentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("OnApply")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("OnApproval")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("OnDrift")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("OnFailure")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("TargetDisplay")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TargetProtected")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("notification_channels", (string)null);
+                });
+
             modelBuilder.Entity("TierModel.Service.Data.Run", b =>
                 {
                     b.Property<long>("Id")
@@ -200,6 +266,21 @@ namespace TierModel.Service.Data.Migrations
 
                     b.Property<string>("AdmlLanguage")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ApprovalComment")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("ApprovalExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("ApprovalRequired")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ApprovedBy")
                         .HasColumnType("text");
 
                     b.Property<string>("ConfigVersions")

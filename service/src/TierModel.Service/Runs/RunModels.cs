@@ -15,11 +15,14 @@ public record DeployRequest(string PreferredDc, DeployScope? Scope, bool Include
 public record RunSummaryDto(
     long Id, RunKind Kind, RunStatus Status, RunTrigger Trigger, RunMode? Mode, DeployScope? Scope, string[] Includes,
     string PreferredDc, string RequestedBy, long? ScheduleId, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt,
-    DateTimeOffset? FinishedAt, int? ExitCode, int? DriftCount, int? ErrorCount, string? Message)
+    DateTimeOffset? FinishedAt, int? ExitCode, int? DriftCount, int? ErrorCount, string? Message,
+    bool ApprovalRequired, string? ApprovedBy, DateTimeOffset? ApprovedAt, string? ApprovalComment, DateTimeOffset? ApprovalExpiresAt)
 {
     public static RunSummaryDto From(Run r) => new(
         r.Id, r.Kind, r.Status, r.Trigger, r.Mode, r.Scope, IncludeList(r.IncludeMsa, r.IncludeGmsa, r.IncludeDmsa, r.IncludeWinLaps),
-        r.PreferredDc, r.RequestedBy, r.ScheduleId, r.CreatedAt, r.StartedAt, r.FinishedAt, r.ExitCode, r.DriftCount, r.ErrorCount, r.Message);
+        r.PreferredDc, r.RequestedBy, r.ScheduleId, r.CreatedAt, r.StartedAt, r.FinishedAt, r.ExitCode, r.DriftCount, r.ErrorCount, r.Message,
+        r.ApprovalRequired, r.ApprovedBy, r.ApprovedAt, r.ApprovalComment,
+        r.Status == RunStatus.AwaitingApproval ? r.ApprovalExpiresAt : null);
 
     public static string[] IncludeList(bool msa, bool gmsa, bool dmsa, bool winLaps) =>
         new[] { (msa, "Msa"), (gmsa, "Gmsa"), (dmsa, "Dmsa"), (winLaps, "WinLaps") }.Where(x => x.Item1).Select(x => x.Item2).ToArray();
@@ -43,8 +46,14 @@ public static partial class RunValidation
         var errors = new Dictionary<string, string[]>();
         if (string.IsNullOrWhiteSpace(r.PreferredDc) || r.PreferredDc.Length > 253 || !HostName().IsMatch(r.PreferredDc))
             errors["preferredDc"] = ["Bitte einen gültigen Domänencontroller-Namen angeben (z. B. dc01.contoso.com)."];
-        if (r.Scope is null && !(r.IncludeMsa || r.IncludeGmsa || r.IncludeDmsa || r.IncludeWinLaps))
+        var anyInclude = r.IncludeMsa || r.IncludeGmsa || r.IncludeDmsa || r.IncludeWinLaps;
+        if (r.Scope is { } scope && !Enum.IsDefined(scope))
+            errors["scope"] = ["Unbekannter Bereich."];
+        else if (r.Scope is null && !anyInclude)
             errors["scope"] = ["Bereich wählen oder mindestens eine Erweiterung aktivieren."];
+        // Deploy-/Audit-TierModel.ps1 reject -Include* together with any scope except -FullDeployment.
+        else if (anyInclude && r.Scope is not (null or DeployScope.FullDeployment))
+            errors["scope"] = ["Erweiterungen (MSA, gMSA, dMSA, Windows LAPS) sind nur mit „Vollständig“ oder ohne Bereich möglich."];
         if (r.AdmlLanguage is { Length: > 0 } lang && !Language().IsMatch(lang))
             errors["admlLanguage"] = ["Sprache im Format xx-XX angeben (z. B. en-US)."];
         return errors;

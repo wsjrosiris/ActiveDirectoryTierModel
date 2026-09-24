@@ -17,6 +17,8 @@ import {
   Users,
   XCircle,
   Clock,
+  Hourglass,
+  Timer,
 } from 'lucide-react'
 import type { ChangeEntry, Dashboard, RunSummary } from '@/api/types'
 import { useDashboardQuery } from '@/components/layout/app-layout'
@@ -29,7 +31,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/empty-state'
 import { useCan, useUser } from '@/features/auth/auth'
 import { sectionQuery } from '@/features/config/queries'
-import { actionLabels, scopeLabels } from '@/lib/labels'
+import { actionLabels, includeLabels, scopeLabels } from '@/lib/labels'
 import { cn, formatDuration, formatNumber, formatRelative } from '@/lib/utils'
 
 const DriftChart = React.lazy(() => import('./drift-chart'))
@@ -59,6 +61,8 @@ export function Component() {
           )
         }
       />
+
+      {!!data?.pendingApprovals?.length && <PendingApprovalsCard runs={data.pendingApprovals} />}
 
       <KpiRow data={data} loading={isLoading} />
 
@@ -96,6 +100,68 @@ export function Component() {
         <RecentChanges changes={data?.recentChanges} loading={isLoading} className="xl:col-span-2" />
       </div>
     </Page>
+  )
+}
+
+function PendingApprovalsCard({ runs }: { runs: RunSummary[] }) {
+  const canDecide = useCan('Operator')
+  const user = useUser()
+  return (
+    <Card className="relative mb-4 overflow-hidden border-amber-500/40">
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-amber-500/[0.08] to-transparent" />
+      <CardHeader className="relative">
+        <div className="flex items-center gap-3">
+          <span className="grid size-9 place-content-center rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-300">
+            <Hourglass className="size-4" />
+          </span>
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              Freigaben ausstehend
+              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-800 tabular dark:text-amber-300">{runs.length}</span>
+            </CardTitle>
+            <CardDescription>
+              {canDecide ? 'Deploys, die auf die Freigabe durch eine zweite Person warten' : 'Deploys, die auf die Freigabe durch einen Operator warten'}
+            </CardDescription>
+          </div>
+        </div>
+        <Button variant="ghost" size="xs" asChild className="text-muted-foreground">
+          <Link to="/laeufe?status=AwaitingApproval">Alle <ArrowRight /></Link>
+        </Button>
+      </CardHeader>
+      <CardContent className="relative px-2 pb-2">
+        <ul className="grid gap-0.5">
+          {runs.map((r) => {
+            const own = r.requestedBy.toLocaleLowerCase() === user.username.toLocaleLowerCase()
+            return (
+              <li key={r.id}>
+                <Link
+                  to={`/laeufe/${r.id}`}
+                  className="flex items-center gap-3 rounded-md px-3 py-2 transition-colors outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <RunKindIcon kind={r.kind} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium">
+                      #{r.id} · Deploy · {r.scope ? scopeLabels[r.scope] : 'Nur Add-ons'}
+                      {r.includes.length > 0 && <span className="font-normal text-muted-foreground"> + {r.includes.map((i) => includeLabels[i] ?? i).join(', ')}</span>}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {r.requestedBy}{own && ' (Sie)'} · {formatRelative(r.createdAt)} · DC {r.preferredDc}
+                    </p>
+                  </div>
+                  {r.approvalExpiresAt && (
+                    <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex" title="Läuft ab">
+                      <Timer className="size-3.5" /> {formatRelative(r.approvalExpiresAt)}
+                    </span>
+                  )}
+                  <span className="text-xs font-medium text-primary">{canDecide && !own ? 'Prüfen' : 'Ansehen'}</span>
+                  <ArrowRight className="size-3.5 text-muted-foreground" />
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -223,7 +289,13 @@ function DeployCard({ data, loading }: { data?: Dashboard; loading: boolean }) {
               <RunKindIcon kind="Deploy" className="size-11 rounded-full [&_svg]:size-5" />
               <div>
                 <p className="text-lg font-semibold tracking-tight">
-                  {d.mode === 'Apply' ? 'Angewendet' : 'Geplant (WhatIf)'}
+                  {d.status === 'AwaitingApproval'
+                    ? 'Wartet auf Freigabe'
+                    : d.status === 'Rejected'
+                      ? 'Abgelehnt'
+                      : d.mode === 'Apply'
+                        ? 'Angewendet'
+                        : 'Geplant (WhatIf)'}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {d.scope ? scopeLabels[d.scope] : 'Nur Add-ons'} · {d.requestedBy} · {formatDuration(d.startedAt, d.finishedAt)}
@@ -387,7 +459,8 @@ function RecentChanges({ changes, loading, className }: { changes?: ChangeEntry[
 }
 
 function dotColor(action: string) {
-  if (action.includes('failed') || action.includes('delete') || action.includes('cancel')) return 'bg-rose-500'
+  if (action.includes('failed') || action.includes('denied') || action.includes('delete') || action.includes('cancel') || action.includes('reject') || action.includes('expired')) return 'bg-rose-500'
+  if (action === 'run.approve') return 'bg-emerald-500'
   if (action.startsWith('config')) return 'bg-indigo-500'
   if (action.startsWith('run')) return 'bg-sky-500'
   if (action.startsWith('auth')) return 'bg-muted-foreground/60'

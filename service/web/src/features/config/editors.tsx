@@ -15,14 +15,13 @@ import { tierOf, type Tier } from '@/lib/tier'
 import { ListEditor, type Column, type FormProps, type Item } from './list-editor'
 import {
   CheckboxGrid,
-  ChipsInput,
   FormSection,
   SwitchRow,
   setField,
   useGpoNameOptions,
-  useGroupOptions,
   useOuOptions,
 } from './form-helpers'
+import { ALL_OBJECTS_LABEL, PrincipalCombobox, PrincipalMultiCombobox, useObjectTypeOptions } from './lookups'
 import { useSectionContent } from './draft-store'
 import { OuRenameDialog } from './ou-rename-dialog'
 
@@ -78,18 +77,22 @@ function OuForm({ value, onChange, errors, index }: FormProps) {
   return (
     <>
       <FormSection title="Allgemein">
-        <Field label="Name" htmlFor="ou-name" required error={errors.name} hint={existing ? 'Umbenennen aktualisiert alle Referenzen in anderen Sektionen.' : undefined}>
+        <Field label="Name" htmlFor="ou-name" required error={errors.name} hint={existing ? 'Umbenennen und Verschieben aktualisieren alle Referenzen in anderen Sektionen.' : undefined}>
           <div className="flex gap-2">
             <Input id="ou-name" value={value.name ?? ''} readOnly={existing} onChange={(e) => onChange(setField(value, 'name', e.target.value))} aria-invalid={!!errors.name} placeholder="z. B. Tier 0 Accounts" />
             {existing && (
               <Button type="button" variant="outline" onClick={() => setRenameOpen(true)}>
-                <Pencil /> Umbenennen …
+                <Pencil /> Umbenennen / Verschieben …
               </Button>
             )}
           </div>
         </Field>
-        <Field label="Übergeordnete OU" htmlFor="ou-path" required error={errors.path} hint="Relativer Pfad ohne Domänen-Suffix oder {{DOMAIN_DN}} für die oberste Ebene.">
-          <Combobox id="ou-path" mono value={value.path ?? ''} onChange={(v) => onChange(setField(value, 'path', v))} options={parentOptions} placeholder="Übergeordnete OU wählen" invalid={!!errors.path} />
+        <Field label="Übergeordnete OU" htmlFor="ou-path" required error={errors.path} hint={existing ? "Verschieben über „Umbenennen / Verschieben …“." : "Relativer Pfad ohne Domänen-Suffix oder {{DOMAIN_DN}} für die oberste Ebene."}>
+          {existing ? (
+            <Input id="ou-path" className="font-mono" value={value.path ?? ''} readOnly />
+          ) : (
+            <Combobox id="ou-path" mono value={value.path ?? ''} onChange={(v) => onChange(setField(value, 'path', v))} options={parentOptions} placeholder="Übergeordnete OU wählen" invalid={!!errors.path} />
+          )}
         </Field>
         <div className="rounded-lg border border-dashed bg-muted/30 px-3 py-2.5">
           <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Distinguished Name</p>
@@ -110,7 +113,7 @@ function OuForm({ value, onChange, errors, index }: FormProps) {
         </div>
       </FormSection>
       {existing && index !== null && (
-        <OuRenameDialog open={renameOpen} onOpenChange={setRenameOpen} index={index} onApplied={(name) => onChange({ ...value, name })} />
+        <OuRenameDialog open={renameOpen} onOpenChange={setRenameOpen} index={index} onApplied={(name, path) => onChange({ ...value, name, path })} />
       )}
     </>
   )
@@ -155,7 +158,7 @@ export function OusEditor(props: EditorProps) {
             e.path = 'Übergeordnete OU existiert nicht in der Konfiguration.'
           return e
         }}
-        extraActions={[{ label: 'Umbenennen …', icon: <Pencil />, onSelect: (_o, i) => setRename(i) }]}
+        extraActions={[{ label: 'Umbenennen / Verschieben …', icon: <Pencil />, onSelect: (_o, i) => setRename(i) }]}
         toolbarExtra={
           <Segmented
             aria-label="Ansicht"
@@ -285,7 +288,6 @@ export function GroupsEditor(props: EditorProps) {
 
 function UserForm({ value, onChange, errors }: FormProps) {
   const ouOptions = useOuOptions()
-  const groupOptions = useGroupOptions('samaccountname')
   const members: string[] = Array.isArray(value.memberOf) ? value.memberOf : []
   return (
     <>
@@ -306,8 +308,8 @@ function UserForm({ value, onChange, errors }: FormProps) {
         </Field>
         <SwitchRow id="u-enabled" label="Konto aktiviert" description="Dienstkonten bleiben üblicherweise deaktiviert, bis sie benötigt werden." checked={!!value.enabled} onCheckedChange={(v) => onChange(setField(value, 'enabled', v))} />
       </FormSection>
-      <FormSection title="Gruppenmitgliedschaften" description="sAMAccountName der Gruppen">
-        <ChipsInput id="u-member" value={members} onChange={(v) => onChange(setField(value, 'memberOf', v))} options={groupOptions} placeholder="Gruppe hinzufügen …" />
+      <FormSection title="Gruppenmitgliedschaften" description="sAMAccountName der Gruppen – aus der Konfiguration, integriert oder per Suche im Active Directory">
+        <PrincipalMultiCombobox id="u-member" values={members} onChange={(v) => onChange(setField(value, 'memberOf', v))} placeholder="Gruppe suchen und hinzufügen …" />
       </FormSection>
       <Field label="Kommentar" htmlFor="u-comment">
         <Textarea id="u-comment" rows={2} value={value.comment ?? ''} onChange={(e) => onChange(setField(value, 'comment', e.target.value, !('comment' in value)))} />
@@ -377,8 +379,8 @@ function aclTier(a: Item): Tier {
 function makeAclForm(objectTypes: string[], showTier: boolean) {
   return function AclForm({ value, onChange, errors }: FormProps) {
     const ouOptions = useOuOptions()
-    const principals = useGroupOptions('samaccountname')
-    const typeOptions = objectTypes.map((t) => ({ value: t }))
+    const typeOptions = useObjectTypeOptions(objectTypes)
+    const inhKey = 'inheritedobjecttype' in value ? 'inheritedobjecttype' : 'inheritedObjectType'
     const rights: string[] = Array.isArray(value.activedirectoryrights) ? value.activedirectoryrights : []
     return (
       <>
@@ -386,8 +388,8 @@ function makeAclForm(objectTypes: string[], showTier: boolean) {
           <Field label="Ziel-OU" htmlFor="a-ou" required error={errors.targetOUPath}>
             <Combobox id="a-ou" mono value={value.targetOUPath ?? ''} onChange={(v) => onChange(setField(value, 'targetOUPath', v))} options={ouOptions} placeholder="OU wählen" invalid={!!errors.targetOUPath} />
           </Field>
-          <Field label="Prinzipal (Identity Reference)" htmlFor="a-id" required error={errors.identityreference} hint="sAMAccountName einer Gruppe aus der Konfiguration oder ein integriertes Konto.">
-            <Combobox id="a-id" value={value.identityreference ?? ''} onChange={(v) => onChange(setField(value, 'identityreference', v))} options={principals} placeholder="Prinzipal wählen" invalid={!!errors.identityreference} />
+          <Field label="Prinzipal (Identity Reference)" htmlFor="a-id" required error={errors.identityreference} hint="sAMAccountName einer Gruppe aus der Konfiguration, ein integriertes Konto oder eine Gruppe aus dem Active Directory (Suche).">
+            <PrincipalCombobox id="a-id" value={value.identityreference ?? ''} onChange={(v) => onChange(setField(value, 'identityreference', v))} placeholder="Prinzipal wählen" invalid={!!errors.identityreference} />
           </Field>
         </FormSection>
         <FormSection title="Rechte" description="activedirectoryrights">
@@ -408,16 +410,28 @@ function makeAclForm(objectTypes: string[], showTier: boolean) {
         </FormSection>
         <FormSection title="Objekttypen">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Objekttyp" htmlFor="a-obj" hint="Leer = alle Objekte">
-              <Combobox id="a-obj" mono value={value.objecttype ?? ''} onChange={(v) => onChange(setField(value, 'objecttype', v))} options={typeOptions} placeholder="Objekttyp wählen" />
+            <Field label="Objekttyp" htmlFor="a-obj" hint="Namen aus den GUID-Zuordnungen">
+              <Combobox id="a-obj" mono value={value.objecttype ?? ''} onChange={(v) => onChange(setField(value, 'objecttype', v))} options={typeOptions} placeholder={ALL_OBJECTS_LABEL} />
             </Field>
-            <Field label="Geerbter Objekttyp" htmlFor="a-iobj" hint="inheritedObjectType (optional)">
-              <Combobox id="a-iobj" mono value={value.inheritedObjectType ?? ''} onChange={(v) => onChange(setField(value, 'inheritedObjectType', v, true))} options={typeOptions} placeholder="Optional" />
+            <Field label="Geerbter Objekttyp" htmlFor="a-iobj" hint="Optional – schränkt auf Nachfolger dieses Typs ein">
+              <Combobox id="a-iobj" mono value={value[inhKey] ?? ''} onChange={(v) => onChange(setField(value, inhKey, v, true))} options={typeOptions} placeholder={ALL_OBJECTS_LABEL} />
             </Field>
           </div>
           {'inheritanceType' in value && (
             <Field label="Vererbungstyp" htmlFor="a-it" hint="inheritanceType">
-              <Input id="a-it" className="font-mono" value={value.inheritanceType ?? ''} onChange={(e) => onChange(setField(value, 'inheritanceType', e.target.value, true))} />
+              <Combobox
+                id="a-it"
+                mono
+                value={value.inheritanceType ?? ''}
+                onChange={(v) => onChange(setField(value, 'inheritanceType', v, true))}
+                options={[
+                  { value: 'ContainerInherit', hint: 'Vererbung an Container' },
+                  { value: 'ObjectInherit', hint: 'Vererbung an Objekte' },
+                  { value: 'None', hint: 'Keine Vererbung' },
+                  ...typeOptions.filter((o) => o.value),
+                ]}
+                placeholder="Optional"
+              />
             </Field>
           )}
           <SwitchRow id="a-guid" label="GUID auflösen" description="Objekttyp zur Laufzeit über guid-mappings in eine Schema-GUID übersetzen (resolveguid)." checked={!!value.resolveguid} onCheckedChange={(v) => onChange(setField(value, 'resolveguid', v))} />
@@ -442,7 +456,9 @@ export function AclsEditor(props: EditorProps) {
   const isMsa = props.sectionKey !== 'acls'
   const objectTypes = React.useMemo(() => {
     const s = new Set(COMMON_OBJECT_TYPES)
-    items.forEach((a) => { if (a.objecttype) s.add(a.objecttype); if (a.inheritedObjectType) s.add(a.inheritedObjectType) })
+    items.forEach((a) => {
+      for (const k of ['objecttype', 'inheritedObjectType', 'inheritedobjecttype']) if (a[k]) s.add(a[k])
+    })
     return [...s].sort()
   }, [items])
   const Form = React.useMemo(() => makeAclForm(objectTypes, isMsa), [objectTypes, isMsa])
@@ -476,7 +492,7 @@ export function AclsEditor(props: EditorProps) {
           },
           { id: 'inh', header: 'Vererbung', cell: (a) => <span className="text-muted-foreground">{a.activeDirectorysecurityinheritance}</span>, sortValue: (a) => a.activeDirectorysecurityinheritance ?? '', className: 'hidden @6xl:table-cell' },
         ]}
-        searchText={(a) => `${a.identityreference} ${a.targetOUPath} ${a.objecttype ?? ''} ${a.inheritedObjectType ?? ''} ${(a.activedirectoryrights ?? []).join(' ')} ${a.comment ?? ''}`}
+        searchText={(a) => `${a.identityreference} ${a.targetOUPath} ${a.objecttype ?? ''} ${a.inheritedObjectType ?? a.inheritedobjecttype ?? ''} ${(a.activedirectoryrights ?? []).join(' ')} ${a.comment ?? ''}`}
         tierOf={aclTier}
         itemLabel={(a) => `${a.identityreference} → ${String(a.targetOUPath ?? '').replace(/,\{\{DOMAIN_DN\}\}$/, '')}`}
         newItem={() => ({
@@ -503,7 +519,6 @@ export function AclsEditor(props: EditorProps) {
 
 function WinLapsForm({ value, onChange, errors }: FormProps) {
   const ouOptions = useOuOptions()
-  const groups = useGroupOptions('name')
   const gpoNames = useGpoNameOptions()
   return (
     <>
@@ -519,14 +534,14 @@ function WinLapsForm({ value, onChange, errors }: FormProps) {
       <FormSection title="Berechtigte Gruppen" description="Gruppennamen (nicht sAMAccountName)">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Lesen" htmlFor="w-read" required error={errors.readGroup}>
-            <Combobox id="w-read" value={value.readGroup ?? ''} onChange={(v) => onChange(setField(value, 'readGroup', v))} options={groups} placeholder="Gruppe wählen" invalid={!!errors.readGroup} />
+            <PrincipalCombobox by="name" id="w-read" value={value.readGroup ?? ''} onChange={(v) => onChange(setField(value, 'readGroup', v))} placeholder="Gruppe wählen" invalid={!!errors.readGroup} />
           </Field>
           <Field label="Zurücksetzen" htmlFor="w-reset" required error={errors.resetGroup}>
-            <Combobox id="w-reset" value={value.resetGroup ?? ''} onChange={(v) => onChange(setField(value, 'resetGroup', v))} options={groups} placeholder="Gruppe wählen" invalid={!!errors.resetGroup} />
+            <PrincipalCombobox by="name" id="w-reset" value={value.resetGroup ?? ''} onChange={(v) => onChange(setField(value, 'resetGroup', v))} placeholder="Gruppe wählen" invalid={!!errors.resetGroup} />
           </Field>
         </div>
         <Field label="Entschlüsselung (decryptorGroup)" htmlFor="w-dec" hint="Optional – bei DC-OU nicht erforderlich">
-          <Combobox id="w-dec" value={value.decryptorGroup ?? ''} onChange={(v) => onChange(setField(value, 'decryptorGroup', v, true))} options={groups} placeholder="Optional" />
+          <PrincipalCombobox by="name" id="w-dec" value={value.decryptorGroup ?? ''} onChange={(v) => onChange(setField(value, 'decryptorGroup', v, true))} placeholder="Optional" />
         </Field>
         <Field label="Decryptor-GPO" htmlFor="w-gpo" hint="Name der GPO, die die Entschlüsselungsgruppe konfiguriert">
           <Combobox id="w-gpo" value={value.decryptorGpoName ?? ''} onChange={(v) => onChange(setField(value, 'decryptorGpoName', v, true))} options={gpoNames} placeholder="Optional" />
@@ -568,72 +583,5 @@ export function WinLapsEditor(props: EditorProps) {
         return e
       }}
     />
-  )
-}
-
-// ============================================================ GPO overview (read-only)
-
-export function GpoOverview({ content, focus }: { content: Json; focus?: string | null }) {
-  React.useEffect(() => {
-    if (!focus) return
-    const t = setTimeout(() => {
-      const el = document.getElementById(`gpo-${focus}`)
-      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      el?.classList.add('ring-2', 'ring-primary')
-      setTimeout(() => el?.classList.remove('ring-2', 'ring-primary'), 2400)
-    }, 150)
-    return () => clearTimeout(t)
-  }, [focus])
-  const map = (content?.gpos ?? {}) as Record<string, Item>
-  const entries = Object.entries(map)
-  const [filter, setFilter] = React.useState('')
-  const q = filter.toLowerCase()
-  const rows = entries
-    .map(([dn, v]) => {
-      const gpos: { name: string; kind: string; linkOrder?: number; linkEnabled?: boolean; mode?: string }[] = []
-      for (const kind of ['ImportOnlyGpo', 'PostConfigureGpo'])
-        if (Array.isArray(v?.[kind])) v[kind].forEach((g: Item) => gpos.push({ name: g.name, kind, linkOrder: g.linkOrder, linkEnabled: g.linkEnabled, mode: g.mode }))
-      gpos.sort((a, b) => (a.linkOrder ?? 999) - (b.linkOrder ?? 999))
-      return { dn, displayName: v?.displayName as string | undefined, gpos }
-    })
-    .filter((r) => !q || r.dn.toLowerCase().includes(q) || r.gpos.some((g) => g.name?.toLowerCase().includes(q)))
-
-  return (
-    <div className="grid gap-3">
-      <div className="flex items-center gap-2">
-        <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="OU oder GPO filtern …" className="h-8 max-w-xs text-[13px]" aria-label="GPOs filtern" />
-        <span className="text-xs text-muted-foreground">{entries.length} Ziele · {entries.reduce((n, [, v]) => n + ((v?.ImportOnlyGpo?.length ?? 0) + (v?.PostConfigureGpo?.length ?? 0)), 0)} GPOs</span>
-      </div>
-      <div className="grid items-start gap-3 lg:grid-cols-2">
-        {rows.map((r) => (
-          <Card key={r.dn} id={`gpo-${r.dn}`} className="overflow-hidden transition-shadow">
-            <div className="flex items-center gap-2 border-b bg-muted/30 px-4 py-2.5">
-              <FolderTree className="size-4 text-muted-foreground" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-medium">{r.displayName ?? (r.dn === DOMAIN ? 'Domänenstamm' : r.dn.split(',')[0].replace(/^OU=/, ''))}</p>
-                <p className="truncate font-mono text-[11px] text-muted-foreground">{r.dn}</p>
-              </div>
-              <TierBadgeFor text={r.dn} short />
-            </div>
-            {r.gpos.length === 0 ? (
-              <p className="px-4 py-3 text-xs text-muted-foreground">Keine GPOs verknüpft</p>
-            ) : (
-              <ul className="divide-y">
-                {r.gpos.map((g, i) => (
-                  <li key={i} className="flex items-center gap-2 px-4 py-2 text-[13px]">
-                    <span className="w-5 text-right font-mono text-[11px] text-muted-foreground tabular">{g.linkOrder ?? '–'}</span>
-                    <span className={g.linkEnabled === false ? 'min-w-0 flex-1 truncate text-muted-foreground' : 'min-w-0 flex-1 truncate'} title={g.name}>
-                      {g.name}
-                    </span>
-                    {g.kind === 'PostConfigureGpo' && <Badge variant="info" className="text-[10px]">konfiguriert</Badge>}
-                    {g.linkEnabled === false && <Badge variant="muted" className="text-[10px]">Link aus</Badge>}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        ))}
-      </div>
-    </div>
   )
 }

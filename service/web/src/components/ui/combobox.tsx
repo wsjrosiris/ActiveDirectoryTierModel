@@ -27,6 +27,9 @@ export function Combobox({
   disabled,
   mono,
   invalid,
+  onSearchChange,
+  loading,
+  validateCustom,
 }: {
   value: string
   onChange: (v: string) => void
@@ -39,15 +42,25 @@ export function Combobox({
   disabled?: boolean
   mono?: boolean
   invalid?: boolean
+  /** Called with the current search text, e.g. to query Active Directory. */
+  onSearchChange?: (s: string) => void
+  loading?: boolean
+  /** Returns an error for a typed value that must not be used as is. */
+  validateCustom?: (v: string) => string | null
 }) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
   const selected = options.find((o) => o.value === value)
   const trimmed = search.trim()
   const showCustom = allowCustom && trimmed && !options.some((o) => o.value.toLowerCase() === trimmed.toLowerCase())
+  const customError = showCustom && validateCustom ? validateCustom(trimmed) : null
+  const setSearchText = (s: string) => {
+    setSearch(s)
+    onSearchChange?.(s)
+  }
 
   return (
-    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSearch('') }}>
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSearchText('') }}>
       <PopoverTrigger asChild>
         <button
           id={id}
@@ -79,29 +92,37 @@ export function Combobox({
         >
           <Command.Input
             value={search}
-            onValueChange={setSearch}
+            onValueChange={setSearchText}
             placeholder={searchPlaceholder}
             className="h-10 border-b bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground"
           />
           <Command.List className="max-h-72 overflow-y-auto p-1">
             <Command.Empty className="px-3 py-6 text-center text-sm text-muted-foreground">
-              {showCustom ? null : emptyText}
+              {showCustom ? null : loading ? 'Suche …' : emptyText}
             </Command.Empty>
             {showCustom && (
               <Command.Item
                 value={`__custom__${trimmed}`}
-                onSelect={() => { onChange(trimmed); setOpen(false); setSearch('') }}
-                className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm data-[selected=true]:bg-accent"
+                disabled={!!customError}
+                onSelect={() => { onChange(trimmed); setOpen(false); setSearchText('') }}
+                className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm data-[disabled=true]:opacity-100 data-[selected=true]:bg-accent"
               >
-                <span className="text-muted-foreground">Verwenden:</span>
-                <span className={cn('truncate', mono && 'font-mono text-xs')}>{trimmed}</span>
+                {customError ? (
+                  <span className="text-xs text-destructive">{customError}</span>
+                ) : (
+                  <>
+                    <span className="text-muted-foreground">Verwenden:</span>
+                    <span className={cn('truncate', mono && 'font-mono text-xs')}>{trimmed}</span>
+                  </>
+                )}
               </Command.Item>
             )}
+            {loading && showCustom && <p className="px-2 py-1.5 text-xs text-muted-foreground">Suche im Active Directory …</p>}
             {options.map((o) => (
               <Command.Item
                 key={o.value}
                 value={`${o.label ?? ''} ${o.value} ${o.hint ?? ''}`}
-                onSelect={() => { onChange(o.value); setOpen(false); setSearch('') }}
+                onSelect={() => { onChange(o.value); setOpen(false); setSearchText('') }}
                 className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm data-[selected=true]:bg-accent"
               >
                 <Check className={cn('size-4 shrink-0', o.value === value ? 'opacity-100' : 'opacity-0')} />

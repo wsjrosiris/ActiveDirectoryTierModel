@@ -157,8 +157,18 @@ export function ListEditor(props: ListEditorProps) {
     setErrors(errs)
     if (Object.keys(errs).length) return
     const next = [...items]
-    if (editing.index === null) next.push(editing.value)
-    else next[editing.index] = editing.value
+    // The list may have changed while the sheet was open (undo/redo, refresh): find the edited
+    // item by identity instead of trusting the index, and never overwrite a different entry.
+    const index = editing.index === null ? null : items[editing.index] === editing.original ? editing.index : items.indexOf(editing.original!)
+    if (index === -1) {
+      toast.error(`${entity.singular} wurde zwischenzeitlich geändert oder entfernt`, {
+        description: 'Die Bearbeitung wurde nicht übernommen. Bitte den Eintrag erneut öffnen.',
+      })
+      setEditing(null)
+      return
+    }
+    if (index === null) next.push(editing.value)
+    else next[index] = editing.value
     onItemsChange(next)
     toast.success(editing.index === null ? `${entity.singular} hinzugefügt` : `${entity.singular} aktualisiert`, {
       description: 'Im Entwurf – zum Übernehmen speichern.',

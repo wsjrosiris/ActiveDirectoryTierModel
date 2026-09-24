@@ -11,7 +11,11 @@ public enum Role
 
 public enum RunKind { Deploy, Audit }
 
-public enum RunStatus { Queued, Running, Succeeded, Failed, Cancelled }
+public enum RunStatus { Queued, Running, Succeeded, Failed, Cancelled, AwaitingApproval, Rejected }
+
+public enum AuthType { Local, Windows }
+
+public enum ChannelType { Email, Teams, Webhook }
 
 public enum RunTrigger { Manual, Schedule }
 
@@ -27,6 +31,9 @@ public class AppUser
     public required string DisplayName { get; set; }
     public string PasswordHash { get; set; } = "";
     public Role Role { get; set; }
+    public AuthType AuthType { get; set; } = AuthType.Local;
+    /// <summary>Windows accounts: the user's SID, which identifies the account across renames.</summary>
+    public string? Sid { get; set; }
     public bool IsActive { get; set; } = true;
     public bool MustChangePassword { get; set; }
     public int FailedLoginCount { get; set; }
@@ -79,6 +86,12 @@ public class Run
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
     public int? ExitCode { get; set; }
+    public bool ApprovalRequired { get; set; }
+    /// <summary>Approver, or the person who rejected the run.</summary>
+    public string? ApprovedBy { get; set; }
+    public DateTimeOffset? ApprovedAt { get; set; }
+    public string? ApprovalComment { get; set; }
+    public DateTimeOffset? ApprovalExpiresAt { get; set; }
     public int? DriftCount { get; set; }
     public int? ErrorCount { get; set; }
     public string? Message { get; set; }
@@ -133,6 +146,25 @@ public class ChangeEntry
     public required string Summary { get; set; }
     /// <summary>Optional JSON payload.</summary>
     public string? Details { get; set; }
+}
+
+public class NotificationChannel
+{
+    public long Id { get; set; }
+    public required string Name { get; set; }
+    public ChannelType Type { get; set; }
+    public bool Enabled { get; set; } = true;
+    /// <summary>Recipients or URL, encrypted with ASP.NET Core data protection (URLs often contain secrets).</summary>
+    public required string TargetProtected { get; set; }
+    /// <summary>What the UI may show: recipients, or the URL shortened to scheme and host.</summary>
+    public required string TargetDisplay { get; set; }
+    public bool OnDrift { get; set; }
+    public bool OnFailure { get; set; }
+    public bool OnApply { get; set; }
+    public bool OnApproval { get; set; }
+    public DateTimeOffset? LastSentAt { get; set; }
+    public string? LastError { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 }
 
 public class Setting

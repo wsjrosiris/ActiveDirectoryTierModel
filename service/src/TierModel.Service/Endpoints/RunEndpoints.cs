@@ -81,10 +81,21 @@ public static class RunEndpoints
             return Results.Ok(new LogPageDto(status.Value, lines));
         });
 
+        runs.MapPost("/{id:long}/approve", (long id, DecisionRequest? r, HttpContext ctx, RunService service) =>
+            Decide(id, approve: true, r?.Comment, ctx, service)).RequireAuthorization(nameof(Role.Operator));
+
+        runs.MapPost("/{id:long}/reject", (long id, DecisionRequest? r, HttpContext ctx, RunService service) =>
+            string.IsNullOrWhiteSpace(r?.Comment)
+                ? Task.FromResult(Results.ValidationProblem(new Dictionary<string, string[]> { ["comment"] = ["Bitte einen Grund angeben."] }))
+                : Decide(id, approve: false, r.Comment, ctx, service)).RequireAuthorization(nameof(Role.Operator));
+
         runs.MapPost("/{id:long}/cancel", async (long id, HttpContext ctx, RunService service) =>
-            await service.CancelAsync(id, ctx.User.UserName())
-                ? Results.NoContent()
-                : Results.Problem(title: "Der Lauf ist bereits beendet", statusCode: 409))
+            await service.CancelAsync(id, ctx.User.UserName()) switch
+            {
+                null => Results.NotFound(),
+                true => Results.NoContent(),
+                false => Results.Problem(title: "Der Lauf ist bereits beendet", statusCode: 409),
+            })
             .RequireAuthorization(nameof(Role.Operator));
 
         var schedules = app.MapGroup("/api/schedules").RequireAuthorization(nameof(Role.Viewer));
@@ -141,6 +152,22 @@ public static class RunEndpoints
             await db.SaveChangesAsync();
             return Results.Accepted($"/api/runs/{run.Id}", RunSummaryDto.From(run));
         }).RequireAuthorization(nameof(Role.Operator));
+    }
+
+    public record DecisionRequest(string? Comment);
+
+    private static async Task<IResult> Decide(long id, bool approve, string? comment, HttpContext ctx, RunService service)
+    {
+        var (outcome, run) = await service.DecideAsync(id, approve, ctx.User.UserName(), comment);
+        return outcome switch
+        {
+            ApprovalOutcome.Done => Results.Ok(RunSummaryDto.From(run!)),
+            ApprovalOutcome.NotFound => Results.NotFound(),
+            ApprovalOutcome.OwnRequest => Results.Problem(title: "Eigene Anträge können nicht selbst freigegeben oder abgelehnt werden",
+                detail: "Das Vier-Augen-Prinzip verlangt eine zweite Person.", statusCode: 403),
+            ApprovalOutcome.Expired => Results.Problem(title: "Die Freigabefrist ist abgelaufen", statusCode: 409),
+            _ => Results.Problem(title: "Der Lauf wartet nicht (mehr) auf eine Freigabe", statusCode: 409),
+        };
     }
 
     private static IResult? ValidateSchedule(ScheduleRequest r)

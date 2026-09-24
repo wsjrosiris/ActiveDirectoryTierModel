@@ -25,7 +25,14 @@ public static partial class Cli
     public static async Task<int> RunAsync(IServiceProvider services, string[] args)
     {
         // The installer writes UTF-8 to stdin; the Windows console default (OEM code page) would garble non-ASCII passwords.
-        if (Console.IsInputRedirected) Console.InputEncoding = new System.Text.UTF8Encoding(false);
+        try
+        {
+            if (Console.IsInputRedirected) Console.InputEncoding = new System.Text.UTF8Encoding(false);
+        }
+        catch (IOException)
+        {
+            // No console attached; stdin is then read with the default encoding.
+        }
         if (args[0] == "db") return await DatabaseCommandAsync(args);
 
         await using var scope = services.CreateAsyncScope();

@@ -14,7 +14,14 @@ public sealed partial class RunLogWriter : IAsyncDisposable
     private readonly Task _flushLoop;
     private int _seq;
 
-    public int ErrorLines { get; private set; }
+    public int ErrorLines { get { lock (_lock) return _errorLines; } }
+    private int _errorLines;
+
+    /// <summary>Value of the last "Total Drift: N" line printed by the audit script.</summary>
+    public int? LastTotalDrift { get; private set; }
+
+    [GeneratedRegex(@"^\s*Total Drift:\s*(\d+)", RegexOptions.IgnoreCase)]
+    private static partial Regex TotalDriftPattern();
 
     public RunLogWriter(IServiceScopeFactory scopes, long runId, int startSeq = 0)
     {
@@ -57,7 +64,8 @@ public sealed partial class RunLogWriter : IAsyncDisposable
         level ??= Classify(stream, text);
         lock (_lock)
         {
-            if (level == "error" && stream != "system") ErrorLines++;
+            if (level == "error" && stream != "system") _errorLines++;
+            if (stream == "stdout" && TotalDriftPattern().Match(text) is { Success: true } m) LastTotalDrift = int.Parse(m.Groups[1].Value);
             _buffer.Add(new RunLogLine
             {
                 RunId = _runId, Seq = ++_seq, At = DateTimeOffset.UtcNow,
@@ -75,7 +83,16 @@ public sealed partial class RunLogWriter : IAsyncDisposable
             while (!_stop.IsCancellationRequested)
             {
                 await Task.Delay(500, _stop.Token);
-                await FlushAsync();
+                try
+                {
+                    await FlushAsync();
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Database briefly unavailable: the batch went back into the buffer, try again later.
+                    _flushErrors++;
+                    if (_flushErrors > 120) throw;
+                }
             }
         }
         catch (OperationCanceledException) { }
@@ -90,17 +107,46 @@ public sealed partial class RunLogWriter : IAsyncDisposable
             batch = [.. _buffer];
             _buffer.Clear();
         }
-        await using var scope = _scopes.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.RunLogLines.AddRange(batch);
-        await db.SaveChangesAsync();
+        try
+        {
+            await using var scope = _scopes.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.RunLogLines.AddRange(batch.Select(l => new RunLogLine { RunId = l.RunId, Seq = l.Seq, At = l.At, Stream = l.Stream, Level = l.Level, Text = l.Text }));
+            await db.SaveChangesAsync();
+        }
+        catch
+        {
+            lock (_lock) _buffer.InsertRange(0, batch);
+            throw;
+        }
     }
 
+    private int _flushErrors;
+
+    /// <summary>Stops the background flush and writes what is left; failures are left to the caller to log.</summary>
     public async ValueTask DisposeAsync()
     {
         await _stop.CancelAsync();
-        await _flushLoop;
-        await FlushAsync();
+        try
+        {
+            await _flushLoop;
+        }
+        catch (Exception)
+        {
+            // Already retried for about a minute; the final flush below reports the error.
+        }
         _stop.Dispose();
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await FlushAsync();
+                return;
+            }
+            catch (Exception) when (attempt < 5)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(attempt));
+            }
+        }
     }
 }

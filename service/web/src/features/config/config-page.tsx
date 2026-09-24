@@ -1,20 +1,16 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link, NavLink, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router'
+import { Link, NavLink, useBlocker, useNavigate, useParams } from 'react-router'
 import {
   CheckCircle2,
   Download,
   FileQuestion,
   History,
-  Loader2,
   Redo2,
   RotateCcw,
   Save,
   Undo2,
   Eye,
-  Braces,
-  Table2,
-  LayoutGrid,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
@@ -27,7 +23,6 @@ import { Kbd } from '@/components/ui/kbd'
 import { Select } from '@/components/ui/select'
 import { InlineSkeleton, Skeleton } from '@/components/ui/skeleton'
 import { Tooltip } from '@/components/ui/tooltip'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Page } from '@/components/shared/page-header'
 import { useCan } from '@/features/auth/auth'
@@ -36,11 +31,14 @@ import { sectionFallbackTitles, sectionGroups } from '@/lib/labels'
 import { cn, downloadUrl, formatDateTime, formatNumber, formatRelative, modKey } from '@/lib/utils'
 import { draftStore, useDirtyKeys, useHistoryAvailability, useSectionContent } from './draft-store'
 import { sectionQuery, sectionsQuery } from './queries'
-import { AclsEditor, GpoOverview, GroupsEditor, OusEditor, UsersEditor, WinLapsEditor, type EditorProps } from './editors'
+import { AclsEditor, GroupsEditor, OusEditor, UsersEditor, WinLapsEditor, type EditorProps } from './editors'
+import { AdmxEditor } from './admx-editor'
+import { DependenciesEditor } from './dependencies-editor'
+import { GuidMappingsEditor } from './guid-editor'
+import { GposEditor } from './gpo-editor'
+import { ObjectFormEditor } from './object-form'
 import { SaveDialog } from './save-dialog'
 import { VersionsSheet } from './versions-sheet'
-
-const JsonEditor = React.lazy(() => import('./json-editor'))
 
 const FORM_EDITORS: Record<string, React.ComponentType<EditorProps>> = {
   ous: OusEditor,
@@ -51,6 +49,18 @@ const FORM_EDITORS: Record<string, React.ComponentType<EditorProps>> = {
   gmsa: AclsEditor,
   dmsa: AclsEditor,
   winlaps: WinLapsEditor,
+  admx: AdmxEditor,
+  'guid-mappings': GuidMappingsEditor,
+  dependencies: DependenciesEditor,
+  metadata: ObjectFormEditor,
+  gpos: GposEditor,
+}
+
+/** Editor for a section: a dedicated form, the ADML form for every language, else the generic structured form. */
+function editorFor(key: string): React.ComponentType<EditorProps> {
+  if (FORM_EDITORS[key]) return FORM_EDITORS[key]
+  if (key.startsWith('adml-')) return AdmxEditor
+  return ObjectFormEditor
 }
 
 export function Component() {
@@ -65,20 +75,16 @@ export function Component() {
   const { canUndo, canRedo } = useHistoryAvailability()
   const [saveOpen, setSaveOpen] = React.useState(false)
   const [versionsOpen, setVersionsOpen] = React.useState(false)
-  const [rawMode, setRawMode] = React.useState(false)
-  const [gpoTab, setGpoTab] = React.useState<'overview' | 'json'>('overview')
-  const [params] = useSearchParams()
-
-  React.useEffect(() => setRawMode(false), [key])
 
   const summary = sections.data?.find((s) => s.key === key)
   const title = summary?.title || section.data?.title || sectionFallbackTitles[key] || key
   const isDirty = dirtyKeys.includes(key)
-  const FormEditor = FORM_EDITORS[key]
+  const FormEditor = editorFor(key)
 
-  // ---- keyboard shortcuts
-  useHotkey('mod+z', () => canEdit && draftStore.undo() && toast('Rückgängig gemacht', { duration: 1200 }))
-  useHotkey(['mod+shift+z', 'mod+y'], () => canEdit && draftStore.redo() && toast('Wiederhergestellt', { duration: 1200 }))
+  // ---- keyboard shortcuts (history is off while a sheet/dialog is open: it edits a snapshot of an item)
+  const dialogOpen = () => !!document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')
+  useHotkey('mod+z', () => canEdit && !dialogOpen() && draftStore.undo() && toast('Rückgängig gemacht', { duration: 1200 }))
+  useHotkey(['mod+shift+z', 'mod+y'], () => canEdit && !dialogOpen() && draftStore.redo() && toast('Wiederhergestellt', { duration: 1200 }))
   useHotkey('mod+s', () => canEdit && dirtyKeys.length > 0 && setSaveOpen(true), { allowInInputs: true })
 
   // ---- leave-page guard
@@ -240,13 +246,6 @@ export function Component() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {FormEditor && (
-                    <Tooltip content={rawMode ? 'Zur Formularansicht' : 'Rohes JSON bearbeiten'}>
-                      <Button variant="outline" size="sm" onClick={() => setRawMode((r) => !r)} aria-pressed={rawMode}>
-                        {rawMode ? <><Table2 /> Formular</> : <><Braces /> JSON</>}
-                      </Button>
-                    </Tooltip>
-                  )}
                   {isDirty && canEdit && (
                     <Button variant="ghost" size="sm" onClick={discard} className="text-muted-foreground">
                       <RotateCcw /> Verwerfen
@@ -263,27 +262,8 @@ export function Component() {
                   <div className="mb-4 flex gap-2"><Skeleton className="h-8 w-64" /><Skeleton className="h-8 w-72" /></div>
                   <div className="grid gap-2">{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-10" />)}</div>
                 </Card>
-              ) : FormEditor && !rawMode ? (
-                <FormEditor sectionKey={key} content={content} setContent={setContent} readOnly={!canEdit} />
               ) : (
-                <Tabs value={key === 'gpos' ? gpoTab : 'json'} onValueChange={(v) => setGpoTab(v as 'overview' | 'json')}>
-                  {key === 'gpos' && (
-                    <TabsList className="mb-1">
-                      <TabsTrigger value="overview"><LayoutGrid /> Übersicht</TabsTrigger>
-                      <TabsTrigger value="json"><Braces /> JSON</TabsTrigger>
-                    </TabsList>
-                  )}
-                  {key === 'gpos' && (
-                    <TabsContent value="overview">
-                      <GpoOverview content={content} focus={params.get('ou')} />
-                    </TabsContent>
-                  )}
-                  <TabsContent value="json" className={key === 'gpos' ? undefined : 'mt-0'}>
-                    <React.Suspense fallback={<Card className="grid h-96 place-content-center"><Loader2 className="size-5 animate-spin text-muted-foreground" /></Card>}>
-                      <JsonEditor value={content} onChange={(v) => setContent(v, `json-${key}`)} readOnly={!canEdit} height="calc(100dvh - 330px)" />
-                    </React.Suspense>
-                  </TabsContent>
-                </Tabs>
+                <FormEditor key={key} sectionKey={key} content={content} setContent={setContent} readOnly={!canEdit} />
               )}
             </>
           )}

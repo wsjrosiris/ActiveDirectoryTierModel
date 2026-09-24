@@ -5,8 +5,22 @@ docs_dir: docs
 theme:
   name: readthedocs
 
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - tables
+
 nav:
   - Home: index.md
+  - TierModel Service:
+      - Überblick: service/index.md
+      - Installation: service/installation.md
+      - Bedienung: service/bedienung.md
+      - Betrieb: service/betrieb.md
+      - Sicherheit: service/sicherheit.md
+      - Entwicklung: service/entwicklung.md
+      - REST-API: service/api.md
   - Contributing: contributing.md
   - Quick Deployment Guide: quick-deployment-guide.md
   - Detailed Deployment Guide: detailed-deployment-guide.md

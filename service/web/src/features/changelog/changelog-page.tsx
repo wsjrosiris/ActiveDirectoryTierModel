@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
   User as UserIcon,
   ChevronDown,
+  Bell,
 } from 'lucide-react'
 import { api } from '@/api/client'
 import type { ChangeEntry } from '@/api/types'
@@ -20,6 +21,7 @@ import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Segmented } from '@/components/ui/segmented'
 import { Skeleton } from '@/components/ui/skeleton'
+import { KeyValueList } from '@/components/shared/key-value-list'
 import { Page, PageHeader } from '@/components/shared/page-header'
 import { actionLabels, entityTypeLabels, sectionFallbackTitles } from '@/lib/labels'
 import { cn, formatDateTime, formatNumber, formatRelative } from '@/lib/utils'
@@ -32,6 +34,7 @@ const typeIcon: Record<string, React.ReactNode> = {
   user: <UserIcon />,
   schedule: <CalendarClock />,
   settings: <Settings2 />,
+  notification: <Bell />,
   auth: <KeyRound />,
 }
 
@@ -41,6 +44,7 @@ const typeTone: Record<string, string> = {
   user: 'bg-teal-500/10 text-teal-600 dark:text-teal-300',
   schedule: 'bg-violet-500/10 text-violet-600 dark:text-violet-300',
   settings: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+  notification: 'bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-300',
   auth: 'bg-muted text-muted-foreground',
 }
 
@@ -119,7 +123,7 @@ export function Component() {
 function Entry({ c }: { c: ChangeEntry }) {
   const [open, setOpen] = React.useState(false)
   const hasDetails = c.details !== null && c.details !== undefined
-  const failed = c.action.includes('failed')
+  const failed = c.action.includes('failed') || c.action.includes('denied') || c.action === 'run.reject' || c.action === 'run.approval-expired'
   return (
     <div>
       <button
@@ -169,9 +173,19 @@ function Details({ c }: { c: ChangeEntry }) {
     return (
       <div className="grid gap-2 text-[13px]">
         <Link to={`/laeufe/${c.entityId}`} className="text-primary hover:underline">Lauf #{c.entityId} öffnen</Link>
-        {typeof d === 'object' && <pre className="overflow-x-auto rounded-md bg-card p-3 font-mono text-[12px]">{JSON.stringify(d, null, 2)}</pre>}
+        {d !== null && d !== undefined && <KeyValueList value={d} />}
       </div>
     )
   }
-  return <pre className="overflow-x-auto rounded-md border bg-card p-3 font-mono text-[12px]">{typeof d === 'string' ? d : JSON.stringify(d, null, 2)}</pre>
+  if (typeof d === 'string') {
+    // details may be a JSON document stored as text – show it as fields, too
+    try {
+      const parsed = JSON.parse(d)
+      if (parsed && typeof parsed === 'object') return <KeyValueList value={parsed} />
+    } catch {
+      /* plain text */
+    }
+    return <p className="text-[13px] whitespace-pre-wrap">{d}</p>
+  }
+  return <KeyValueList value={d} />
 }

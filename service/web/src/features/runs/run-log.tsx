@@ -7,16 +7,22 @@ import type { LogLine, RunStatus } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { cn, formatTime } from '@/lib/utils'
+import { ApiError } from '@/api/client'
 
 const ACTIVE: RunStatus[] = ['Queued', 'Running']
 
-/** Polls /api/runs/{id}/log?after= every second while the run is active. */
-export function useRunLog(runId: number, initialStatus: RunStatus | undefined) {
+/**
+ * Polls /api/runs/{id}/log?after= every second while the run is active.
+ * A run awaiting approval has no log yet: polling pauses (the detail query keeps refreshing the run)
+ * and starts again as soon as the run status turns Queued/Running after the approval.
+ */
+export function useRunLog(runId: number, runStatus: RunStatus | undefined) {
   const [lines, setLines] = React.useState<LogLine[]>([])
-  const [status, setStatus] = React.useState<RunStatus | undefined>(initialStatus)
+  const [status, setStatus] = React.useState<RunStatus | undefined>(runStatus)
   const [loaded, setLoaded] = React.useState(false)
   const after = React.useRef(0)
   const qc = useQueryClient()
+  const awaiting = runStatus === 'AwaitingApproval'
 
   React.useEffect(() => {
     after.current = 0
@@ -25,6 +31,11 @@ export function useRunLog(runId: number, initialStatus: RunStatus | undefined) {
   }, [runId])
 
   React.useEffect(() => {
+    if (awaiting) {
+      setStatus('AwaitingApproval')
+      setLoaded(true)
+      return
+    }
     let stopped = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const ctrl = new AbortController()
@@ -57,6 +68,8 @@ export function useRunLog(runId: number, initialStatus: RunStatus | undefined) {
       } catch (e) {
         if ((e as Error).name === 'AbortError' || stopped) return
         setLoaded(true)
+        // A missing run or missing permission will not fix itself: stop polling.
+        if (e instanceof ApiError && (e.status === 403 || e.status === 404)) return
         timer = setTimeout(tick, 3000)
       }
     }
@@ -66,7 +79,7 @@ export function useRunLog(runId: number, initialStatus: RunStatus | undefined) {
       ctrl.abort()
       if (timer) clearTimeout(timer)
     }
-  }, [runId, qc])
+  }, [runId, qc, awaiting])
 
   return { lines, status, loaded }
 }
@@ -78,7 +91,20 @@ const levelClass: Record<LogLine['level'], string> = {
   success: 'text-emerald-400',
 }
 
-export function RunLog({ lines, active, loaded, runId }: { lines: LogLine[]; active: boolean; loaded: boolean; runId: number }) {
+export function RunLog({
+  lines,
+  active,
+  loaded,
+  runId,
+  emptyText,
+}: {
+  lines: LogLine[]
+  active: boolean
+  loaded: boolean
+  runId: number
+  /** Replaces the default "no output" text, e.g. for runs that never started. */
+  emptyText?: string
+}) {
   const [follow, setFollow] = React.useState(true)
   const [wrap, setWrap] = React.useState(true)
   const [filter, setFilter] = React.useState('')
@@ -187,7 +213,7 @@ export function RunLog({ lines, active, loaded, runId }: { lines: LogLine[]; act
           {!loaded ? (
             <p className="px-4 text-white/40">Protokoll wird geladen …</p>
           ) : shown.length === 0 ? (
-            <p className="px-4 text-white/40">{lines.length === 0 ? (active ? 'Warte auf Ausgabe …' : 'Keine Ausgabe vorhanden.') : 'Keine Zeilen entsprechen dem Filter.'}</p>
+            <p className="px-4 text-white/40">{lines.length === 0 ? (active ? 'Warte auf Ausgabe …' : emptyText ?? 'Keine Ausgabe vorhanden.') : 'Keine Zeilen entsprechen dem Filter.'}</p>
           ) : (
             shown.map((l) => (
               <div key={l.seq} className={cn('group flex gap-3 px-4 hover:bg-white/[0.04]', l.level === 'error' && 'bg-rose-500/[0.07]')}>

@@ -1,5 +1,12 @@
 import type {
+  AdGroups,
+  DomainControllers,
+  GpoBackup,
+  TemplateFiles,
+  ApproveRequest,
+  AuthOptions,
   ChangeEntry,
+  ChannelInput,
   ChangePasswordRequest,
   CreateUserRequest,
   Dashboard,
@@ -7,8 +14,10 @@ import type {
   LoginRequest,
   LogResponse,
   MeResponse,
+  NotificationChannel,
   Paged,
   ProblemDetails,
+  RejectRequest,
   RestoreRequest,
   RunDetail,
   RunKind,
@@ -22,10 +31,14 @@ import type {
   SectionSummary,
   Settings,
   SettingsUpdate,
+  SmtpSettings,
+  SmtpUpdate,
   UpdateUserRequest,
   User,
   ValidationIssue,
   VersionInfo,
+  WindowsAuthSettings,
+  WindowsAuthUpdate,
 } from './types'
 
 export class ApiError extends Error {
@@ -172,6 +185,9 @@ export const api = {
     login: (body: LoginRequest) => post<User>('/api/auth/login', body),
     logout: () => post<void>('/api/auth/logout'),
     changePassword: (body: ChangePasswordRequest) => post<void>('/api/auth/change-password', body),
+    options: () => request<AuthOptions>('/api/auth/options', { noRedirect: true }),
+    /** Browser navigation (Negotiate), never fetch. */
+    windowsLoginUrl: (returnUrl: string) => `/api/auth/windows?returnUrl=${enc(returnUrl)}`,
   },
   users: {
     list: () => get<User[]>('/api/users'),
@@ -182,10 +198,18 @@ export const api = {
     unlock: (id: string) => post<void>(`/api/users/${enc(id)}/unlock`),
     remove: (id: string) => del<void>(`/api/users/${enc(id)}`),
   },
+  lookup: {
+    gpoBackups: () => get<GpoBackup[]>('/api/lookup/gpo-backups'),
+    templateFiles: () => get<TemplateFiles>('/api/lookup/template-files'),
+    domainControllers: () => get<DomainControllers>('/api/lookup/domain-controllers'),
+    adGroups: (q: string, signal?: AbortSignal) => request<AdGroups>(`/api/lookup/ad-groups?q=${enc(q)}`, { signal }),
+  },
   config: {
     sections: () => get<SectionSummary[]>('/api/config/sections'),
     section: (key: string) => get<Section>(`/api/config/sections/${enc(key)}`),
-    save: (key: string, body: SaveSectionRequest) => put<Section>(`/api/config/sections/${enc(key)}`, body),
+    // No login redirect: a full page load would discard all unsaved drafts. The save dialog explains instead.
+    save: (key: string, body: SaveSectionRequest) =>
+      request<Section>(`/api/config/sections/${enc(key)}`, { method: 'PUT', body, noRedirect: true }),
     versions: (key: string) => get<VersionInfo[]>(`/api/config/sections/${enc(key)}/versions`),
     version: (key: string, version: number) =>
       get<Section>(`/api/config/sections/${enc(key)}/versions/${version}`),
@@ -203,6 +227,8 @@ export const api = {
     log: (id: number, after: number, signal?: AbortSignal) =>
       get<LogResponse>(`/api/runs/${id}/log?after=${after}`, signal),
     cancel: (id: number) => post<void>(`/api/runs/${id}/cancel`),
+    approve: (id: number, body: ApproveRequest) => post<RunSummary>(`/api/runs/${id}/approve`, body),
+    reject: (id: number, body: RejectRequest) => post<RunSummary>(`/api/runs/${id}/reject`, body),
   },
   schedules: {
     list: () => get<Schedule[]>('/api/schedules'),
@@ -218,6 +244,17 @@ export const api = {
   dashboard: () => get<Dashboard>('/api/dashboard'),
   settings: {
     get: () => get<Settings>('/api/settings'),
-    update: (body: SettingsUpdate | Settings) => put<Settings>('/api/settings', body),
+    update: (body: SettingsUpdate) => put<Settings>('/api/settings', body),
+    windowsAuth: () => get<WindowsAuthSettings>('/api/settings/windows-auth'),
+    updateWindowsAuth: (body: WindowsAuthUpdate) => put<WindowsAuthSettings>('/api/settings/windows-auth', body),
+  },
+  notifications: {
+    channels: () => get<NotificationChannel[]>('/api/notifications/channels'),
+    createChannel: (body: ChannelInput) => post<NotificationChannel>('/api/notifications/channels', body),
+    updateChannel: (id: number, body: ChannelInput) => put<NotificationChannel>(`/api/notifications/channels/${id}`, body),
+    removeChannel: (id: number) => del<void>(`/api/notifications/channels/${id}`),
+    testChannel: (id: number) => post<void>(`/api/notifications/channels/${id}/test`),
+    smtp: () => get<SmtpSettings>('/api/notifications/smtp'),
+    updateSmtp: (body: SmtpUpdate) => put<SmtpSettings>('/api/notifications/smtp', body),
   },
 }

@@ -13,12 +13,17 @@ export const scopeLabels: Record<Scope, string> = {
 export const scopes = Object.keys(scopeLabels) as Scope[]
 
 export const statusLabels: Record<RunStatus, string> = {
+  AwaitingApproval: 'Wartet auf Freigabe',
   Queued: 'In Warteschlange',
   Running: 'Läuft',
   Succeeded: 'Erfolgreich',
   Failed: 'Fehlgeschlagen',
   Cancelled: 'Abgebrochen',
+  Rejected: 'Abgelehnt',
 }
+
+/** Statuses in which the run is not finished yet (the detail page keeps refreshing). */
+export const pendingStatuses: RunStatus[] = ['AwaitingApproval', 'Queued', 'Running']
 
 export const includeLabels: Record<string, string> = {
   Msa: 'MSA',
@@ -33,6 +38,7 @@ export const entityTypeLabels: Record<string, string> = {
   user: 'Benutzer',
   schedule: 'Zeitplan',
   settings: 'Einstellungen',
+  notification: 'Benachrichtigung',
   auth: 'Anmeldung',
 }
 
@@ -42,6 +48,9 @@ export const actionLabels: Record<string, string> = {
   'run.deploy': 'Deploy gestartet',
   'run.audit': 'Audit gestartet',
   'run.cancel': 'Lauf abgebrochen',
+  'run.approve': 'Deploy freigegeben',
+  'run.reject': 'Deploy abgelehnt',
+  'run.approval-expired': 'Freigabe abgelaufen',
   'user.create': 'Benutzer angelegt',
   'user.update': 'Benutzer geändert',
   'user.delete': 'Benutzer gelöscht',
@@ -51,11 +60,20 @@ export const actionLabels: Record<string, string> = {
   'auth.logout': 'Abmeldung',
   'auth.login-failed': 'Fehlgeschlagene Anmeldung',
   'auth.change-password': 'Passwort geändert',
+  'auth.windows-login': 'Windows-Anmeldung',
+  'auth.windows-denied': 'Windows-Anmeldung abgelehnt',
   'schedule.create': 'Zeitplan angelegt',
   'schedule.update': 'Zeitplan geändert',
   'schedule.delete': 'Zeitplan gelöscht',
   'schedule.run': 'Zeitplan ausgeführt',
   'settings.update': 'Einstellungen geändert',
+  'settings.windows-auth': 'Windows-Anmeldung geändert',
+  'notification.create': 'Benachrichtigungskanal angelegt',
+  'notification.update': 'Benachrichtigungskanal geändert',
+  'notification.delete': 'Benachrichtigungskanal gelöscht',
+  'notification.test': 'Testnachricht gesendet',
+  'notification.failed': 'Benachrichtigung fehlgeschlagen',
+  'smtp.update': 'SMTP-Einstellungen geändert',
 }
 
 export const findingTypeLabels: Record<string, string> = {
