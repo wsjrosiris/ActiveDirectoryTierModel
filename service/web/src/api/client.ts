@@ -131,12 +131,15 @@ export interface RequestOptions {
   signal?: AbortSignal
   /** Suppress the automatic redirect on 401. */
   noRedirect?: boolean
+  /** Raw request body (e.g. an uploaded file) sent with its own content type instead of JSON. */
+  raw?: Blob
 }
 
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const method = (opts.method ?? 'GET').toUpperCase()
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
+  if (opts.raw) headers['Content-Type'] = opts.raw.type || 'application/octet-stream'
   if (UNSAFE.has(method)) {
     const token = readCookie('XSRF-TOKEN')
     if (token) headers['X-XSRF-TOKEN'] = token
@@ -148,7 +151,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
       method,
       headers,
       credentials: 'same-origin',
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      body: opts.raw ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
       signal: opts.signal,
     })
   } catch (e) {

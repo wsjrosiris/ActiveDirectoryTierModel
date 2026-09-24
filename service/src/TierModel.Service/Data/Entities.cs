@@ -9,8 +9,8 @@ public enum Role
     Admin = 3,
 }
 
-/// <summary>Monitor: snapshot of the privileged groups (Watch-TierModelPrivilegedGroups.ps1).</summary>
-public enum RunKind { Deploy, Audit, Monitor }
+/// <summary>Monitor: snapshot of the privileged groups (Watch-TierModelPrivilegedGroups.ps1). Jit: time-limited membership (Grant-TierModelJitAccess.ps1).</summary>
+public enum RunKind { Deploy, Audit, Monitor, Jit }
 
 /// <summary>Scheduled: an apply waiting for the next maintenance window (<see cref="Run.ScheduledFor"/>).</summary>
 public enum RunStatus { Queued, Running, Succeeded, Failed, Cancelled, AwaitingApproval, Rejected, Scheduled }
@@ -109,6 +109,9 @@ public class Run
     public long? PlanRunId { get; set; }
     /// <summary>Status <see cref="RunStatus.Scheduled"/>: when the run is queued (start of the next maintenance window).</summary>
     public DateTimeOffset? ScheduledFor { get; set; }
+    /// <summary>Kind <see cref="RunKind.Jit"/>: what the run does and (grant/revoke) the request it belongs to.</summary>
+    public JitAction? JitAction { get; set; }
+    public long? JitRequestId { get; set; }
 }
 
 public class RunLogLine
@@ -178,6 +181,8 @@ public class NotificationChannel
     public bool OnApproval { get; set; }
     public bool OnCertificate { get; set; }
     public bool OnPrivilegedChange { get; set; }
+    public bool OnJitRequested { get; set; }
+    public bool OnJitGranted { get; set; }
     public DateTimeOffset? LastSentAt { get; set; }
     public string? LastError { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

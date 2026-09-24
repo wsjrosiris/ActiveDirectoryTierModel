@@ -48,6 +48,16 @@ public sealed class Tier0Config
     public HashSet<string> Groups { get; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>samAccountName of every configured Tier 0 account (users section: Tier 0 OU, or member of a Tier 0 group).</summary>
     public HashSet<string> Accounts { get; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Just-in-Time memberships active at the time of the snapshot (roadmap 6): expected, not flagged.</summary>
+    public List<Jit.JitExpectation> Jit { get; } = [];
+
+    /// <summary>The active JIT grant that explains this membership: same member SID (or account) and the JIT group itself or a JIT group on the nesting path.</summary>
+    public Jit.JitExpectation? JitFor(PrivilegedGroup group, PrivilegedMember member) => Jit.FirstOrDefault(j =>
+        (j.MemberSid is { } sid ? string.Equals(sid, member.Sid, StringComparison.OrdinalIgnoreCase)
+            : string.Equals(j.MemberAccount, member.SamAccountName, StringComparison.OrdinalIgnoreCase))
+        && ((j.GroupSid is { } g && string.Equals(g, group.Sid, StringComparison.OrdinalIgnoreCase))
+            || j.GroupNames.Any(n => string.Equals(n, group.Name, StringComparison.OrdinalIgnoreCase)
+                || member.Via.Any(v => string.Equals(v, n, StringComparison.OrdinalIgnoreCase)))));
 
     public static Tier0Config From(IReadOnlyDictionary<string, JsonNode?> sections)
     {
@@ -141,6 +151,7 @@ public static class PrivilegedEvaluator
         if (!IsGroup(member.ObjectClass) && config.IsTier0Account(member.SamAccountName)) return "Tier-0-Konto laut Konfiguration";
         // Personal admin accounts are usually not in the users section; they live in the Tier 0 account OUs of the model.
         if (!IsGroup(member.ObjectClass) && TierRules.TierOf(ParentDn(member.DistinguishedName)) == 0) return "Konto in einer Tier-0-OU";
+        if (config.JitFor(group, member) is { } jit) return $"Erwartet (JIT bis {Maintenance.MaintenanceCalendar.Format(jit.ExpiresAt)})";
         return null;
     }
 

@@ -17,6 +17,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<MaintenanceWindow> MaintenanceWindows => Set<MaintenanceWindow>();
     public DbSet<FreezePeriod> FreezePeriods => Set<FreezePeriod>();
     public DbSet<ApiToken> ApiTokens => Set<ApiToken>();
+    public DbSet<JitGroup> JitGroups => Set<JitGroup>();
+    public DbSet<JitRequest> JitRequests => Set<JitRequest>();
 
     // New change-log entries are hash-chained (roadmap 23): computed under an advisory lock in the same transaction.
     public override int SaveChanges(bool acceptAllChangesOnSuccess) =>
@@ -72,6 +74,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Plan).HasColumnType("jsonb");
             e.HasIndex(x => x.PlanRunId);
             e.HasIndex(x => new { x.Status, x.ScheduledFor });
+            e.Property(x => x.JitAction).HasConversion<string>().HasMaxLength(16);
+            e.HasIndex(x => x.JitRequestId);
         });
 
         b.Entity<RunLogLine>(e =>
@@ -124,6 +128,37 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => x.Prefix).IsUnique();
             e.HasIndex(x => x.UserId);
             e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<JitGroup>(e =>
+        {
+            e.ToTable("jit_groups");
+            e.Property(x => x.Group).HasMaxLength(256);
+            e.Property(x => x.GroupSid).HasMaxLength(184);
+            e.Property(x => x.DisplayName).HasMaxLength(128);
+            e.Property(x => x.MinimumRole).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.CreatedBy).HasMaxLength(256);
+            e.HasIndex(x => x.Group).IsUnique();
+        });
+
+        b.Entity<JitRequest>(e =>
+        {
+            e.ToTable("jit_requests");
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.RequestedBy).HasMaxLength(256);
+            e.Property(x => x.MemberAccount).HasMaxLength(256);
+            e.Property(x => x.Group).HasMaxLength(256);
+            e.Property(x => x.GroupDisplayName).HasMaxLength(128);
+            e.Property(x => x.Justification).HasMaxLength(1000);
+            e.Property(x => x.DecidedBy).HasMaxLength(256);
+            e.Property(x => x.DecisionComment).HasMaxLength(1000);
+            e.Property(x => x.RevokedBy).HasMaxLength(256);
+            e.Property(x => x.GroupSid).HasMaxLength(184);
+            e.Property(x => x.MemberSid).HasMaxLength(184);
+            e.Property(x => x.Dc).HasMaxLength(253);
+            e.HasIndex(x => new { x.Status, x.ExpiresAt });
+            e.HasIndex(x => new { x.RequestedBy, x.Id });
+            e.HasOne<JitGroup>().WithMany().HasForeignKey(x => x.JitGroupId).OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<NotificationChannel>(e =>

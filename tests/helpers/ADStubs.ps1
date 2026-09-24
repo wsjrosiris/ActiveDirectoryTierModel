@@ -27,7 +27,7 @@ if (-not (Get-Command Get-ADDomain -ErrorAction SilentlyContinue)) {
     # ActiveDirectory module stubs
     function Get-ADDomain { param($Server, $Identity) }
     function Get-ADForest { param($Server, $Identity) }
-    function Get-ADGroup { param($Identity, $Server, $Filter, $SearchBase, $Properties, $ErrorAction) }
+    function Get-ADGroup { param($Identity, $Server, $Filter, $SearchBase, $Properties, [switch]$ShowMemberTimeToLive, $ErrorAction) }
     function Get-ADGroupMember { param($Identity, $Server, $Recursive) }
     function Get-ADUser { param($Identity, $Server, $Filter, $SearchBase, $Properties, $ErrorAction) }
     function Get-ADOrganizationalUnit { param($Identity, $Server, $Filter, $SearchBase, $Properties, $ErrorAction) }
@@ -37,14 +37,16 @@ if (-not (Get-Command Get-ADDomain -ErrorAction SilentlyContinue)) {
     function New-ADGroup { param($Name, $GroupScope, $GroupCategory, $Path, $Server, $Description, $DisplayName, $SamAccountName, $ErrorAction) }
     function New-ADOrganizationalUnit { param($Name, $Path, $Server, $Description, $ProtectedFromAccidentalDeletion, $ErrorAction) }
     function New-ADUser { param($Name, $SamAccountName, $UserPrincipalName, $Path, $Server, $AccountPassword, $Enabled, $DisplayName, $Description, $GivenName, $Surname, $ErrorAction) }
-    function Add-ADGroupMember { param($Identity, $Members, $Server, $ErrorAction) }
+    function Add-ADGroupMember { param($Identity, $Members, $Server, $MemberTimeToLive, $ErrorAction) }
+    function Remove-ADGroupMember { param($Identity, $Members, $Server, $Confirm, $ErrorAction) }
+    function Get-ADOptionalFeature { param($Identity, $Filter, $Server, $ErrorAction) }
     function Set-ADObject { param($Identity, $Server, $Replace, $Add, $Remove, $Clear, $ErrorAction) }
 
     # Register as in-memory module so Get-Module ActiveDirectory returns a result
     New-Module -Name ActiveDirectory -ScriptBlock {
         function Get-ADDomain { param($Server, $Identity) }
         function Get-ADForest { param($Server, $Identity) }
-        function Get-ADGroup { param($Identity, $Server, $Filter, $SearchBase, $Properties, $ErrorAction) }
+        function Get-ADGroup { param($Identity, $Server, $Filter, $SearchBase, $Properties, [switch]$ShowMemberTimeToLive, $ErrorAction) }
         function Get-ADGroupMember { param($Identity, $Server, $Recursive) }
         function Get-ADUser { param($Identity, $Server, $Filter, $SearchBase, $Properties, $ErrorAction) }
         function Get-ADOrganizationalUnit { param($Identity, $Server, $Filter, $SearchBase, $Properties, $ErrorAction) }
@@ -54,7 +56,9 @@ if (-not (Get-Command Get-ADDomain -ErrorAction SilentlyContinue)) {
         function New-ADGroup { param($Name, $GroupScope, $GroupCategory, $Path, $Server, $Description, $DisplayName, $SamAccountName, $ErrorAction) }
         function New-ADOrganizationalUnit { param($Name, $Path, $Server, $Description, $ProtectedFromAccidentalDeletion, $ErrorAction) }
         function New-ADUser { param($Name, $SamAccountName, $UserPrincipalName, $Path, $Server, $AccountPassword, $Enabled, $DisplayName, $Description, $GivenName, $Surname, $ErrorAction) }
-        function Add-ADGroupMember { param($Identity, $Members, $Server, $ErrorAction) }
+        function Add-ADGroupMember { param($Identity, $Members, $Server, $MemberTimeToLive, $ErrorAction) }
+        function Remove-ADGroupMember { param($Identity, $Members, $Server, $Confirm, $ErrorAction) }
+        function Get-ADOptionalFeature { param($Identity, $Filter, $Server, $ErrorAction) }
         function Set-ADObject { param($Identity, $Server, $Replace, $Add, $Remove, $Clear, $ErrorAction) }
         Export-ModuleMember -Function *
     } | Import-Module -Global -Force

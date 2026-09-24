@@ -300,6 +300,180 @@ namespace TierModel.Service.Data.Migrations
                     b.ToTable("freeze_periods", (string)null);
                 });
 
+            modelBuilder.Entity("TierModel.Service.Data.JitGroup", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.PrimitiveCollection<string[]>("EligibleUsers")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Group")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("GroupSid")
+                        .HasMaxLength(184)
+                        .HasColumnType("character varying(184)");
+
+                    b.Property<int>("MaxMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MinimumRole")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<bool>("RequiresApproval")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("Tier")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Group")
+                        .IsUnique();
+
+                    b.ToTable("jit_groups", (string)null);
+                });
+
+            modelBuilder.Entity("TierModel.Service.Data.JitRequest", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset?>("ApprovalExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("ApprovalRequired")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Dc")
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)");
+
+                    b.Property<DateTimeOffset?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DecidedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("DecisionComment")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("GrantedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Group")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("GroupDisplayName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("GroupSid")
+                        .HasMaxLength(184)
+                        .HasColumnType("character varying(184)");
+
+                    b.Property<long?>("JitGroupId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Justification")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("MemberAccount")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("MemberSid")
+                        .HasMaxLength(184)
+                        .HasColumnType("character varying(184)");
+
+                    b.Property<string>("Message")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Minutes")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<long?>("RevokeRunId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RevokedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<long?>("RunId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("Tier")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JitGroupId");
+
+                    b.HasIndex("RequestedBy", "Id");
+
+                    b.HasIndex("Status", "ExpiresAt");
+
+                    b.ToTable("jit_requests", (string)null);
+                });
+
             modelBuilder.Entity("TierModel.Service.Data.MaintenanceWindow", b =>
                 {
                     b.Property<long>("Id")
@@ -381,6 +555,12 @@ namespace TierModel.Service.Data.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("OnFailure")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("OnJitGranted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("OnJitRequested")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("OnPrivilegedChange")
@@ -519,6 +699,13 @@ namespace TierModel.Service.Data.Migrations
                     b.Property<bool>("IncludeWinLaps")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("JitAction")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<long?>("JitRequestId")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(24)
@@ -572,6 +759,8 @@ namespace TierModel.Service.Data.Migrations
                         .HasColumnType("character varying(24)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("JitRequestId");
 
                     b.HasIndex("PlanRunId");
 
@@ -725,6 +914,14 @@ namespace TierModel.Service.Data.Migrations
                         .HasForeignKey("SectionKey")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("TierModel.Service.Data.JitRequest", b =>
+                {
+                    b.HasOne("TierModel.Service.Data.JitGroup", null)
+                        .WithMany()
+                        .HasForeignKey("JitGroupId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("TierModel.Service.Data.PrivilegedSnapshot", b =>

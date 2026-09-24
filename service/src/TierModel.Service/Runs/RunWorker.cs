@@ -139,6 +139,7 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
         var status = RunStatus.Failed;
         string? message = null;
         var privilegedChange = false;
+        Jit.JitRunResult? jitResult = null;
         try
         {
             log.System($"Lauf #{id} gestartet: {Describe(run)}");
@@ -153,7 +154,8 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
             await db.SaveChangesAsync(CancellationToken.None);
             log.System("Konfiguration: " + string.Join(", ", snapshot.Select(s => $"{s.Def.Key} v{s.Version}")));
 
-            var issues = ConfigValidator.Validate(snapshot.ToDictionary(s => s.Def.Key, s => JsonNode.Parse(s.Content)));
+            // JIT runs only change one group membership; configuration issues do not concern them.
+            List<ValidationIssue> issues = run.Kind == RunKind.Jit ? [] : ConfigValidator.Validate(snapshot.ToDictionary(s => s.Def.Key, s => JsonNode.Parse(s.Content)));
             foreach (var issue in issues.Where(i => i.Severity == "Error"))
                 log.System($"Validierungsfehler [{issue.Section}] {issue.Message}{(issue.Item is null ? "" : $" ({issue.Item})")}", "error");
             var errors = issues.Count(i => i.Severity == "Error");
@@ -165,17 +167,24 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
             var workDir = Workspace.Create(o, id, snapshot);
             log.System($"Arbeitsverzeichnis: {workDir}");
 
+            var jit = run.Kind == RunKind.Jit ? await JitArgumentsAsync(db, run, CancellationToken.None) : null;
             var wrapper = Path.Combine(workDir, "run.ps1");
-            await File.WriteAllTextAsync(wrapper, BuildWrapperScript(run, workDir), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true), linked.Token);
-            if (run.Kind == RunKind.Monitor && !File.Exists(Path.Combine(workDir, Workspace.MonitorScript)))
-                throw new InvalidOperationException($"Das Framework enthält {Workspace.MonitorScript} nicht – bitte das Framework unter '{o.FrameworkPath}' aktualisieren.");
-            log.System($"Aufruf: {ScriptName(run.Kind)} {string.Join(' ', ScriptParameters(run, workDir))}");
+            await File.WriteAllTextAsync(wrapper, BuildWrapperScript(run, workDir, jit), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true), linked.Token);
+            if (run.Kind is RunKind.Monitor or RunKind.Jit && !File.Exists(Path.Combine(workDir, ScriptName(run.Kind))))
+                throw new InvalidOperationException($"Das Framework enthält {ScriptName(run.Kind)} nicht – bitte das Framework unter '{o.FrameworkPath}' aktualisieren.");
+            log.System($"Aufruf: {ScriptName(run.Kind)} {string.Join(' ', ScriptParameters(run, workDir, jit))}");
             var exitCode = await RunPowerShellAsync(o.PwshPath, workDir, PwshArguments(wrapper), log, linked.Token);
             run.ExitCode = exitCode;
 
             if (run.Kind == RunKind.Audit) ReadAuditReport(run, workDir, log);
             var plan = run.Kind == RunKind.Deploy && run.Mode == RunMode.Plan ? ReadDeployPlan(run, workDir, (text, level) => log.System(text, level)) : null;
             string? monitorMessage = null;
+            if (run.Kind == RunKind.Jit)
+            {
+                jitResult = Jit.JitRunResult.Read(workDir, (text, level) => log.System(text, level));
+                if (jitResult is not null) run.Summary = jitResult.SummaryJson();
+                if (jitResult is { Success: false, Error: { } jitError }) log.System($"Fehler: {jitError}", "error");
+            }
             if (run.Kind == RunKind.Monitor && exitCode == 0)
             {
                 var sections = snapshot.ToDictionary(x => x.Def.Key, x => JsonNode.Parse(x.Content));
@@ -191,8 +200,10 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
                 {
                     RunKind.Audit => run.DriftCount is > 0 ? $"{run.DriftCount} Abweichung(en) gefunden" : "Keine Abweichungen",
                     RunKind.Monitor => monitorMessage,
+                    RunKind.Jit => JitMessage(run, jitResult),
                     _ => run.Mode == RunMode.Apply ? "Bereitstellung abgeschlossen" : PlanMessage(plan),
                 }
+                : run.Kind == RunKind.Jit && jitResult?.Error is { } failure ? failure
                 : $"PowerShell wurde mit Code {exitCode} beendet";
         }
         catch (OperationCanceledException) when (cancel.IsCancellationRequested)
@@ -238,12 +249,25 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
             }
         }
         logger.LogInformation("Run {RunId} finished with {Status}: {Message}", id, status, message);
+        if (run.Kind == RunKind.Jit)
+        {
+            try
+            {
+                await scope.ServiceProvider.GetRequiredService<Jit.JitService>().CompleteRunAsync(run, jitResult, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                // The JIT maintenance repairs the request later (run finished without being processed).
+                logger.LogError(ex, "JIT request of run {RunId} could not be updated", id);
+            }
+        }
         foreach (var e in NotificationService.EventsFor(run, privilegedChange)) notifications.Enqueue(e, id);
     }
 
     private static string Describe(Run r)
     {
         if (r.Kind == RunKind.Monitor) return $"Überwachung privilegierter Gruppen, DC {r.PreferredDc}, angefordert von {r.RequestedBy}";
+        if (r.Kind == RunKind.Jit) return $"{RunService.RunTitle(r)}{(r.JitRequestId is { } req ? $" für Antrag #{req}" : "")}, DC {r.PreferredDc}, angefordert von {r.RequestedBy}";
         var what = r.Kind == RunKind.Audit ? "Audit" : r.Mode == RunMode.Apply ? "Deploy – ANWENDEN" : "Deploy – Planung";
         var includes = RunSummaryDto.IncludeList(r.IncludeMsa, r.IncludeGmsa, r.IncludeDmsa, r.IncludeWinLaps);
         return $"{what}, Bereich {r.Scope?.ToString() ?? "–"}{(includes.Length > 0 ? " + " + string.Join(", ", includes) : "")}, DC {r.PreferredDc}, angefordert von {r.RequestedBy}";
@@ -259,13 +283,48 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
     {
         RunKind.Deploy => "Deploy-TierModel.ps1",
         RunKind.Monitor => Workspace.MonitorScript,
+        RunKind.Jit => Workspace.JitScript,
         _ => "Audit-TierModel.ps1",
     };
 
+    /// <summary>Parameters of a JIT run beyond the domain controller (from its request; none for the prerequisite check).</summary>
+    public record JitArguments(JitAction Action, string? Group, string? Member, int? Minutes);
+
+    private static async Task<JitArguments> JitArgumentsAsync(AppDbContext db, Run run, CancellationToken ct)
+    {
+        var action = run.JitAction ?? JitAction.Check;
+        if (action == JitAction.Check) return new(action, null, null, null);
+        var request = await db.JitRequests.AsNoTracking().FirstOrDefaultAsync(r => r.Id == run.JitRequestId, ct)
+            ?? throw new InvalidOperationException($"Antrag #{run.JitRequestId} für diesen Lauf wurde nicht gefunden.");
+        // Values become process arguments: they were validated when the request/group was saved, check again.
+        var group = Jit.JitService.NormalizeIdentity(request.GroupSid ?? request.Group) ?? throw new InvalidOperationException("Ungültige Gruppe im Antrag.");
+        var member = Jit.JitService.NormalizeIdentity(request.MemberAccount) ?? throw new InvalidOperationException("Ungültiges Konto im Antrag.");
+        return new(action, group, member, action == JitAction.Grant ? request.Minutes : null);
+    }
+
+    private static string JitMessage(Run run, Jit.JitRunResult? result) => run.JitAction switch
+    {
+        JitAction.Check => result?.Raw["ready"] is JsonValue v && v.TryGetValue<bool>(out var ready) && ready
+            ? "Voraussetzungen erfüllt"
+            : "Voraussetzungen nicht erfüllt (Privileged Access Management Feature)",
+        JitAction.Revoke => result?.Removed == false ? "Mitgliedschaft bestand nicht mehr – nichts zu entziehen" : $"Mitgliedschaft entzogen: {result?.Member} aus {result?.Group}",
+        _ => result?.ExpiresAt is { } until ? $"Mitgliedschaft erteilt: {result.Member} in {result.Group} bis {Maintenance.MaintenanceCalendar.Format(until)}" : "Mitgliedschaft erteilt",
+    };
+
     /// <summary>Parameters passed to the framework script. Values are validated before they get here.</summary>
-    public static List<string> ScriptParameters(Run run, string workDir)
+    public static List<string> ScriptParameters(Run run, string workDir, JitArguments? jit = null)
     {
         var p = new List<string> { "-PreferredDc", Quote(run.PreferredDc) };
+        if (run.Kind == RunKind.Jit)
+        {
+            jit ??= new JitArguments(run.JitAction ?? JitAction.Check, null, null, null);
+            p.AddRange(["-Mode", jit.Action.ToString()]);
+            if (jit.Group is { } g) p.AddRange(["-Group", Quote(g)]);
+            if (jit.Member is { } m) p.AddRange(["-Member", Quote(m)]);
+            if (jit.Minutes is { } minutes) p.AddRange(["-Minutes", minutes.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
+            p.AddRange(["-OutputPath", Quote(Path.Combine(workDir, "out", Jit.JitRunResult.FileName))]);
+            return p;
+        }
         // Watch-TierModelPrivilegedGroups.ps1 reads its configuration from $PSScriptRoot\config like the other scripts.
         if (run.Kind == RunKind.Monitor)
         {
@@ -297,7 +356,7 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
     /// otherwise use the OEM code page and garble umlauts and symbols) and calls the framework script.
     /// It stays in the run folder, so an administrator can re-run exactly the same call for troubleshooting.
     /// </summary>
-    public static string BuildWrapperScript(Run run, string workDir)
+    public static string BuildWrapperScript(Run run, string workDir, JitArguments? jit = null)
     {
         var script = ScriptName(run.Kind);
         return $"""
@@ -305,7 +364,7 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
             [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
             $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
             $global:LASTEXITCODE = 0
-            & (Join-Path $PSScriptRoot '{script}') {string.Join(' ', ScriptParameters(run, workDir))}
+            & (Join-Path $PSScriptRoot '{script}') {string.Join(' ', ScriptParameters(run, workDir, jit))}
             exit $LASTEXITCODE
 
             """;
@@ -458,8 +517,11 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
             .OrderByDescending(s => s.Id)
             .Select(s => new { s.Data, s.Evaluation })
             .FirstOrDefaultAsync();
+        // Members with an active Just-in-Time grant at the time of the snapshot are expected (roadmap 6).
+        var tier0 = Tier0Config.From(sections);
+        tier0.Jit.AddRange(await Jit.JitService.ExpectationsAsync(db, data.Metadata.Timestamp ?? DateTimeOffset.UtcNow));
         var evaluation = PrivilegedEvaluator.Evaluate(data, PrivilegedSnapshotReader.Deserialize(previous?.Data),
-            PrivilegedEvaluation.Deserialize(previous?.Evaluation), Tier0Config.From(sections), thresholds, DateTimeOffset.UtcNow);
+            PrivilegedEvaluation.Deserialize(previous?.Evaluation), tier0, thresholds, DateTimeOffset.UtcNow);
 
         db.PrivilegedSnapshots.Add(new PrivilegedSnapshot
         {

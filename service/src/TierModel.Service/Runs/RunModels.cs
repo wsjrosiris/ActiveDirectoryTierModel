@@ -23,14 +23,14 @@ public record RunSummaryDto(
     string PreferredDc, string RequestedBy, long? ScheduleId, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt,
     DateTimeOffset? FinishedAt, int? ExitCode, int? DriftCount, int? ErrorCount, string? Message,
     bool ApprovalRequired, string? ApprovedBy, DateTimeOffset? ApprovedAt, string? ApprovalComment, DateTimeOffset? ApprovalExpiresAt,
-    long? PlanRunId, string AdmlLanguage, DateTimeOffset? ScheduledFor = null)
+    long? PlanRunId, string AdmlLanguage, DateTimeOffset? ScheduledFor = null, JitAction? JitAction = null, long? JitRequestId = null)
 {
     public static RunSummaryDto From(Run r) => new(
         r.Id, r.Kind, r.Status, r.Trigger, r.Mode, r.Scope, IncludeList(r.IncludeMsa, r.IncludeGmsa, r.IncludeDmsa, r.IncludeWinLaps),
         r.PreferredDc, r.RequestedBy, r.ScheduleId, r.CreatedAt, r.StartedAt, r.FinishedAt, r.ExitCode, r.DriftCount, r.ErrorCount, r.Message,
         r.ApprovalRequired, r.ApprovedBy, r.ApprovedAt, r.ApprovalComment,
         r.Status == RunStatus.AwaitingApproval ? r.ApprovalExpiresAt : null,
-        r.PlanRunId, r.AdmlLanguage, r.Status == RunStatus.Scheduled ? r.ScheduledFor : null);
+        r.PlanRunId, r.AdmlLanguage, r.Status == RunStatus.Scheduled ? r.ScheduledFor : null, r.JitAction, r.JitRequestId);
 
     public static string[] IncludeList(bool msa, bool gmsa, bool dmsa, bool winLaps) =>
         new[] { (msa, "Msa"), (gmsa, "Gmsa"), (dmsa, "Dmsa"), (winLaps, "WinLaps") }.Where(x => x.Item1).Select(x => x.Item2).ToArray();

@@ -50,7 +50,8 @@ public class HealthService(
     ServerCertificateSource certificateSource,
     SettingsService settings,
     NotificationQueue notifications,
-    ILogger<HealthService> logger)
+    ILogger<HealthService> logger,
+    GitSync.GitSyncService? git = null)
 {
     public const string Ok = "ok", Warn = "warn", Error = "error";
     public const int CertificateWarnDays = 30;
@@ -77,6 +78,7 @@ public class HealthService(
         items.Add(Workers());
         items.Add(DataProtection());
         items.Add(await Safe("changelog", "Änderungsprotokoll", () => ChangeLogChainAsync(ct)));
+        if (git is not null && await GitSync.GitHealth.CheckAsync(git, ct) is { } gitItem) items.Add(gitItem);
         var overall = items.Any(i => i.Status == Error) ? Error : items.Any(i => i.Status == Warn) ? Warn : Ok;
         return new HealthDetailsDto(overall, DateTimeOffset.UtcNow, AppVersion, items);
     }
@@ -389,6 +391,7 @@ public class HealthService(
             (RunWorker.HeartbeatName, "Ausführung von Läufen"),
             (ScheduleWorker.HeartbeatName, "Zeitpläne und Aufräumen"),
             (NotificationWorker.HeartbeatName, "Benachrichtigungen"),
+            (Jit.JitWorker.HeartbeatName, "Befristeter Zugriff (Ablauf)"),
         };
         var facts = new List<HealthFactDto>();
         var worst = Ok;

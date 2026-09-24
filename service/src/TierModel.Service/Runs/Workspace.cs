@@ -12,9 +12,10 @@ public static class Workspace
 {
     private static readonly string[] Files = ["Deploy-TierModel.ps1", "Audit-TierModel.ps1"];
     /// <summary>Newer framework scripts; older framework versions do not have them (the run using them then fails with a clear message).</summary>
-    private static readonly string[] OptionalFiles = [MonitorScript];
+    private static readonly string[] OptionalFiles = [MonitorScript, JitScript];
 
     public const string MonitorScript = "Watch-TierModelPrivilegedGroups.ps1";
+    public const string JitScript = "Grant-TierModelJitAccess.ps1";
     private static readonly string[] Directories = ["modules", "config"];
 
     public static string RunsRoot(TierModelOptions o) => Path.Combine(o.WorkPath, "runs");

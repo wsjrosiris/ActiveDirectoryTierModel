@@ -56,6 +56,8 @@ builder.Services.AddDbContext<AppDbContext>((sp, o) => o.UseNpgsql(connectionStr
     .AddInterceptors(sp.GetRequiredService<TierModel.Service.Notifications.Siem.ChangeLogForwardInterceptor>()));
 TierModel.Service.Notifications.Siem.SiemSetup.AddSiem(builder.Services);
 TierModel.Service.Reports.ReportEndpoints.AddReports(builder.Services);
+TierModel.Service.Jit.JitEndpoints.AddJit(builder.Services);
+TierModel.Service.Transfer.TransferEndpoints.AddTransfer(builder.Services);
 
 // Keys protecting the auth/antiforgery cookies: persisted next to the run data so sessions survive restarts
 // (a gMSA has no loaded user profile), encrypted with DPAPI for the service account on Windows.
@@ -97,6 +99,8 @@ if (isCli)
 builder.Services.AddHostedService<RunWorker>();
 builder.Services.AddHostedService<ScheduleWorker>();
 builder.Services.AddHostedService<NotificationWorker>();
+builder.Services.AddHostedService<TierModel.Service.Jit.JitWorker>();
+builder.Services.AddHostedService<TierModel.Service.GitSync.GitSyncWorker>();
 
 var app = builder.Build();
 
@@ -143,6 +147,8 @@ TierModel.Service.Reports.ReportEndpoints.MapReportEndpoints(app);
 TierModel.Service.Maintenance.MaintenanceEndpoints.MapMaintenanceEndpoints(app);
 app.MapApiTokenEndpoints();
 app.MapChangeLogChainEndpoints();
+TierModel.Service.Jit.JitEndpoints.MapJitEndpoints(app);
+TierModel.Service.Transfer.TransferEndpoints.MapTransferEndpoints(app);
 app.Map("/api/{**rest}", () => Results.Problem(title: "Nicht gefunden", statusCode: 404));
 app.MapFallbackToFile("index.html", new StaticFileOptions { OnPrepareResponse = CacheHeaders });
 

@@ -107,6 +107,8 @@ public static class SiemEvents
     public const string HygieneFinding = "TM-320";
     public const string AttackPath = "TM-330";
     public const string ChangeLog = "TM-400";
+    public const string JitRequested = "TM-500";
+    public const string JitGranted = "TM-501";
 
     private static KeyValuePair<string, string> F(string key, object? value) =>
         new(key, Convert.ToString(value, CultureInfo.InvariantCulture) ?? "");
@@ -126,6 +128,8 @@ public static class SiemEvents
             NotificationEvent.Apply => (DeployApplied, "Deployment applied", 7, "Deploy"),
             NotificationEvent.ApprovalRequested => (ApprovalRequested, "Approval requested", 4, "Deploy"),
             NotificationEvent.PrivilegedChange => (PrivilegedChange, "Privileged group change", 8, "PrivilegedAccess"),
+            NotificationEvent.JitRequested => (JitRequested, "Just-in-time access requested", 4, "PrivilegedAccess"),
+            NotificationEvent.JitGranted => (JitGranted, "Just-in-time access granted", 7, "PrivilegedAccess"),
             _ => (Test, "Event", 3, "Service"),
         };
         var fields = m.Facts.Select(f => F("fact" + Pascal(f.Label), f.Value)).ToList();

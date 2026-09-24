@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { RunKindIcon, RunStatusBadge, DriftBadge, SeverityBadge } from '@/components/shared/badges'
+import { RunKindIcon, RunStatusBadge, DriftBadge, SeverityBadge, runKindText } from '@/components/shared/badges'
 import { Page } from '@/components/shared/page-header'
 import { useCan } from '@/features/auth/auth'
 import { areaLabels, areaPlanLabels, findingArea, findingTypeLabels, includeLabels, scopeLabels, sectionFallbackTitles } from '@/lib/labels'
@@ -107,7 +107,7 @@ export function Component() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-xl font-semibold tracking-tight">
-                    {r.kind === 'Deploy' ? (r.mode === 'Apply' ? 'Deploy' : 'Deploy (Planung)') : r.kind === 'Monitor' ? 'Überwachung' : 'Audit'}{' '}
+                    {r.kind === 'Deploy' ? (r.mode === 'Apply' ? 'Deploy' : 'Deploy (Planung)') : r.kind === 'Jit' ? runKindText(r) : r.kind === 'Monitor' ? 'Überwachung' : 'Audit'}{' '}
                     <span className="font-mono text-muted-foreground">#{r.id}</span>
                   </h1>
                   <RunStatusBadge status={status ?? r.status} scheduledFor={r.scheduledFor} />
@@ -158,7 +158,11 @@ export function Component() {
 
           <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Meta label="Bereich">
-              {isMonitor ? 'Privilegierte Gruppen' : r.scope ? scopeLabels[r.scope] : 'Nur Add-ons'}
+              {r.kind === 'Jit' ? (
+                <Link to="/zugriff" className="text-primary hover:underline">
+                  {r.jitRequestId ? `Antrag #${r.jitRequestId}` : 'Voraussetzungsprüfung'}
+                </Link>
+              ) : isMonitor ? 'Privilegierte Gruppen' : r.scope ? scopeLabels[r.scope] : 'Nur Add-ons'}
               {r.includes.length > 0 && (
                 <div className="mt-1 flex flex-wrap gap-1">{r.includes.map((i) => <Badge key={i} variant="secondary">{includeLabels[i] ?? i}</Badge>)}</div>
               )}

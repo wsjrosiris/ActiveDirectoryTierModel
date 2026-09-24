@@ -86,6 +86,12 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
     {
         RunKind.Audit => "Audit",
         RunKind.Monitor => "Überwachung",
+        RunKind.Jit => run.JitAction switch
+        {
+            JitAction.Revoke => "Befristeter Zugriff (Entzug)",
+            JitAction.Check => "Befristeter Zugriff (Prüfung)",
+            _ => "Befristeter Zugriff",
+        },
         _ => run.Mode == RunMode.Apply ? "Deploy (Anwenden)" : "Deploy (Planung)",
     };
 

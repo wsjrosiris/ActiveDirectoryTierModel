@@ -143,7 +143,7 @@ export interface DeployRequest extends RunRequest {
   planRunId?: number | null
 }
 
-export type RunKind = 'Deploy' | 'Audit' | 'Monitor'
+export type RunKind = 'Deploy' | 'Audit' | 'Monitor' | 'Jit'
 export type RunStatus = 'AwaitingApproval' | 'Queued' | 'Running' | 'Succeeded' | 'Failed' | 'Cancelled' | 'Rejected' | 'Scheduled'
 
 export interface RunSummary {
@@ -177,6 +177,9 @@ export interface RunSummary {
   admlLanguage: string
   /** Only while 'Scheduled': start of the maintenance window the apply waits for. */
   scheduledFor?: string | null
+  /** Kind 'Jit': grant, revoke or prerequisite check, and the JIT request it belongs to. */
+  jitAction?: 'Grant' | 'Revoke' | 'Check' | null
+  jitRequestId?: number | null
 }
 
 export interface ApproveRequest {
@@ -430,6 +433,9 @@ export interface ChannelEvents {
   certificate: boolean
   /** Changes in privileged groups or new privileged findings (monitor runs). */
   privileged: boolean
+  /** Just-in-Time access requested / granted. */
+  jitRequested: boolean
+  jitGranted: boolean
 }
 
 export interface NotificationChannel {

@@ -6,6 +6,7 @@ import {
   Download,
   FileQuestion,
   History,
+  Import,
   Redo2,
   RotateCcw,
   Save,
@@ -164,6 +165,11 @@ export function Component() {
           <Button variant="outline" size="sm" onClick={() => downloadUrl(api.config.exportUrl)}>
             <Download /> Export
           </Button>
+          {canEdit && (
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/konfiguration/import"><Import /> Import</Link>
+            </Button>
+          )}
           {canEdit && (
             <Button size="sm" disabled={!dirtyKeys.length} onClick={() => setSaveOpen(true)}>
               <Save /> Speichern

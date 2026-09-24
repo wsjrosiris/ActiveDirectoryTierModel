@@ -15,6 +15,7 @@ import { Page, PageHeader } from '@/components/shared/page-header'
 import { RequireAuth } from '@/features/auth/auth'
 import { settingsQuery } from '@/features/runs/run-request-form'
 import { languageError, useDomainControllerOptions, useLanguageOptions } from '@/features/config/lookups'
+import { GitSettingsCard } from './git-settings-card'
 
 export function Component() {
   return (
@@ -240,6 +241,9 @@ function SettingsPage() {
           </div>
         </form>
       )}
+      <div className="mt-4 grid grid-cols-[minmax(0,1fr)]">
+        <GitSettingsCard />
+      </div>
     </Page>
   )
 }

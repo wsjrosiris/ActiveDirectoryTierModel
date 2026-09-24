@@ -24,6 +24,8 @@ import {
   Webhook,
   XCircle,
   ShieldUser,
+  Timer,
+  KeyRound,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, ApiError } from '@/api/client'
@@ -102,6 +104,8 @@ const eventMeta: { key: keyof ChannelEvents; label: string; description: string;
   { key: 'apply', label: 'Angewendet', description: 'Ein Deploy im Modus „Anwenden“ wurde erfolgreich abgeschlossen.', icon: <Rocket /> },
   { key: 'approval', label: 'Freigabe', description: 'Ein Deploy wartet auf die Freigabe durch eine zweite Person (mit den Zählern der Planung).', icon: <Hourglass /> },
   { key: 'privileged', label: 'Privilegierte Gruppen', description: 'Die Überwachung hat neue oder entfernte Mitglieder, ein nicht erwartetes Mitglied, einen neuen hohen Hygiene-Befund oder einen neuen Angriffspfad gefunden.', icon: <ShieldUser /> },
+  { key: 'jitRequested', label: 'Befristeter Zugriff beantragt', description: 'Jemand beantragt eine befristete Mitgliedschaft in einer JIT-Gruppe (mit Begründung).', icon: <Timer /> },
+  { key: 'jitGranted', label: 'Befristeter Zugriff erteilt', description: 'Eine befristete Mitgliedschaft wurde im Active Directory eingetragen (mit Ablaufzeit).', icon: <KeyRound /> },
   { key: 'certificate', label: 'Zertifikat', description: 'Das HTTPS-Zertifikat des Dienstes läuft in weniger als 30 Tagen ab (tägliche Prüfung).', icon: <KeySquare /> },
 ]
 
@@ -288,7 +292,7 @@ function ChannelCard({ channel: c, onEdit, smtpMissing }: { channel: Notificatio
   )
 }
 
-const emptyEvents: ChannelEvents = { drift: true, failure: true, apply: false, approval: false, certificate: true, privileged: true }
+const emptyEvents: ChannelEvents = { drift: true, failure: true, apply: false, approval: false, certificate: true, privileged: true, jitRequested: true, jitGranted: true }
 
 const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+$/
 

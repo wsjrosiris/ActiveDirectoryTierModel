@@ -76,10 +76,10 @@ export function RunsTable({
                 {!hideKind && <TD><RunKindLabel run={r} /></TD>}
                 <TD><RunStatusBadge status={r.status} scheduledFor={r.scheduledFor} /></TD>
                 <TD className="hidden xl:table-cell">
-                  <span className="text-[13px]">{r.kind === 'Monitor' ? 'Privilegierte Gruppen' : r.scope ? scopeLabels[r.scope] : 'Nur Add-ons'}</span>
+                  <span className="text-[13px]">{r.kind === 'Jit' ? (r.jitRequestId ? `JIT-Antrag #${r.jitRequestId}` : 'JIT-Voraussetzungen') : r.kind === 'Monitor' ? 'Privilegierte Gruppen' : r.scope ? scopeLabels[r.scope] : 'Nur Add-ons'}</span>
                   {r.includes.length > 0 && <span className="ml-1.5 text-xs text-muted-foreground">+ {r.includes.map((i) => includeLabels[i] ?? i).join(', ')}</span>}
                 </TD>
-                {kind !== 'Deploy' && <TD>{r.kind !== 'Deploy' ? <DriftBadge count={r.driftCount} monitor={r.kind === 'Monitor'} /> : <span className="text-muted-foreground">–</span>}</TD>}
+                {kind !== 'Deploy' && <TD>{r.kind !== 'Deploy' && r.kind !== 'Jit' ? <DriftBadge count={r.driftCount} monitor={r.kind === 'Monitor'} /> : <span className="text-muted-foreground">–</span>}</TD>}
                 <TD className="hidden font-mono text-xs text-muted-foreground 2xl:table-cell">{r.preferredDc}</TD>
                 <TD className="hidden md:table-cell">
                   <div className="text-[13px]" title={formatDateTime(r.createdAt)}>{formatRelative(r.createdAt)}</div>

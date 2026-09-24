@@ -12,7 +12,7 @@ using TierModel.Service.Runs;
 
 namespace TierModel.Service.Notifications;
 
-public enum NotificationEvent { Drift, Failure, Apply, ApprovalRequested, CertificateExpiring, PrivilegedChange }
+public enum NotificationEvent { Drift, Failure, Apply, ApprovalRequested, CertificateExpiring, PrivilegedChange, JitRequested, JitGranted }
 
 /// <summary>A run event (message built from the run) or a ready-made message for events without a run.</summary>
 public record NotificationRequest(NotificationEvent Event, long RunId, NotificationMessage? Message = null);
@@ -44,6 +44,8 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
         NotificationEvent.ApprovalRequested => c.OnApproval,
         NotificationEvent.CertificateExpiring => c.OnCertificate,
         NotificationEvent.PrivilegedChange => c.OnPrivilegedChange,
+        NotificationEvent.JitRequested => c.OnJitRequested,
+        NotificationEvent.JitGranted => c.OnJitGranted,
         _ => false,
     };
 

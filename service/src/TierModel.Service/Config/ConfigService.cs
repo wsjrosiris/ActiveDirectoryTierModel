@@ -20,7 +20,8 @@ public record SectionDto(string Key, string FileName, string Title, string Descr
 
 public record VersionInfoDto(int Version, DateTimeOffset CreatedAt, string CreatedBy, string? Comment, string Sha256);
 
-public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions<TierModelOptions> options, ILogger<ConfigService> logger)
+public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions<TierModelOptions> options, ILogger<ConfigService> logger,
+    GitSync.GitSyncQueue? gitSync = null)
 {
     private static readonly JsonSerializerOptions WriteOptions = new()
     {
@@ -152,6 +153,39 @@ public class ConfigService(AppDbContext db, ChangeLogService changeLog, IOptions
             new { section = def.Key, fromVersion = baseVersion, toVersion = newVersion, comment });
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+        // Git mirror (roadmap 16): queued for the background worker, never blocks or fails the save.
+        gitSync?.Enqueue(def.Key, newVersion);
+        return (await GetAsync(def.Key, ct: ct))!;
+    }
+
+    /// <summary>Creates a catalog section that does not exist yet (e.g. imported from another instance) with version 1.</summary>
+    public async Task<SectionDto> CreateAsync(string key, JsonNode? content, string? comment, string user, string action = "config.import", CancellationToken ct = default)
+    {
+        var def = ConfigCatalog.Find(key) ?? throw new KeyNotFoundException(key);
+        if (content is not JsonObject)
+            throw new ArgumentException("Der Inhalt muss ein JSON-Objekt sein.");
+        if (await db.ConfigSections.AnyAsync(s => s.Key == def.Key, ct))
+            throw new ConfigConflictException(await db.ConfigSections.Where(s => s.Key == def.Key).Select(s => s.CurrentVersion).FirstAsync(ct));
+        var text = Serialize(content);
+        var now = DateTimeOffset.UtcNow;
+        db.ConfigSections.Add(new ConfigSection { Key = def.Key, FileName = def.FileName, CurrentVersion = 1, UpdatedAt = now, UpdatedBy = user });
+        db.ConfigVersions.Add(new ConfigVersion
+        {
+            SectionKey = def.Key, Version = 1, Content = text, Sha256 = Hash(text),
+            CreatedBy = user, CreatedAt = now, Comment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim(),
+        });
+        changeLog.Add(user, action, "config", def.Key,
+            $"{def.Title}: Version 1 angelegt" + (string.IsNullOrWhiteSpace(comment) ? "" : $" ({comment.Trim()})"),
+            new { section = def.Key, fromVersion = 0, toVersion = 1, comment });
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            throw new ConfigConflictException(1);
+        }
+        gitSync?.Enqueue(def.Key, 1);
         return (await GetAsync(def.Key, ct: ct))!;
     }
 

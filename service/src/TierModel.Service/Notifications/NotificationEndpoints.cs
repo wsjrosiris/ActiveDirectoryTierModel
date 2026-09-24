@@ -9,7 +9,8 @@ namespace TierModel.Service.Notifications;
 
 public static partial class NotificationEndpoints
 {
-    public record EventsDto(bool Drift, bool Failure, bool Apply, bool Approval, bool Certificate = false, bool Privileged = false);
+    public record EventsDto(bool Drift, bool Failure, bool Apply, bool Approval, bool Certificate = false, bool Privileged = false,
+        bool JitRequested = false, bool JitGranted = false);
 
     /// <summary>Log Analytics settings as shown to the UI: the client secret only as "stored".</summary>
     public record LogAnalyticsDto(string TenantId, string ClientId, string EndpointUrl, string DcrImmutableId, string StreamName, bool HasClientSecret);
@@ -22,7 +23,8 @@ public static partial class NotificationEndpoints
         SyslogSettings? Syslog = null, LogAnalyticsDto? LogAnalytics = null, bool ForwardChangeLog = false, long DroppedEvents = 0)
     {
         public static ChannelDto From(NotificationChannel c) => new(c.Id, c.Name, c.Type, c.Enabled, c.TargetDisplay,
-            new EventsDto(c.OnDrift, c.OnFailure, c.OnApply, c.OnApproval, c.OnCertificate, c.OnPrivilegedChange), c.LastSentAt, c.LastError, c.CreatedAt);
+            new EventsDto(c.OnDrift, c.OnFailure, c.OnApply, c.OnApproval, c.OnCertificate, c.OnPrivilegedChange,
+                c.OnJitRequested, c.OnJitGranted), c.LastSentAt, c.LastError, c.CreatedAt);
 
         /// <summary>With the (secret-free) SIEM settings and the number of events that could not be forwarded.</summary>
         public static ChannelDto From(NotificationChannel c, IDataProtector secrets, SiemForwarder forwarder)
@@ -243,12 +245,14 @@ public static partial class NotificationEndpoints
 
     private static void Apply(NotificationChannel c, EventsDto? e)
     {
-        e ??= new EventsDto(true, true, false, true, true, true);
+        e ??= new EventsDto(true, true, false, true, true, true, true, true);
         c.OnDrift = e.Drift;
         c.OnFailure = e.Failure;
         c.OnApply = e.Apply;
         c.OnApproval = e.Approval;
         c.OnCertificate = e.Certificate;
         c.OnPrivilegedChange = e.Privileged;
+        c.OnJitRequested = e.JitRequested;
+        c.OnJitGranted = e.JitGranted;
     }
 }

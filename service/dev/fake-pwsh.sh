@@ -14,6 +14,51 @@ if [ -n "$command" ]; then
   echo "fake-pwsh: -Command not supported" >&2; exit 1
 fi
 call=$(grep -E "^& " "$wrapper")
+# Grant-TierModelJitAccess.ps1 (Just-in-Time access): -Mode Check|Grant|Revoke|List, result JSON in -OutputPath.
+# The Privileged Access Management feature counts as enabled unless the DC name contains "nopam";
+# a DC name containing "jitfail" makes grant/revoke fail. Grants return TTL = minutes*60 - 3 seconds.
+if echo "$call" | grep -q "Grant-TierModelJitAccess\.ps1"; then
+  arg() { echo "$call" | sed -nE "s/.*-$1 '([^']*)'.*/\1/p"; }
+  mode=$(echo "$call" | sed -nE "s/.*-Mode ([A-Za-z]+).*/\1/p"); out=$(arg OutputPath); dc=$(arg PreferredDc)
+  group=$(arg Group); member=$(arg Member); minutes=$(echo "$call" | sed -nE "s/.*-Minutes ([0-9]+).*/\1/p")
+  now=$(date -u +%Y-%m-%dT%H:%M:%SZ); mkdir -p "$(dirname "$out")"
+  D="S-1-5-21-1004336348-1177238915-682003330"
+  sid_of() { case "$1" in S-1-*) echo "$1" ;; Administrator) echo "$D-500" ;; t0-alice) echo "$D-1201" ;; t0-bob) echo "$D-1202" ;; t0-carol) echo "$D-1203" ;;
+    helpdesk-jan) echo "$D-2301" ;; "Domain Admins") echo "$D-512" ;; Tier0Admins) echo "$D-1105" ;; *) echo "$D-$(( 7000 + $(echo -n "$1" | cksum | cut -d' ' -f1) % 2000 ))" ;; esac; }
+  echo "Just-in-Time access ($mode) starting (fake)."; echo "Preferred DC: $dc"; sleep 0.3
+  pam=true; echo "$dc" | grep -q nopam && pam=false
+  if [ "$mode" = "Check" ]; then
+    if $pam; then
+      echo "Privileged Access Management feature: enabled; forest functional level: Windows2016Forest"
+      printf '{ "mode": "check", "success": true, "ready": true, "pamEnabled": true, "enabledScopes": ["CN=Partitions,CN=Configuration,DC=contoso,DC=local"], "forestMode": "Windows2016Forest", "forestLevelSufficient": true, "messages": [], "dc": "%s", "timestamp": "%s" }\n' "$dc" "$now" > "$out"
+    else
+      echo "The optional feature 'Privileged Access Management Feature' is not enabled in this forest."
+      printf '{ "mode": "check", "success": true, "ready": false, "pamEnabled": false, "enabledScopes": [], "forestMode": "Windows2016Forest", "forestLevelSufficient": true, "messages": ["The optional feature '"'"'Privileged Access Management Feature'"'"' is not enabled in this forest. Enabling it is irreversible and must be done by the forest owner; this check never enables it."], "dc": "%s", "timestamp": "%s" }\n' "$dc" "$now" > "$out"
+    fi
+    echo "Script completed successfully."; exit 0
+  fi
+  lower=$(echo "$mode" | tr 'A-Z' 'a-z')
+  if ! $pam || echo "$dc" | grep -q jitfail; then
+    msg="Just-in-Time access is not possible: The optional feature 'Privileged Access Management Feature' is not enabled in this forest."
+    echo "$dc" | grep -q jitfail && msg="Insufficient access rights to perform the operation (fake)"
+    echo "Just-in-Time access ($mode) failed: $msg" >&2
+    printf '{ "mode": "%s", "success": false, "error": "%s", "dc": "%s", "timestamp": "%s" }\n' "$lower" "$msg" "$dc" "$now" > "$out"; exit 1
+  fi
+  gsid=$(sid_of "$group"); msid=$(sid_of "$member")
+  if [ "$mode" = "Grant" ]; then
+    ttl=$(( minutes * 60 - 3 )); exp=$(date -u -d "+$ttl seconds" +%Y-%m-%dT%H:%M:%SZ)
+    echo "Added $member to $group until $exp (TTL $ttl s)."
+    printf '{ "mode": "grant", "success": true, "group": "%s", "member": "%s", "sids": { "group": "%s", "member": "%s" }, "groupDn": "CN=%s,OU=Groups,DC=contoso,DC=local", "memberDn": "CN=%s,OU=Admins,DC=contoso,DC=local", "ttlSeconds": %s, "expiresAt": "%s", "dc": "%s", "timestamp": "%s" }\n' \
+      "$group" "$member" "$gsid" "$msid" "$group" "$member" "$ttl" "$exp" "$dc" "$now" > "$out"
+  elif [ "$mode" = "Revoke" ]; then
+    echo "Removed $member from $group."
+    printf '{ "mode": "revoke", "success": true, "group": "%s", "member": "%s", "sids": { "group": "%s", "member": "%s" }, "wasMember": true, "removed": true, "dc": "%s", "timestamp": "%s" }\n' \
+      "$group" "$member" "$gsid" "$msid" "$dc" "$now" > "$out"
+  else
+    printf '{ "mode": "list", "success": true, "group": "%s", "members": [], "dc": "%s", "timestamp": "%s" }\n' "$group" "$dc" "$now" > "$out"
+  fi
+  echo "Script completed successfully."; exit 0
+fi
 name=$(echo "$call" | grep -oE "(Deploy|Audit)-TierModel\.ps1|Watch-TierModelPrivilegedGroups\.ps1")
 # Watch-TierModelPrivilegedGroups.ps1: write a privileged.json per the contract. The content rotates through three states
 # (counter file next to the run folders), so consecutive runs show added/removed members and new findings.

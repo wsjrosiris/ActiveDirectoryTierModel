@@ -1,4 +1,4 @@
-import { Ban, CheckCircle2, Clock, Loader2, XCircle, Rocket, ScanSearch, CalendarClock, Hourglass, ShieldX, ShieldUser } from 'lucide-react'
+import { Ban, CheckCircle2, Clock, Loader2, XCircle, Rocket, ScanSearch, CalendarClock, Hourglass, ShieldX, ShieldUser, Timer } from 'lucide-react'
 import type { RunKind, RunStatus, RunSummary } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { severityLabels, statusLabels } from '@/lib/labels'
@@ -69,11 +69,18 @@ export function RunKindLabel({ run, className }: { run: Pick<RunSummary, 'kind' 
 }
 
 /** "Deploy", "Deploy (Plan)", "Audit" or "Überwachung". */
-export function runKindText(run: Pick<RunSummary, 'kind' | 'mode'>) {
+export function runKindText(run: Pick<RunSummary, 'kind' | 'mode'> & { jitAction?: RunSummary['jitAction'] }) {
+  if (run.kind === 'Jit') return run.jitAction === 'Revoke' ? 'Befristeter Zugriff (Entzug)' : run.jitAction === 'Check' ? 'JIT-Voraussetzungen' : 'Befristeter Zugriff'
   return run.kind === 'Deploy' ? (run.mode === 'Apply' ? 'Deploy' : 'Deploy (Plan)') : run.kind === 'Monitor' ? 'Überwachung' : 'Audit'
 }
 
 export function RunKindIcon({ kind, className }: { kind: RunKind; className?: string }) {
+  if (kind === 'Jit')
+    return (
+      <span className={cn('grid size-6 place-content-center rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-300', className)}>
+        <Timer className="size-3.5" />
+      </span>
+    )
   if (kind === 'Monitor')
     return (
       <span className={cn('grid size-6 place-content-center rounded-md bg-teal-500/10 text-teal-600 dark:text-teal-300', className)}>

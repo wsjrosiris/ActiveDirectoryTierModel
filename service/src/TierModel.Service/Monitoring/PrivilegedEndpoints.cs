@@ -51,6 +51,7 @@ public static class PrivilegedEndpoints
             var evaluation = PrivilegedEvaluation.Deserialize(latest.Evaluation)
                 ?? new PrivilegedEvaluation(true, [], [], [], [], [], thresholds);
             var tier0 = Tier0Config.From(await config.CurrentContentAsync(ct));
+            tier0.Jit.AddRange(await Jit.JitService.ExpectationsAsync(db, latest.TakenAt, ct));
             var unexpected = evaluation.Unexpected.Select(u => (u.GroupSid, u.MemberSid)).ToHashSet();
             var monitored = data.Groups.SelectMany(g => new[] { g.Name, g.WellKnownName }).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
 
