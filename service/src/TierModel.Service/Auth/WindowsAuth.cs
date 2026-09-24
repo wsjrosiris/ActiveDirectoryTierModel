@@ -86,7 +86,7 @@ public static partial class WindowsAuth
     public static void MapWindowsAuthEndpoints(this RouteGroupBuilder auth)
     {
         auth.MapGet("/options", async (SettingsService settings) =>
-            Results.Ok(new { windowsAuth = Available && (await settings.GetWindowsAuthAsync()).Enabled }));
+            Results.Ok(new { windowsAuth = Available && (await settings.GetWindowsAuthAsync()).Enabled, entraAuth = (await EntraAuth.LoadAsync(settings)).Usable }));
 
         auth.MapGet("/windows", async (HttpContext ctx, string? returnUrl, SettingsService settings, AppDbContext db,
             ChangeLogService log, IOptions<TierModelOptions> o, ILoggerFactory loggers) =>

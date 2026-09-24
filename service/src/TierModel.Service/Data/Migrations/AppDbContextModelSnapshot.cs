@@ -22,6 +22,61 @@ namespace TierModel.Service.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("TierModel.Service.Data.ApiToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Prefix")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RevokedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("SecretHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Prefix")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("api_tokens", (string)null);
+                });
+
             modelBuilder.Entity("TierModel.Service.Data.AppUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -118,6 +173,14 @@ namespace TierModel.Service.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Hash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("PrevHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("Summary")
                         .IsRequired()
                         .HasColumnType("text");
@@ -199,6 +262,85 @@ namespace TierModel.Service.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("config_versions", (string)null);
+                });
+
+            modelBuilder.Entity("TierModel.Service.Data.FreezePeriod", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("From")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("To")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("From", "To");
+
+                    b.ToTable("freeze_periods", (string)null);
+                });
+
+            modelBuilder.Entity("TierModel.Service.Data.MaintenanceWindow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.PrimitiveCollection<int[]>("Days")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<TimeOnly>("From")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<TimeOnly>("To")
+                        .HasColumnType("time without time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("maintenance_windows", (string)null);
                 });
 
             modelBuilder.Entity("TierModel.Service.Data.NotificationChannel", b =>
@@ -406,6 +548,9 @@ namespace TierModel.Service.Data.Migrations
                     b.Property<long?>("ScheduleId")
                         .HasColumnType("bigint");
 
+                    b.Property<DateTimeOffset?>("ScheduledFor")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Scope")
                         .HasMaxLength(24)
                         .HasColumnType("character varying(24)");
@@ -433,6 +578,8 @@ namespace TierModel.Service.Data.Migrations
                     b.HasIndex("Kind", "Id");
 
                     b.HasIndex("Status", "Id");
+
+                    b.HasIndex("Status", "ScheduledFor");
 
                     b.ToTable("runs", (string)null);
                 });
@@ -560,6 +707,15 @@ namespace TierModel.Service.Data.Migrations
                     b.HasKey("Key");
 
                     b.ToTable("settings", (string)null);
+                });
+
+            modelBuilder.Entity("TierModel.Service.Data.ApiToken", b =>
+                {
+                    b.HasOne("TierModel.Service.Data.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("TierModel.Service.Data.ConfigVersion", b =>

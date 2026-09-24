@@ -3,7 +3,7 @@ import type { RunKind, RunStatus, RunSummary } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { severityLabels, statusLabels } from '@/lib/labels'
 import { tierMeta, tierOf, type Tier } from '@/lib/tier'
-import { cn } from '@/lib/utils'
+import { cn, formatDateShort } from '@/lib/utils'
 
 export function TierBadge({ tier, className, short }: { tier: Tier; className?: string; short?: boolean }) {
   if (tier === null) return null
@@ -43,14 +43,15 @@ const statusStyle: Record<RunStatus, { variant: 'success' | 'danger' | 'info' | 
   Failed: { variant: 'danger', icon: <XCircle /> },
   Cancelled: { variant: 'muted', icon: <Ban /> },
   Rejected: { variant: 'danger', icon: <ShieldX /> },
+  Scheduled: { variant: 'info', icon: <CalendarClock /> },
 }
 
-export function RunStatusBadge({ status, className }: { status: RunStatus; className?: string }) {
+export function RunStatusBadge({ status, className, scheduledFor }: { status: RunStatus; className?: string; scheduledFor?: string | null }) {
   const s = statusStyle[status]
   return (
     <Badge variant={s.variant} className={className}>
       {s.icon}
-      {statusLabels[status]}
+      {status === 'Scheduled' && scheduledFor ? `Geplant für ${formatDateShort(scheduledFor)}` : statusLabels[status]}
     </Badge>
   )
 }

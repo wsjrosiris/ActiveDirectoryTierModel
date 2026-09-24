@@ -15,6 +15,7 @@ import { scopeLabels } from '@/lib/labels'
 import { cn, formatDateTime, formatRelative } from '@/lib/utils'
 import { emptyRunRequest, includesFromRequest, RunRequestFields, runRequestError, settingsQuery } from './run-request-form'
 import { useApplyPlan } from './plan-apply'
+import { MaintenanceNotice } from './maintenance-notice'
 import { planCountsText } from './plan-model'
 
 type Mode = 'plan' | 'apply'
@@ -167,6 +168,7 @@ export function Component() {
                   onPlan={() => setMode('plan')}
                 />
               )}
+              {mode === 'apply' && <MaintenanceNotice />}
               {needsApproval ? (
                 <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
                   <UsersRound className="size-4 shrink-0" />
@@ -186,12 +188,12 @@ export function Component() {
                 type="submit"
                 size="lg"
                 variant={mode === 'apply' && !needsApproval ? 'destructive' : 'default'}
-                disabled={!canEdit || !!error || blockedByPlan}
+                disabled={!canEdit || !!error || blockedByPlan || (mode === 'apply' && applyPlan.frozen)}
                 loading={deploy.isPending || applyPlan.isPending}
                 className="w-full"
               >
                 {!(deploy.isPending || applyPlan.isPending) && (blockedByPlan ? <Lock /> : needsApproval ? <UsersRound /> : mode === 'apply' ? <Zap /> : <FlaskConical />)}
-                {blockedByPlan
+                {blockedByPlan || (mode === 'apply' && applyPlan.frozen)
                   ? 'Anwenden gesperrt'
                   : needsApproval
                     ? candidate ? `Planung #${candidate.id} zur Freigabe einreichen …` : 'Zur Freigabe einreichen …'

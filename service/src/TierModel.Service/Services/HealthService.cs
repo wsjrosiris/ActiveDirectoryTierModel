@@ -76,8 +76,27 @@ public class HealthService(
         items.Add(Framework());
         items.Add(Workers());
         items.Add(DataProtection());
+        items.Add(await Safe("changelog", "Änderungsprotokoll", () => ChangeLogChainAsync(ct)));
         var overall = items.Any(i => i.Status == Error) ? Error : items.Any(i => i.Status == Warn) ? Warn : Ok;
         return new HealthDetailsDto(overall, DateTimeOffset.UtcNow, AppVersion, items);
+    }
+
+    /// <summary>Hash chain of the change log (roadmap 23), verified at most every 10 minutes.</summary>
+    private async Task<HealthItemDto> ChangeLogChainAsync(CancellationToken ct)
+    {
+        var r = await ChangeLogChain.VerifyCachedAsync(db, ct: ct);
+        var facts = new List<HealthFactDto>
+        {
+            new("Einträge geprüft", r.Count.ToString("N0", De)),
+            new("Letzter Eintrag", r.LastId is { } id ? $"#{id}" : "–"),
+            new("Ketten-Ende (SHA-256)", r.LastHash ?? "–"),
+            new("Geprüft", Format(r.CheckedAt)),
+        };
+        if (r.Ok)
+            return new HealthItemDto("changelog", "Änderungsprotokoll", Ok,
+                $"Hash-Kette vollständig ({r.Count:N0} Einträge). Das Ketten-Ende regelmäßig notieren: damit fällt auch ein Austausch der ganzen Tabelle auf.", facts);
+        facts.Insert(0, new("Unterbrochen bei", $"#{r.BrokenAtId}"));
+        return new HealthItemDto("changelog", "Änderungsprotokoll", Error, $"Hash-Kette unterbrochen bei Eintrag #{r.BrokenAtId}: {r.Problem}.", facts);
     }
 
     private async Task<HealthItemDto> Safe(string key, string title, Func<Task<HealthItemDto>> check)

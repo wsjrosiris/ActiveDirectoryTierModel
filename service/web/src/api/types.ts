@@ -2,7 +2,7 @@
 
 export type Role = 'Viewer' | 'Editor' | 'Operator' | 'Admin'
 
-export type AuthType = 'Local' | 'Windows'
+export type AuthType = 'Local' | 'Windows' | 'Entra'
 
 export interface User {
   id: string
@@ -24,6 +24,8 @@ export interface MeResponse {
 
 export interface AuthOptions {
   windowsAuth: boolean
+  /** Sign-in with Microsoft Entra ID is enabled and configured. */
+  entraAuth?: boolean
 }
 
 export interface LoginRequest {
@@ -142,7 +144,7 @@ export interface DeployRequest extends RunRequest {
 }
 
 export type RunKind = 'Deploy' | 'Audit' | 'Monitor'
-export type RunStatus = 'AwaitingApproval' | 'Queued' | 'Running' | 'Succeeded' | 'Failed' | 'Cancelled' | 'Rejected'
+export type RunStatus = 'AwaitingApproval' | 'Queued' | 'Running' | 'Succeeded' | 'Failed' | 'Cancelled' | 'Rejected' | 'Scheduled'
 
 export interface RunSummary {
   id: number
@@ -173,6 +175,8 @@ export interface RunSummary {
   /** Apply runs: the planning run whose result is applied. */
   planRunId: number | null
   admlLanguage: string
+  /** Only while 'Scheduled': start of the maintenance window the apply waits for. */
+  scheduledFor?: string | null
 }
 
 export interface ApproveRequest {
@@ -390,7 +394,33 @@ export interface WindowsAuthUpdate {
 
 // ---------- Benachrichtigungen ----------
 
-export type ChannelType = 'Email' | 'Teams' | 'Webhook'
+export type ChannelType = 'Email' | 'Teams' | 'Webhook' | 'Syslog' | 'LogAnalytics'
+
+export type SyslogProtocol = 'Udp' | 'Tcp' | 'Tls'
+export type SyslogFormat = 'Cef' | 'Rfc5424'
+
+export interface SyslogSettings {
+  host: string
+  port: number
+  protocol: SyslogProtocol
+  format: SyslogFormat
+  /** TLS only: false accepts self-signed certificates (test receivers). */
+  validateCertificate: boolean
+}
+
+export interface LogAnalyticsSettings {
+  tenantId: string
+  clientId: string
+  endpointUrl: string
+  dcrImmutableId: string
+  streamName: string
+  hasClientSecret: boolean
+}
+
+export interface LogAnalyticsInput extends Omit<LogAnalyticsSettings, 'hasClientSecret'> {
+  /** Empty or null keeps the stored secret. */
+  clientSecret?: string | null
+}
 
 export interface ChannelEvents {
   drift: boolean
@@ -413,6 +443,13 @@ export interface NotificationChannel {
   lastSentAt: string | null
   lastError: string | null
   createdAt: string
+  /** SIEM channels only. */
+  syslog?: SyslogSettings | null
+  logAnalytics?: LogAnalyticsSettings | null
+  /** SIEM channels: every change-log entry is forwarded as well. */
+  forwardChangeLog?: boolean
+  /** SIEM channels: events lost (queue full or not deliverable) since the service started. */
+  droppedEvents?: number
 }
 
 export interface ChannelInput {
@@ -422,6 +459,10 @@ export interface ChannelInput {
   /** On update: null = unchanged. */
   target: string | null
   events: ChannelEvents
+  /** SIEM channels: null/undefined keeps the stored settings. */
+  syslog?: SyslogSettings | null
+  logAnalytics?: LogAnalyticsInput | null
+  forwardChangeLog?: boolean
 }
 
 export type SmtpSecurity = 'None' | 'StartTls' | 'SslOnConnect'
@@ -774,4 +815,84 @@ export interface PrefixPreview {
   prefix: string
   renames: GpoRename[]
   gpoCount: number
+}
+
+// ---------- Entra ID ----------
+
+export type EntraEntryKind = 'Group' | 'AppRole'
+
+export interface EntraRoleEntry {
+  kind: EntraEntryKind
+  /** Group: object ID (GUID) · AppRole: value of the "roles" claim. */
+  value: string
+  displayName?: string | null
+}
+
+export interface EntraAuthSettings {
+  enabled: boolean
+  tenantId: string
+  clientId: string
+  hasClientSecret: boolean
+  roleMappings: Record<Role, EntraRoleEntry[]>
+  callbackPath: string
+}
+
+export interface EntraAuthUpdate {
+  enabled: boolean
+  tenantId: string
+  clientId: string
+  /** Empty or null keeps the stored secret. */
+  clientSecret?: string | null
+  roleMappings: Record<Role, EntraRoleEntry[]>
+}
+
+export interface EntraMetadataCheck {
+  ok: boolean
+  message: string
+  issuer: string | null
+  authorizationEndpoint: string | null
+  tokenEndpoint: string | null
+}
+
+// ---------- Berichte ----------
+
+export type ReportType = 'soll-ist' | 'aenderungen' | 'privilegiert'
+
+export interface ReportTypeInfo {
+  type: ReportType
+  title: string
+  description: string
+  needsRange: boolean
+  basis: string | null
+  basisAt: string | null
+}
+
+export type ReportFrequency = 'Weekly' | 'Monthly'
+
+export interface ReportSchedule {
+  id: string
+  name: string
+  type: ReportType
+  frequency: ReportFrequency
+  /** Weekly: 0 (Sunday) … 6 · Monthly: 1–28. */
+  day: number
+  /** HH:mm, server time zone. */
+  time: string
+  recipients: string[]
+  enabled: boolean
+  createdAt: string
+  lastSentAt: string | null
+  lastError: string | null
+  nextRunAt: string | null
+}
+
+export interface ReportScheduleInput {
+  id?: string | null
+  name: string
+  type: ReportType
+  frequency: ReportFrequency
+  day: number
+  time: string
+  recipients: string[]
+  enabled: boolean
 }

@@ -30,6 +30,7 @@ export function Combobox({
   onSearchChange,
   loading,
   validateCustom,
+  hideValue,
 }: {
   value: string
   onChange: (v: string) => void
@@ -47,6 +48,8 @@ export function Combobox({
   loading?: boolean
   /** Returns an error for a typed value that must not be used as is. */
   validateCustom?: (v: string) => string | null
+  /** Show only the option's label in the trigger (for fixed choices whose value is an internal key). */
+  hideValue?: boolean
 }) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
@@ -76,8 +79,8 @@ export function Combobox({
         >
           {value && selected?.label && selected.label !== value ? (
             <span className="flex min-w-0 items-baseline gap-2">
-              <span className="max-w-[65%] shrink-0 truncate font-sans text-sm">{selected.label}</span>
-              <span className="truncate font-mono text-[11px] text-muted-foreground">{value}</span>
+              <span className={cn('shrink-0 truncate font-sans text-sm', hideValue ? 'max-w-full' : 'max-w-[65%]')}>{selected.label}</span>
+              {!hideValue && <span className="truncate font-mono text-[11px] text-muted-foreground">{value}</span>}
             </span>
           ) : (
             <span className={cn('truncate', !value && 'font-sans text-muted-foreground')}>{value || placeholder}</span>

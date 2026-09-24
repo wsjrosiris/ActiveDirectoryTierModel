@@ -13,7 +13,14 @@ import {
   User as UserIcon,
   ChevronDown,
   Bell,
+  CalendarRange,
+  KeySquare,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react'
+import { opsApi } from '@/api/ops'
+import { Badge } from '@/components/ui/badge'
+import { Tooltip } from '@/components/ui/tooltip'
 import { api } from '@/api/client'
 import type { ChangeEntry } from '@/api/types'
 import { Button } from '@/components/ui/button'
@@ -36,6 +43,8 @@ const typeIcon: Record<string, React.ReactNode> = {
   settings: <Settings2 />,
   notification: <Bell />,
   auth: <KeyRound />,
+  maintenance: <CalendarRange />,
+  token: <KeySquare />,
 }
 
 const typeTone: Record<string, string> = {
@@ -46,6 +55,8 @@ const typeTone: Record<string, string> = {
   settings: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
   notification: 'bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-300',
   auth: 'bg-muted text-muted-foreground',
+  maintenance: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  token: 'bg-orange-500/10 text-orange-700 dark:text-orange-300',
 }
 
 function dayKey(iso: string) {
@@ -78,7 +89,12 @@ export function Component() {
 
   return (
     <Page>
-      <PageHeader icon={<FileClock />} title="Änderungsprotokoll" description="Wer hat wann was geändert – Konfiguration, Läufe, Benutzer und Anmeldungen." />
+      <PageHeader
+        icon={<FileClock />}
+        title="Änderungsprotokoll"
+        description="Wer hat wann was geändert – Konfiguration, Läufe, Benutzer und Anmeldungen."
+        actions={<ChainBadge />}
+      />
       <div className="mb-4 overflow-x-auto">
         <Segmented<string>
           aria-label="Typ"
@@ -97,9 +113,9 @@ export function Component() {
       ) : items.length === 0 ? (
         <Card><EmptyState icon={<FileClock />} title="Keine Einträge" description="Für diesen Filter wurden keine Änderungen protokolliert." /></Card>
       ) : (
-        <div className={cn('grid gap-6', q.isPlaceholderData && 'opacity-60')}>
+        <div className={cn('grid grid-cols-[minmax(0,1fr)] gap-6', q.isPlaceholderData && 'opacity-60')}>
           {grouped.map(([day, list]) => (
-            <section key={day}>
+            <section key={day} className="min-w-0">
               <h2 className="mb-2 text-xs font-medium text-muted-foreground">{day}</h2>
               <Card className="divide-y overflow-hidden">
                 {list.map((c) => <Entry key={c.id} c={c} />)}
@@ -117,6 +133,31 @@ export function Component() {
         </div>
       )}
     </Page>
+  )
+}
+
+/** Result of the hash-chain check (roadmap 23): every entry is chained to its predecessor. */
+function ChainBadge() {
+  const q = useQuery({ queryKey: ['changelog', 'chain'], queryFn: opsApi.changelog.chain, staleTime: 60_000 })
+  const r = q.data
+  if (!r) return null
+  const detail = (
+    <span className="grid gap-0.5">
+      <span>{formatNumber(r.count)} Einträge geprüft, {formatDateTime(r.checkedAt)}</span>
+      {r.ok ? <span>Jeder Eintrag ist per SHA-256 mit seinem Vorgänger verkettet – nachträgliche Änderungen fallen auf.</span> : <span>{r.problem}</span>}
+      {r.lastHash && <span className="font-mono break-all">Ketten-Ende: {r.lastHash}</span>}
+    </span>
+  )
+  return (
+    <Tooltip content={detail}>
+      <span tabIndex={0} className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="chain-badge">
+        {r.ok ? (
+          <Badge variant="success"><ShieldCheck /> Kette geprüft</Badge>
+        ) : (
+          <Badge variant="danger"><ShieldAlert /> Kette unterbrochen bei #{r.brokenAtId}</Badge>
+        )}
+      </span>
+    </Tooltip>
   )
 }
 

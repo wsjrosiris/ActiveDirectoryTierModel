@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
-import { Copy, Info, KeyRound, Lock, MonitorCheck, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2, Unlock, UserPlus, Users } from 'lucide-react'
+import { Cloud, Copy, Info, KeyRound, Lock, MonitorCheck, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2, Unlock, UserPlus, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import type { Role, User } from '@/api/types'
@@ -54,6 +54,10 @@ function AuthTypeBadge({ user }: { user: User }) {
   return user.authType === 'Windows' ? (
     <Tooltip content="Anmeldung per Kerberos/NTLM – Rolle aus AD-Gruppen">
       <Badge variant="info"><MonitorCheck /> Windows</Badge>
+    </Tooltip>
+  ) : user.authType === 'Entra' ? (
+    <Tooltip content="Anmeldung mit Microsoft Entra ID – Rolle aus Gruppen oder App-Rollen">
+      <Badge variant="info"><Cloud /> Entra ID</Badge>
     </Tooltip>
   ) : (
     <Badge variant="outline"><KeyRound /> Lokal</Badge>
@@ -116,8 +120,8 @@ function UsersPage() {
                     </div>
                   </TD>
                   <TD>
-                    {u.authType === 'Windows' ? (
-                      <Tooltip content="Wird bei jeder Anmeldung aus den AD-Gruppen bestimmt">
+                    {u.authType !== 'Local' ? (
+                      <Tooltip content={u.authType === 'Entra' ? 'Wird bei jeder Anmeldung aus Entra ID bestimmt' : 'Wird bei jeder Anmeldung aus den AD-Gruppen bestimmt'}>
                         <Badge variant={roleVariant[u.role]}>{roleLabels[u.role]}</Badge>
                       </Tooltip>
                     ) : (
@@ -130,7 +134,7 @@ function UsersPage() {
                       {!u.isActive ? <Badge variant="muted">Deaktiviert</Badge> : isLocked(u) ? (
                         <Tooltip content={`Gesperrt bis ${formatDateTime(u.lockedUntil)}`}><Badge variant="danger"><Lock /> Gesperrt</Badge></Tooltip>
                       ) : <Badge variant="success">Aktiv</Badge>}
-                      {u.mustChangePassword && u.authType !== 'Windows' && <Badge variant="warning">Passwortwechsel</Badge>}
+                      {u.mustChangePassword && u.authType === 'Local' && <Badge variant="warning">Passwortwechsel</Badge>}
                     </div>
                   </TD>
                   <TD className="hidden text-[13px] md:table-cell" title={formatDateTime(u.lastLoginAt)}>{u.lastLoginAt ? formatRelative(u.lastLoginAt) : 'Nie'}</TD>
@@ -142,7 +146,7 @@ function UsersPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onSelect={() => setEditing(u)}><Pencil /> Bearbeiten</DropdownMenuItem>
-                        {u.authType !== 'Windows' && <DropdownMenuItem onSelect={() => setResetFor(u)}><KeyRound /> Passwort zurücksetzen</DropdownMenuItem>}
+                        {u.authType === 'Local' && <DropdownMenuItem onSelect={() => setResetFor(u)}><KeyRound /> Passwort zurücksetzen</DropdownMenuItem>}
                         {isLocked(u) && <DropdownMenuItem onSelect={() => unlock.mutate(u)}><Unlock /> Entsperren</DropdownMenuItem>}
                         {u.id !== me.id && (
                           <>
@@ -230,6 +234,7 @@ function UserSheet({ value, onClose, selfId }: { value: User | 'new' | null; onC
   })
   const self = user?.id === selfId
   const windows = user?.authType === 'Windows'
+  const entra = user?.authType === 'Entra'
   const error = isNew && !username.trim() ? 'Benutzername erforderlich.' : isNew && password.length < 12 ? 'Passwort muss mindestens 12 Zeichen haben.' : null
 
   return (
@@ -241,8 +246,8 @@ function UserSheet({ value, onClose, selfId }: { value: User | 'new' | null; onC
             <SheetDescription>
               {isNew
                 ? 'Das initiale Passwort muss bei der ersten Anmeldung geändert werden.'
-                : windows
-                  ? 'Windows-Konto: Anzeigename und Status.'
+                : windows || entra
+                  ? `${entra ? 'Entra-ID' : 'Windows'}-Konto: Anzeigename und Status.`
                   : 'Rolle und Status des Kontos.'}
             </SheetDescription>
           </SheetHeader>
@@ -272,7 +277,7 @@ function UserSheet({ value, onClose, selfId }: { value: User | 'new' | null; onC
                     type="button"
                     role="radio"
                     aria-checked={role === r}
-                    disabled={windows ? r !== role : self && r !== 'Admin'}
+                    disabled={windows || entra ? r !== role : self && r !== 'Admin'}
                     onClick={() => setRole(r)}
                     className={cn(
                       'flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45',
@@ -296,6 +301,15 @@ function UserSheet({ value, onClose, selfId }: { value: User | 'new' | null; onC
                     Die Rolle eines Windows-Kontos wird bei jeder Anmeldung aus seinen AD-Gruppen bestimmt und kann hier nicht geändert werden.
                     Die Zuordnung Gruppe → Rolle pflegen Sie unter{' '}
                     <Link to="/admin/windows-anmeldung" className="font-medium underline underline-offset-2" onClick={onClose}>Windows-Anmeldung</Link>.
+                  </p>
+                </div>
+              ) : entra ? (
+                <div className="flex gap-2.5 rounded-lg border border-sky-500/25 bg-sky-500/5 px-3 py-2.5 text-xs text-sky-900 dark:text-sky-200">
+                  <Cloud className="mt-px size-4 shrink-0" />
+                  <p>
+                    Die Rolle eines Entra-ID-Kontos wird bei jeder Anmeldung aus seinen Gruppen oder App-Rollen bestimmt.
+                    Die Zuordnung pflegen Sie unter{' '}
+                    <Link to="/admin/entra-anmeldung" className="font-medium underline underline-offset-2" onClick={onClose}>Entra-ID-Anmeldung</Link>.
                   </p>
                 </div>
               ) : self ? (

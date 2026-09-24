@@ -51,7 +51,11 @@ builder.Services.AddSingleton(certificateSource);
 
 var connectionString = builder.Configuration.GetConnectionString("TierModel")
     ?? throw new InvalidOperationException("ConnectionStrings:TierModel fehlt in appsettings.json.");
-builder.Services.AddDbContext<AppDbContext>(o => o.UseNpgsql(connectionString));
+// Saved change-log entries are also forwarded to SIEM channels (roadmap 19), see ChangeLogForwardInterceptor.
+builder.Services.AddDbContext<AppDbContext>((sp, o) => o.UseNpgsql(connectionString)
+    .AddInterceptors(sp.GetRequiredService<TierModel.Service.Notifications.Siem.ChangeLogForwardInterceptor>()));
+TierModel.Service.Notifications.Siem.SiemSetup.AddSiem(builder.Services);
+TierModel.Service.Reports.ReportEndpoints.AddReports(builder.Services);
 
 // Keys protecting the auth/antiforgery cookies: persisted next to the run data so sessions survive restarts
 // (a gMSA has no loaded user profile), encrypted with DPAPI for the service account on Windows.
@@ -67,6 +71,7 @@ builder.Services.AddScoped<ChangeLogService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<ConfigService>();
 builder.Services.AddScoped<RunService>();
+builder.Services.AddScoped<TierModel.Service.Maintenance.MaintenanceService>();
 builder.Services.AddSingleton<RunQueue>();
 builder.Services.AddSingleton<NotificationQueue>();
 builder.Services.AddScoped<NotificationService>();
@@ -98,6 +103,9 @@ var app = builder.Build();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+    // Change-log entries from before the hash chain get their hashes once (roadmap 23).
+    if (await ChangeLogChain.BackfillAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>()) is > 0 and var chained)
+        app.Logger.LogInformation("Änderungsprotokoll: {Count} ältere Einträge in die Hash-Kette aufgenommen", chained);
     await scope.ServiceProvider.GetRequiredService<ConfigService>().SeedAsync();
     if (!await scope.ServiceProvider.GetRequiredService<AppDbContext>().Users.AnyAsync())
         app.Logger.LogWarning("Es existiert noch kein Benutzer. Anlegen mit: TierModel.Service.exe admin create --username <name>");
@@ -130,6 +138,11 @@ app.MapLookupEndpoints();
 app.MapPrivilegedEndpoints();
 app.MapAdEndpoints();
 app.MapSetupEndpoints();
+app.MapEntraAuthEndpoints();
+TierModel.Service.Reports.ReportEndpoints.MapReportEndpoints(app);
+TierModel.Service.Maintenance.MaintenanceEndpoints.MapMaintenanceEndpoints(app);
+app.MapApiTokenEndpoints();
+app.MapChangeLogChainEndpoints();
 app.Map("/api/{**rest}", () => Results.Problem(title: "Nicht gefunden", statusCode: 404));
 app.MapFallbackToFile("index.html", new StaticFileOptions { OnPrepareResponse = CacheHeaders });
 

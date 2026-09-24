@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Cpu,
   Database,
+  FileClock,
   FolderCog,
   HardDrive,
   History,
@@ -45,6 +46,7 @@ const itemIcons: Record<string, React.ReactNode> = {
   framework: <FolderCog />,
   workers: <Activity />,
   dataProtection: <KeyRound />,
+  changelog: <FileClock />,
 }
 
 const statusMeta: Record<HealthStatus, { label: string; dot: string; ring: string; chip: string; icon: React.ReactNode }> = {
@@ -191,7 +193,7 @@ function HealthCard({ item }: { item: HealthItem }) {
           {item.facts.map((f) => (
             <React.Fragment key={f.label}>
               <dt className="text-muted-foreground">{f.label}</dt>
-              <dd className={cn('min-w-0 break-words', /[\\/]|^[0-9A-F]{40}$|^S-1-/.test(f.value) && 'font-mono text-[11.5px] break-all')}>{f.value}</dd>
+              <dd className={cn('min-w-0 break-words', /[\\/]|^[0-9A-F]{40}$|^[0-9a-f]{64}$|^S-1-/.test(f.value) && 'font-mono text-[11.5px] break-all')}>{f.value}</dd>
             </React.Fragment>
           ))}
         </dl>

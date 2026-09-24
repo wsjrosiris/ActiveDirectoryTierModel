@@ -98,8 +98,25 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var id = await db.Runs.Where(r => r.Status == RunStatus.Queued).OrderBy(r => r.Id).Select(r => (long?)r.Id).FirstOrDefaultAsync(ct);
-        if (id is null) return null;
+        var next = await db.Runs.Where(r => r.Status == RunStatus.Queued).OrderBy(r => r.Id).Select(r => new { r.Id, r.Kind, r.Mode }).FirstOrDefaultAsync(ct);
+        if (next is null) return null;
+        var id = next.Id;
+        if (next.Kind == RunKind.Deploy && next.Mode == RunMode.Apply)
+        {
+            // Last line of defence (roadmap 4): an apply never starts outside a maintenance window or inside a freeze,
+            // e.g. when a freeze was added after the run was queued. It goes back to "Scheduled".
+            var maintenance = scope.ServiceProvider.GetRequiredService<Maintenance.MaintenanceService>();
+            var (status, scheduledFor) = await maintenance.StartStatusAsync(DateTimeOffset.UtcNow, ct);
+            if (status == RunStatus.Scheduled)
+            {
+                await db.Runs.Where(r => r.Id == id && r.Status == RunStatus.Queued).ExecuteUpdateAsync(u => u
+                    .SetProperty(r => r.Status, RunStatus.Scheduled)
+                    .SetProperty(r => r.ScheduledFor, scheduledFor), ct);
+                logger.LogInformation("Run {RunId} deferred to {ScheduledFor}: outside a maintenance window or inside a freeze", id, scheduledFor);
+                queue.Notify();   // look at the next queued run right away
+                return null;
+            }
+        }
         var claimed = await db.Runs.Where(r => r.Id == id && r.Status == RunStatus.Queued).ExecuteUpdateAsync(u => u
             .SetProperty(r => r.Status, RunStatus.Running)
             .SetProperty(r => r.StartedAt, DateTimeOffset.UtcNow), ct);

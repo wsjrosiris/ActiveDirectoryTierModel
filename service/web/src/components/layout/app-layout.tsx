@@ -6,6 +6,7 @@ import {
   Command,
   Hourglass,
   KeyRound,
+  KeySquare,
   Laptop,
   Loader2,
   LogOut,
@@ -336,6 +337,9 @@ function Topbar({
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => navigate('/passwort-aendern')}>
               <KeyRound /> Passwort ändern
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => navigate('/api-tokens')}>
+              <KeySquare /> API-Tokens
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onPalette()}>
               <Command /> Befehlspalette

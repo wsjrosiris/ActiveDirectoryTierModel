@@ -14,6 +14,22 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Setting> Settings => Set<Setting>();
     public DbSet<NotificationChannel> NotificationChannels => Set<NotificationChannel>();
     public DbSet<PrivilegedSnapshot> PrivilegedSnapshots => Set<PrivilegedSnapshot>();
+    public DbSet<MaintenanceWindow> MaintenanceWindows => Set<MaintenanceWindow>();
+    public DbSet<FreezePeriod> FreezePeriods => Set<FreezePeriod>();
+    public DbSet<ApiToken> ApiTokens => Set<ApiToken>();
+
+    // New change-log entries are hash-chained (roadmap 23): computed under an advisory lock in the same transaction.
+    public override int SaveChanges(bool acceptAllChangesOnSuccess) =>
+        HasNewChangeEntries()
+            ? ChangeLogChain.SaveChainedAsync(this, ct => Task.FromResult(base.SaveChanges(acceptAllChangesOnSuccess)), CancellationToken.None).GetAwaiter().GetResult()
+            : base.SaveChanges(acceptAllChangesOnSuccess);
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default) =>
+        HasNewChangeEntries()
+            ? ChangeLogChain.SaveChainedAsync(this, ct => base.SaveChangesAsync(acceptAllChangesOnSuccess, ct), cancellationToken)
+            : base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+
+    private bool HasNewChangeEntries() => ChangeTracker.Entries<ChangeEntry>().Any(e => e.State == EntityState.Added);
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -55,6 +71,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Findings).HasColumnType("jsonb");
             e.Property(x => x.Plan).HasColumnType("jsonb");
             e.HasIndex(x => x.PlanRunId);
+            e.HasIndex(x => new { x.Status, x.ScheduledFor });
         });
 
         b.Entity<RunLogLine>(e =>
@@ -78,6 +95,35 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => x.At);
             e.HasIndex(x => new { x.EntityType, x.At });
             e.Property(x => x.Details).HasColumnType("jsonb");
+            e.Property(x => x.Hash).HasMaxLength(64);
+            e.Property(x => x.PrevHash).HasMaxLength(64);
+        });
+
+        b.Entity<MaintenanceWindow>(e =>
+        {
+            e.ToTable("maintenance_windows");
+            e.Property(x => x.Name).HasMaxLength(100);
+            e.Property(x => x.TimeZone).HasMaxLength(64);
+        });
+
+        b.Entity<FreezePeriod>(e =>
+        {
+            e.ToTable("freeze_periods");
+            e.Property(x => x.Reason).HasMaxLength(200);
+            e.HasIndex(x => new { x.From, x.To });
+        });
+
+        b.Entity<ApiToken>(e =>
+        {
+            e.ToTable("api_tokens");
+            e.Property(x => x.Name).HasMaxLength(100);
+            e.Property(x => x.Prefix).HasMaxLength(8);
+            e.Property(x => x.SecretHash).HasMaxLength(64);
+            e.Property(x => x.Role).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.RevokedBy).HasMaxLength(256);
+            e.HasIndex(x => x.Prefix).IsUnique();
+            e.HasIndex(x => x.UserId);
+            e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<NotificationChannel>(e =>

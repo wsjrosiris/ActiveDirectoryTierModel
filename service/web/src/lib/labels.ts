@@ -21,10 +21,11 @@ export const statusLabels: Record<RunStatus, string> = {
   Failed: 'Fehlgeschlagen',
   Cancelled: 'Abgebrochen',
   Rejected: 'Abgelehnt',
+  Scheduled: 'Geplant',
 }
 
 /** Statuses in which the run is not finished yet (the detail page keeps refreshing). */
-export const pendingStatuses: RunStatus[] = ['AwaitingApproval', 'Queued', 'Running']
+export const pendingStatuses: RunStatus[] = ['AwaitingApproval', 'Scheduled', 'Queued', 'Running']
 
 export const includeLabels: Record<string, string> = {
   Msa: 'MSA',
@@ -41,6 +42,8 @@ export const entityTypeLabels: Record<string, string> = {
   settings: 'Einstellungen',
   notification: 'Benachrichtigung',
   auth: 'Anmeldung',
+  maintenance: 'Wartungsfenster',
+  token: 'API-Token',
 }
 
 export const actionLabels: Record<string, string> = {
@@ -53,6 +56,15 @@ export const actionLabels: Record<string, string> = {
   'run.approve': 'Deploy freigegeben',
   'run.reject': 'Deploy abgelehnt',
   'run.approval-expired': 'Freigabe abgelaufen',
+  'run.window-start': 'Wartungsfenster erreicht',
+  'maintenance.window-create': 'Wartungsfenster angelegt',
+  'maintenance.window-update': 'Wartungsfenster geändert',
+  'maintenance.window-delete': 'Wartungsfenster gelöscht',
+  'maintenance.freeze-create': 'Sperrzeit angelegt',
+  'maintenance.freeze-update': 'Sperrzeit geändert',
+  'maintenance.freeze-delete': 'Sperrzeit gelöscht',
+  'token.create': 'API-Token erstellt',
+  'token.revoke': 'API-Token widerrufen',
   'user.create': 'Benutzer angelegt',
   'user.update': 'Benutzer geändert',
   'user.delete': 'Benutzer gelöscht',
@@ -64,6 +76,12 @@ export const actionLabels: Record<string, string> = {
   'auth.change-password': 'Passwort geändert',
   'auth.windows-login': 'Windows-Anmeldung',
   'auth.windows-denied': 'Windows-Anmeldung abgelehnt',
+  'auth.entra-login': 'Entra-ID-Anmeldung',
+  'auth.entra-denied': 'Entra-ID-Anmeldung abgelehnt',
+  'settings.entra-auth': 'Entra-ID-Anmeldung geändert',
+  'settings.report-schedules': 'Berichtszeitpläne geändert',
+  'report.send': 'Bericht versendet',
+  'report.failed': 'Berichtsversand fehlgeschlagen',
   'schedule.create': 'Zeitplan angelegt',
   'schedule.update': 'Zeitplan geändert',
   'schedule.delete': 'Zeitplan gelöscht',

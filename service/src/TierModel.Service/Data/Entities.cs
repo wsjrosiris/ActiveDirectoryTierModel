@@ -12,11 +12,12 @@ public enum Role
 /// <summary>Monitor: snapshot of the privileged groups (Watch-TierModelPrivilegedGroups.ps1).</summary>
 public enum RunKind { Deploy, Audit, Monitor }
 
-public enum RunStatus { Queued, Running, Succeeded, Failed, Cancelled, AwaitingApproval, Rejected }
+/// <summary>Scheduled: an apply waiting for the next maintenance window (<see cref="Run.ScheduledFor"/>).</summary>
+public enum RunStatus { Queued, Running, Succeeded, Failed, Cancelled, AwaitingApproval, Rejected, Scheduled }
 
-public enum AuthType { Local, Windows }
+public enum AuthType { Local, Windows, Entra }
 
-public enum ChannelType { Email, Teams, Webhook }
+public enum ChannelType { Email, Teams, Webhook, Syslog, LogAnalytics }
 
 public enum RunTrigger { Manual, Schedule }
 
@@ -106,6 +107,8 @@ public class Run
     public string? Plan { get; set; }
     /// <summary>Apply runs: the planning run whose result was reviewed (and whose configuration versions are applied).</summary>
     public long? PlanRunId { get; set; }
+    /// <summary>Status <see cref="RunStatus.Scheduled"/>: when the run is queued (start of the next maintenance window).</summary>
+    public DateTimeOffset? ScheduledFor { get; set; }
 }
 
 public class RunLogLine
@@ -153,6 +156,10 @@ public class ChangeEntry
     public required string Summary { get; set; }
     /// <summary>Optional JSON payload.</summary>
     public string? Details { get; set; }
+    /// <summary>Hex SHA-256 over <see cref="PrevHash"/> and the canonical entry (see <see cref="ChangeLogChain"/>).</summary>
+    public string? Hash { get; set; }
+    /// <summary>Hash of the previous entry (by Id); empty for the first entry.</summary>
+    public string? PrevHash { get; set; }
 }
 
 public class NotificationChannel

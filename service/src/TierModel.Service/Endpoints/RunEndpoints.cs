@@ -46,7 +46,7 @@ public static class RunEndpoints
             return new { items = items.Select(RunSummaryDto.From), total };
         });
 
-        runs.MapPost("/deploy", async (DeployRequest r, HttpContext ctx, RunService service) =>
+        runs.MapPost("/deploy", async (DeployRequest r, HttpContext ctx, RunService service, Maintenance.MaintenanceService maintenance) =>
         {
             if (r.ConfirmApply && !ctx.User.HasRole(Role.Operator))
                 return Results.Problem(title: "Nur Operatoren dürfen Änderungen im Active Directory anwenden", statusCode: 403);
@@ -57,6 +57,9 @@ public static class RunEndpoints
             {
                 (plan, var planError) = await service.CheckPlanForApplyAsync(r);
                 if (planError is not null) return Results.ValidationProblem(new Dictionary<string, string[]> { ["planRunId"] = [planError] });
+                // Freeze periods (roadmap 4): rejected right away; outside a maintenance window the run is scheduled.
+                if (await maintenance.CheckApplyRequestAsync(DateTimeOffset.UtcNow) is { } freezeError)
+                    return Results.ValidationProblem(new Dictionary<string, string[]> { ["maintenance"] = [freezeError] }, title: "Anwenden derzeit gesperrt");
             }
             var run = await service.EnqueueAsync(RunKind.Deploy, r.ToRunRequest(), r.ConfirmApply, ctx.User.UserName(), planRun: plan);
             return Results.Accepted($"/api/runs/{run.Id}", RunSummaryDto.From(run));

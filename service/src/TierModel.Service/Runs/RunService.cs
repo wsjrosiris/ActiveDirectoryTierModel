@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TierModel.Service.Config;
 using TierModel.Service.Data;
+using TierModel.Service.Maintenance;
 using TierModel.Service.Notifications;
 
 namespace TierModel.Service.Runs;
@@ -16,7 +17,8 @@ public record PlanCandidatesDto(bool RequirePlan, int MaxAgeHours, PlanCandidate
 /// <summary>Whether a planning run can be applied right now.</summary>
 public record PlanApplicabilityDto(bool Applicable, string? Reason, DateTimeOffset? ExpiresAt);
 
-public class RunService(AppDbContext db, RunQueue queue, ChangeLogService changeLog, SettingsService settings, ConfigService config, NotificationQueue notifications)
+public class RunService(AppDbContext db, RunQueue queue, ChangeLogService changeLog, SettingsService settings, ConfigService config, NotificationQueue notifications,
+    MaintenanceService maintenance)
 {
     public async Task<Run> EnqueueAsync(RunKind kind, RunRequest r, bool confirmApply, string user, RunTrigger trigger = RunTrigger.Manual, long? scheduleId = null,
         CancellationToken ct = default, Run? planRun = null)
@@ -54,6 +56,11 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
             run.ApprovalExpiresAt = run.CreatedAt.AddHours(s.ApprovalTimeoutHours);
             run.ConfigVersions ??= JsonSerializer.Serialize((await config.SnapshotAsync(ct)).ToDictionary(x => x.Def.Key, x => x.Version));
         }
+        else if (MaintenanceService.IsRestricted(run))
+        {
+            // Outside a maintenance window the apply waits (roadmap 4); freezes are rejected by the endpoint beforehand.
+            (run.Status, run.ScheduledFor) = await maintenance.StartStatusAsync(run.CreatedAt, ct);
+        }
         db.Runs.Add(run);
         await db.SaveChangesAsync(ct);
 
@@ -62,12 +69,15 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
         var scope = kind == RunKind.Monitor ? "privilegierte Gruppen"
             : run.Scope?.ToString() ?? string.Join(", ", RunSummaryDto.IncludeList(run.IncludeMsa, run.IncludeGmsa, run.IncludeDmsa, run.IncludeWinLaps));
         changeLog.Add(user, kind switch { RunKind.Audit => "run.audit", RunKind.Monitor => "run.monitor", _ => "run.deploy" }, "run", run.Id.ToString(),
-            run.Status == RunStatus.AwaitingApproval
-                ? $"{what} #{run.Id} zur Freigabe eingereicht: {scope} über {run.PreferredDc}"
-                : $"{what} #{run.Id} gestartet: {scope} über {run.PreferredDc}");
+            run.Status switch
+            {
+                RunStatus.AwaitingApproval => $"{what} #{run.Id} zur Freigabe eingereicht: {scope} über {run.PreferredDc}",
+                RunStatus.Scheduled => $"{what} #{run.Id} für das nächste Wartungsfenster geplant ({MaintenanceCalendar.Format(run.ScheduledFor!.Value)}): {scope} über {run.PreferredDc}",
+                _ => $"{what} #{run.Id} gestartet: {scope} über {run.PreferredDc}",
+            });
         await db.SaveChangesAsync(ct);
         if (run.Status == RunStatus.AwaitingApproval) notifications.Enqueue(NotificationEvent.ApprovalRequested, run.Id);
-        else queue.Notify();
+        else if (run.Status == RunStatus.Queued) queue.Notify();
         return run;
     }
 
@@ -145,7 +155,7 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
     {
         if (!await db.Runs.AnyAsync(r => r.Id == id, ct)) return null;
         var cancelledQueued = await db.Runs
-            .Where(r => r.Id == id && (r.Status == RunStatus.Queued || r.Status == RunStatus.AwaitingApproval))
+            .Where(r => r.Id == id && (r.Status == RunStatus.Queued || r.Status == RunStatus.AwaitingApproval || r.Status == RunStatus.Scheduled))
             .ExecuteUpdateAsync(u => u
                 .SetProperty(r => r.Status, RunStatus.Cancelled)
                 .SetProperty(r => r.FinishedAt, DateTimeOffset.UtcNow)
@@ -179,9 +189,11 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
         run.ApprovalComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
         if (approve)
         {
-            run.Status = RunStatus.Queued;
+            // An approved apply still waits for the next maintenance window (a freeze moves it past the freeze).
+            (run.Status, run.ScheduledFor) = MaintenanceService.IsRestricted(run) ? await maintenance.StartStatusAsync(now, ct) : (RunStatus.Queued, null);
             changeLog.Add(user, "run.approve", "run", id.ToString(),
-                $"Deploy #{id} von {run.RequestedBy} freigegeben" + (run.ApprovalComment is null ? "" : $": {run.ApprovalComment}"));
+                $"Deploy #{id} von {run.RequestedBy} freigegeben" + (run.ApprovalComment is null ? "" : $": {run.ApprovalComment}")
+                + (run.Status == RunStatus.Scheduled ? $" – Start im Wartungsfenster ab {MaintenanceCalendar.Format(run.ScheduledFor!.Value)}" : ""));
         }
         else
         {
@@ -193,6 +205,7 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
         // Optimistic check: only one decision wins if two operators click at the same time.
         var updated = await db.Runs.Where(r => r.Id == id && r.Status == RunStatus.AwaitingApproval).ExecuteUpdateAsync(u => u
             .SetProperty(r => r.Status, run.Status)
+            .SetProperty(r => r.ScheduledFor, run.ScheduledFor)
             .SetProperty(r => r.ApprovedBy, run.ApprovedBy)
             .SetProperty(r => r.ApprovedAt, run.ApprovedAt)
             .SetProperty(r => r.ApprovalComment, run.ApprovalComment)
@@ -201,7 +214,7 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
         if (updated == 0) return (ApprovalOutcome.NotAwaiting, run);
         await db.Entry(run).ReloadAsync(ct);   // values written by ExecuteUpdate; also drops the tracked edits
         await db.SaveChangesAsync(ct);         // change log entry
-        if (approve) queue.Notify();
+        if (approve && run.Status == RunStatus.Queued) queue.Notify();
         return (ApprovalOutcome.Done, run);
     }
 

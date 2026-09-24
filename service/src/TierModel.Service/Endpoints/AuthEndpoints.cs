@@ -73,7 +73,7 @@ public static class AuthEndpoints
             var user = await db.Users.FirstOrDefaultAsync(u => u.Id == ctx.User.UserId());
             if (user is null) return Results.Unauthorized();
             if (user.AuthType != AuthType.Local)
-                return Results.Problem(title: "Windows-Konten haben hier kein Passwort", statusCode: 400);
+                return Results.Problem(title: "Windows- und Entra-Konten haben hier kein Passwort", statusCode: 400);
             if (!users.VerifyPassword(user, r.CurrentPassword ?? ""))
                 return Results.Problem(title: "Das aktuelle Passwort ist falsch", statusCode: 400);
             if (AuthClaims.PasswordProblem(r.NewPassword) is { } problem)
@@ -119,7 +119,7 @@ public static class AuthEndpoints
             var user = await db.Users.FindAsync(id);
             if (user is null) return Results.NotFound();
             // The role of Windows accounts comes from their AD groups at every sign-in.
-            if (user.AuthType == AuthType.Windows) r = r with { Role = user.Role };
+            if (user.AuthType is AuthType.Windows or AuthType.Entra) r = r with { Role = user.Role };
             if (!Enum.IsDefined(r.Role))
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["role"] = ["Unbekannte Rolle."] });
             var self = ctx.User.UserId() == id;
@@ -149,7 +149,7 @@ public static class AuthEndpoints
             var user = await db.Users.FindAsync(id);
             if (user is null) return Results.NotFound();
             if (user.AuthType != AuthType.Local)
-                return Results.Problem(title: "Windows-Konten haben hier kein Passwort", statusCode: 400);
+                return Results.Problem(title: "Windows- und Entra-Konten haben hier kein Passwort", statusCode: 400);
             if (AuthClaims.PasswordProblem(r.NewPassword) is { } problem)
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["newPassword"] = [problem] });
             users.SetPassword(user, r.NewPassword, mustChange: true);

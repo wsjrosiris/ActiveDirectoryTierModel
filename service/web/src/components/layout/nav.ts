@@ -1,4 +1,4 @@
-import { Activity, Bell, Sparkles, ShieldUser, HeartPulse, FileClock, KeyRound, LayoutDashboard, Rocket, ScanSearch, Settings2, SlidersHorizontal, Users, type LucideIcon } from 'lucide-react'
+import { Activity, Bell, CalendarRange, Cloud, FileText, Sparkles, ShieldUser, HeartPulse, FileClock, KeyRound, LayoutDashboard, Rocket, ScanSearch, Settings2, SlidersHorizontal, Users, type LucideIcon } from 'lucide-react'
 import type { Role } from '@/api/types'
 
 export interface NavItem {
@@ -18,12 +18,15 @@ export const mainNav: NavItem[] = [
   { to: '/privilegiert', label: 'Privilegierte Zugriffe', icon: ShieldUser, keywords: 'überwachung tier 0 domain admins mitglieder hygiene angriffspfade monitor geschützte gruppen' },
   { to: '/laeufe', label: 'Läufe', icon: Activity, keywords: 'runs jobs log warteschlange' },
   { to: '/aenderungen', label: 'Änderungsprotokoll', icon: FileClock, keywords: 'changelog audit log verlauf' },
+  { to: '/berichte', label: 'Berichte', icon: FileText, keywords: 'pdf report soll ist nachweis export drucken zeitraum privilegiert e-mail versand' },
 ]
 
 export const adminNav: NavItem[] = [
   { to: '/admin/benutzer', label: 'Benutzer', icon: Users, role: 'Admin', keywords: 'konten rollen' },
   { to: '/admin/windows-anmeldung', label: 'Windows-Anmeldung', icon: KeyRound, role: 'Admin', keywords: 'kerberos ntlm sso ad gruppen rollen domäne negotiate' },
+  { to: '/admin/entra-anmeldung', label: 'Entra-ID-Anmeldung', icon: Cloud, role: 'Admin', keywords: 'azure ad microsoft entra oidc openid sso cloud gruppen app-rollen mandant' },
   { to: '/admin/benachrichtigungen', label: 'Benachrichtigungen', icon: Bell, role: 'Admin', keywords: 'e-mail smtp teams webhook alarm notification' },
+  { to: '/admin/wartungsfenster', label: 'Wartungsfenster', icon: CalendarRange, role: 'Admin', keywords: 'sperrzeit freeze change freeze wartung zeitfenster anwenden geplant' },
   { to: '/admin/einstellungen', label: 'Einstellungen', icon: Settings2, role: 'Admin', keywords: 'settings dc sprache freigabe vier-augen approval planung plan gültigkeit' },
   { to: '/einrichtung', label: 'Einrichtung', icon: Sparkles, role: 'Admin', keywords: 'assistent setup erste schritte domäne präfix vorlage' },
   { to: '/admin/systemzustand', label: 'Systemzustand', icon: HeartPulse, role: 'Admin', keywords: 'health status zertifikat datenbank speicherplatz powershell version worker dienst ampel' },

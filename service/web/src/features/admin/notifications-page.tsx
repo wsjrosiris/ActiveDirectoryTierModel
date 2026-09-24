@@ -3,6 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
   Bell,
+  CloudUpload,
+  FileClock,
+  Radio,
   CheckCircle2,
   Hourglass,
   KeySquare,
@@ -24,7 +27,19 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, ApiError } from '@/api/client'
-import type { ChannelEvents, ChannelInput, ChannelType, NotificationChannel, SmtpSecurity, SmtpSettings, SmtpUpdate } from '@/api/types'
+import type {
+  ChannelEvents,
+  ChannelInput,
+  ChannelType,
+  LogAnalyticsInput,
+  NotificationChannel,
+  SmtpSecurity,
+  SmtpSettings,
+  SmtpUpdate,
+  SyslogFormat,
+  SyslogProtocol,
+  SyslogSettings,
+} from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -67,7 +82,19 @@ const typeMeta: Record<ChannelType, { label: string; icon: React.ReactNode; tone
   Email: { label: 'E-Mail', icon: <Mail />, tone: 'bg-sky-500/10 text-sky-600 dark:text-sky-300', targetLabel: 'Empfänger' },
   Teams: { label: 'Microsoft Teams', icon: <MessagesSquare />, tone: 'bg-violet-500/10 text-violet-600 dark:text-violet-300', targetLabel: 'Webhook-URL' },
   Webhook: { label: 'Webhook', icon: <Webhook />, tone: 'bg-amber-500/10 text-amber-700 dark:text-amber-300', targetLabel: 'URL' },
+  Syslog: { label: 'Syslog (SIEM)', icon: <Radio />, tone: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300', targetLabel: 'Server' },
+  LogAnalytics: { label: 'Log Analytics', icon: <CloudUpload />, tone: 'bg-blue-500/10 text-blue-700 dark:text-blue-300', targetLabel: 'Datensammlungsendpunkt' },
 }
+
+const typeHints: Record<ChannelType, string> = {
+  Email: 'Nachricht an Postfächer über den SMTP-Server',
+  Teams: 'Karte in einem Teams-Kanal',
+  Webhook: 'JSON per HTTP POST',
+  Syslog: 'CEF oder RFC 5424 an einen SIEM-Collector',
+  LogAnalytics: 'Microsoft Sentinel über die Logs Ingestion API',
+}
+
+const isSiem = (t: ChannelType) => t === 'Syslog' || t === 'LogAnalytics'
 
 const eventMeta: { key: keyof ChannelEvents; label: string; description: string; icon: React.ReactNode }[] = [
   { key: 'drift', label: 'Drift', description: 'Ein Audit hat Abweichungen vom Soll-Zustand gefunden.', icon: <ScanSearch /> },
@@ -89,7 +116,7 @@ function NotificationsPage() {
       <PageHeader
         icon={<Bell />}
         title="Benachrichtigungen"
-        description="E-Mail, Microsoft Teams oder Webhooks bei Drift, Fehlern, Anwendungen, Freigaben und Änderungen an privilegierten Gruppen."
+        description="E-Mail, Microsoft Teams, Webhooks oder SIEM (Syslog, Log Analytics) bei Drift, Fehlern, Anwendungen, Freigaben und Änderungen an privilegierten Gruppen."
         actions={<Button onClick={() => setEditing('new')}><Plus /> Kanal hinzufügen</Button>}
       />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
@@ -186,9 +213,16 @@ function ChannelCard({ channel: c, onEdit, smtpMissing }: { channel: Notificatio
                   </span>
                 </Tooltip>
               ))
-            ) : (
-              <span className="text-xs text-muted-foreground">Keine Ereignisse ausgewählt</span>
+            ) : null}
+            {c.forwardChangeLog && (
+              <Tooltip content="Jeder Eintrag des Änderungsprotokolls wird zusätzlich weitergeleitet.">
+                <span className="inline-flex items-center gap-1 rounded-full border bg-card px-2 py-0.5 text-xs font-medium [&_svg]:size-3 [&_svg]:text-muted-foreground">
+                  <FileClock />
+                  Änderungsprotokoll
+                </span>
+              </Tooltip>
             )}
+            {!active.length && !c.forwardChangeLog && <span className="text-xs text-muted-foreground">Keine Ereignisse ausgewählt</span>}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -234,6 +268,13 @@ function ChannelCard({ channel: c, onEdit, smtpMissing }: { channel: Notificatio
           <span>Noch nichts gesendet</span>
         )}
         {c.lastError && c.lastSentAt && <span title={formatDateTime(c.lastSentAt)}>Zuletzt erfolgreich {formatRelative(c.lastSentAt)}</span>}
+        {isSiem(c.type) && (c.droppedEvents ?? 0) > 0 && (
+          <Tooltip content="Ereignisse, die seit dem Start des Dienstes nicht weitergeleitet werden konnten (Warteschlange voll oder Empfänger nicht erreichbar).">
+            <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300">
+              <AlertTriangle className="size-3.5" /> {c.droppedEvents} Ereignis{c.droppedEvents === 1 ? '' : 'se'} verworfen
+            </span>
+          </Tooltip>
+        )}
         {c.type === 'Email' && smtpMissing && (
           <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300">
             <AlertTriangle className="size-3.5" /> SMTP-Server nicht konfiguriert
@@ -271,6 +312,49 @@ function targetError(type: ChannelType, target: string, required: boolean): stri
   }
 }
 
+const defaultSyslog: SyslogSettings = { host: '', port: 514, protocol: 'Udp', format: 'Cef', validateCertificate: true }
+const defaultPorts: Record<SyslogProtocol, number> = { Udp: 514, Tcp: 514, Tls: 6514 }
+type LaForm = Omit<LogAnalyticsInput, 'clientSecret'> & { clientSecret: string }
+
+const emptyLa: LaForm = { tenantId: '', clientId: '', endpointUrl: '', dcrImmutableId: '', streamName: 'Custom-TierModel_CL', clientSecret: '' }
+
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const HOST_RE = /^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,62})(?:\.[A-Za-z0-9-]{1,63})*$|^[0-9a-fA-F:.]+$/
+
+function syslogErrors(s: SyslogSettings): Partial<Record<'host' | 'port', string>> {
+  const e: Partial<Record<'host' | 'port', string>> = {}
+  if (!s.host.trim()) e.host = 'Server angeben.'
+  else if (!HOST_RE.test(s.host.trim())) e.host = 'Gültigen Hostnamen oder IP-Adresse angeben.'
+  if (!Number.isInteger(s.port) || s.port < 1 || s.port > 65535) e.port = '1–65535'
+  return e
+}
+
+type LaField = 'tenantId' | 'clientId' | 'endpointUrl' | 'dcrImmutableId' | 'streamName' | 'clientSecret'
+
+function laErrors(l: LaForm, secretRequired: boolean): Partial<Record<LaField, string>> {
+  const e: Partial<Record<LaField, string>> = {}
+  if (!GUID_RE.test(l.tenantId.trim())) e.tenantId = 'Mandanten-ID als GUID angeben.'
+  if (!GUID_RE.test(l.clientId.trim())) e.clientId = 'Anwendungs-ID als GUID angeben.'
+  try {
+    const u = new URL(l.endpointUrl.trim())
+    if (u.protocol !== 'https:') e.endpointUrl = 'Die Adresse muss mit https:// beginnen.'
+  } catch {
+    e.endpointUrl = 'Vollständige Adresse angeben (https://…ingest.monitor.azure.com).'
+  }
+  if (!/^dcr-[0-9a-f]{32}$/i.test(l.dcrImmutableId.trim())) e.dcrImmutableId = 'Format dcr- gefolgt von 32 Hexadezimalzeichen.'
+  if (!/^(Custom|Microsoft)-[A-Za-z0-9_]{1,100}$/.test(l.streamName.trim())) e.streamName = 'Format Custom-Tabelle, z. B. Custom-TierModel_CL.'
+  if (secretRequired && !l.clientSecret) e.clientSecret = 'Geheimen Clientschlüssel angeben.'
+  return e
+}
+
+/** Server field names ("syslog.host", "logAnalytics.tenantId") → the form's keys. */
+function serverFieldErrors(e: unknown): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (e instanceof ApiError && e.errors)
+    for (const [k, v] of Object.entries(e.errors)) out[k.replace(/^(syslog|logAnalytics)\./i, '').replace(/^./, (c) => c.toLowerCase())] = v[0]
+  return out
+}
+
 function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' | null; onClose: () => void }) {
   const isNew = value === 'new'
   const channel = value && value !== 'new' ? value : null
@@ -280,6 +364,10 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
   const [enabled, setEnabled] = React.useState(true)
   const [target, setTarget] = React.useState('')
   const [events, setEvents] = React.useState<ChannelEvents>(emptyEvents)
+  const [syslog, setSyslog] = React.useState<SyslogSettings>(defaultSyslog)
+  const [la, setLa] = React.useState<LaForm>(emptyLa)
+  const [forwardChangeLog, setForwardChangeLog] = React.useState(false)
+  const [serverErrors, setServerErrors] = React.useState<Record<string, string>>({})
   const [touched, setTouched] = React.useState(false)
   const allChannels = useQuery({ queryKey: channelsKey, queryFn: api.notifications.channels })
   const smtpData = useQuery({ queryKey: smtpKey, queryFn: api.notifications.smtp })
@@ -301,17 +389,30 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
     // Teams/Webhook URLs are never returned in full: the field stays empty unless a new URL is typed.
     setTarget(channel?.type === 'Email' ? channel.target : '')
     setEvents(channel?.events ?? emptyEvents)
+    setSyslog(channel?.syslog ?? defaultSyslog)
+    setLa(channel?.logAnalytics ? { ...channel.logAnalytics, clientSecret: '' } : emptyLa)
+    setForwardChangeLog(channel?.forwardChangeLog ?? isNew)
+    setServerErrors({})
     setTouched(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value])
 
-  const secretTarget = type !== 'Email'
+  const siem = isSiem(type)
+  const secretTarget = type !== 'Email' && !siem
   const typeChanged = !!channel && channel.type !== type
   // A kept URL is only meaningful for an unchanged Teams/Webhook channel.
   const keepsStoredUrl = !!channel && secretTarget && !typeChanged && !target.trim()
   const targetRequired = isNew || typeChanged || type === 'Email'
-  const tError = targetError(type, target, targetRequired)
-  const error = !name.trim() ? 'Name erforderlich.' : tError
+  const hasStoredSecret = !!channel && channel.type === 'LogAnalytics' && !typeChanged && !!channel.logAnalytics?.hasClientSecret
+  const sErr = type === 'Syslog' ? syslogErrors(syslog) : {}
+  const lErr = type === 'LogAnalytics' ? laErrors(la, !hasStoredSecret) : {}
+  const fieldError = (k: string) => (touched ? ((sErr as Record<string, string>)[k] ?? (lErr as Record<string, string>)[k]) : undefined) ?? serverErrors[k]
+  const tError = siem ? null : targetError(type, target, targetRequired)
+  const error = !name.trim()
+    ? 'Name erforderlich.'
+    : siem
+      ? (Object.values(sErr)[0] ?? Object.values(lErr)[0] ?? null)
+      : tError
 
   const save = useMutation({
     mutationFn: () => {
@@ -319,17 +420,34 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
         name: name.trim(),
         type,
         enabled,
-        target: keepsStoredUrl ? null : target.trim(),
+        target: siem ? null : keepsStoredUrl ? null : target.trim(),
         events,
       }
+      if (type === 'Syslog') body.syslog = { ...syslog, host: syslog.host.trim() }
+      if (type === 'LogAnalytics')
+        body.logAnalytics = {
+          tenantId: la.tenantId.trim(),
+          clientId: la.clientId.trim(),
+          endpointUrl: la.endpointUrl.trim(),
+          dcrImmutableId: la.dcrImmutableId.trim(),
+          streamName: la.streamName.trim(),
+          clientSecret: la.clientSecret || null,
+        }
+      if (siem) body.forwardChangeLog = forwardChangeLog
       return isNew ? api.notifications.createChannel(body) : api.notifications.updateChannel(channel!.id, body)
     },
+    meta: { silent: true },
     onSuccess: (c) => {
       qc.invalidateQueries({ queryKey: channelsKey })
       toast.success(isNew ? `Kanal „${c.name}“ angelegt` : 'Änderungen gespeichert', {
         description: isNew ? 'Mit „Testnachricht senden“ können Sie die Zustellung prüfen.' : undefined,
       })
       onClose()
+    },
+    onError: (e) => {
+      const fields = serverFieldErrors(e)
+      setServerErrors(fields)
+      toast.error('Nicht gespeichert', { description: Object.values(fields)[0] ?? errorMessage(e) })
     },
   })
 
@@ -341,6 +459,15 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
         : type === 'Teams'
           ? 'https://contoso.webhook.office.com/…'
           : 'https://monitoring.contoso.com/hooks/tiermodel'
+
+  const setS = <K extends keyof SyslogSettings>(k: K, v: SyslogSettings[K]) => {
+    setSyslog((s) => ({ ...s, [k]: v }))
+    setServerErrors((e) => ({ ...e, [k]: '' }))
+  }
+  const setL = (k: LaField, v: string) => {
+    setLa((s) => ({ ...s, [k]: v }))
+    setServerErrors((e) => ({ ...e, [k]: '' }))
+  }
 
   return (
     <Sheet open={!!value} onOpenChange={(o) => !o && onClose()}>
@@ -362,60 +489,174 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
               <Input id="ch-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="z. B. Tier-0-Team" autoFocus={isNew} autoComplete="off" />
             </Field>
             <div className="grid gap-1.5">
-              <p className="text-[13px] font-medium">Typ</p>
-              <Segmented<ChannelType>
-                aria-label="Typ"
-                value={type}
-                onValueChange={(t) => {
-                  setType(t)
-                  setTarget(channel && channel.type === t && t === 'Email' ? channel.target : '')
-                }}
-                options={(Object.keys(typeMeta) as ChannelType[]).map((t) => ({ value: t, label: typeMeta[t].label, icon: typeMeta[t].icon }))}
-              />
+              <p id="ch-type-label" className="text-[13px] font-medium">Typ</p>
+              <div role="radiogroup" aria-labelledby="ch-type-label" className="grid grid-cols-2 gap-2">
+                {(Object.keys(typeMeta) as ChannelType[]).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    role="radio"
+                    aria-checked={type === t}
+                    onClick={() => {
+                      setType(t)
+                      setTarget(channel && channel.type === t && t === 'Email' ? channel.target : '')
+                      setServerErrors({})
+                    }}
+                    className={cn(
+                      'flex min-w-0 items-start gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-all outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring',
+                      type === t && 'border-primary/50 bg-primary/5 ring-1 ring-primary/30',
+                    )}
+                  >
+                    <span className={cn('mt-0.5 grid size-7 shrink-0 place-content-center rounded-md [&_svg]:size-4', typeMeta[t].tone)}>{typeMeta[t].icon}</span>
+                    <span className="grid min-w-0">
+                      <span className="text-[13px] font-medium">{typeMeta[t].label}</span>
+                      <span className="text-[11.5px] leading-snug text-muted-foreground">{typeHints[t]}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <Field
-              label={typeMeta[type].targetLabel}
-              htmlFor="ch-target"
-              required={targetRequired}
-              error={touched || target ? tError ?? undefined : undefined}
-              hint={
-                type === 'Email'
-                  ? 'Adressen eingeben oder vorschlagen lassen, mit Enter oder Komma übernehmen. Versand über den SMTP-Server rechts.'
-                  : channel && !typeChanged
-                    ? 'Die gespeicherte URL wird aus Sicherheitsgründen nur gekürzt angezeigt. Leer lassen, um sie beizubehalten.'
-                    : type === 'Teams'
-                      ? 'Webhook-URL eines Teams-Kanals (Workflows → „Beim Empfang einer Webhookanforderung posten“).'
-                      : 'Der Dienst sendet ein JSON-Dokument per HTTP POST an diese Adresse.'
-              }
-            >
-              {type === 'Email' ? (
-                <MultiCombobox
-                  id="ch-target"
-                  values={splitAddresses(target)}
-                  onChange={(v) => setTarget(v.join(', '))}
-                  options={addressOptions}
-                  mono
-                  placeholder="admin@contoso.com"
-                  emptyText="Adresse eingeben und mit Enter übernehmen"
-                  validateCustom={(v) => (EMAIL_RE.test(v) ? null : `„${v}“ ist keine gültige E-Mail-Adresse`)}
-                  invalid={(touched || !!target) && !!tError}
-                />
-              ) : (
-                <Input
-                  id="ch-target"
-                  value={target}
-                  onChange={(e) => setTarget(e.target.value)}
-                  placeholder={placeholder}
-                  className="font-mono text-[13px]"
-                  autoComplete="off"
-                  spellCheck={false}
-                  inputMode="url"
-                  aria-invalid={(touched || !!target) && !!tError ? true : undefined}
-                />
-              )}
-            </Field>
+            {type === 'Syslog' ? (
+              <div className="grid gap-4 rounded-lg border bg-muted/20 p-3.5">
+                <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-3">
+                  <Field label="Server" htmlFor="ch-sys-host" required error={fieldError('host')} hint="Hostname oder IP-Adresse des Collectors">
+                    <Input id="ch-sys-host" value={syslog.host} onChange={(e) => setS('host', e.target.value)} placeholder="siem-collector.contoso.com" className="font-mono text-[13px]" autoComplete="off" spellCheck={false} aria-invalid={!!fieldError('host') || undefined} />
+                  </Field>
+                  <Field label="Port" htmlFor="ch-sys-port" error={fieldError('port')}>
+                    <Input id="ch-sys-port" type="number" min={1} max={65535} value={Number.isNaN(syslog.port) ? '' : syslog.port} onChange={(e) => setS('port', e.target.valueAsNumber)} aria-invalid={!!fieldError('port') || undefined} />
+                  </Field>
+                </div>
+                <div className="grid gap-1.5">
+                  <p className="text-[13px] font-medium">Übertragung</p>
+                  <Segmented<SyslogProtocol>
+                    aria-label="Übertragung"
+                    value={syslog.protocol}
+                    onValueChange={(p) => setSyslog((s) => ({ ...s, protocol: p, port: s.port === defaultPorts[s.protocol] || Number.isNaN(s.port) ? defaultPorts[p] : s.port }))}
+                    options={[
+                      { value: 'Udp', label: 'UDP' },
+                      { value: 'Tcp', label: 'TCP' },
+                      { value: 'Tls', label: 'TCP + TLS' },
+                    ]}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {syslog.protocol === 'Udp'
+                      ? 'Schnell, aber ohne Zustellbestätigung; lange Meldungen werden auf 8 KB gekürzt.'
+                      : syslog.protocol === 'Tcp'
+                        ? 'Zuverlässige Zustellung mit Längenpräfix (RFC 6587), unverschlüsselt.'
+                        : 'Verschlüsselt nach RFC 5425 (üblich: Port 6514).'}
+                  </p>
+                </div>
+                {syslog.protocol === 'Tls' && (
+                  <label htmlFor="ch-sys-validate" className="flex items-center justify-between gap-4 rounded-lg border bg-card px-3 py-2.5">
+                    <span className="grid">
+                      <span className="text-[13px] font-medium">Zertifikat prüfen</span>
+                      <span className="text-xs text-muted-foreground">Nur für Test-Collectors mit selbstsigniertem Zertifikat ausschalten.</span>
+                    </span>
+                    <Switch id="ch-sys-validate" checked={syslog.validateCertificate} onCheckedChange={(v) => setS('validateCertificate', v)} />
+                  </label>
+                )}
+                <div className="grid gap-1.5">
+                  <p className="text-[13px] font-medium">Format</p>
+                  <Segmented<SyslogFormat>
+                    aria-label="Format"
+                    value={syslog.format}
+                    onValueChange={(f) => setS('format', f)}
+                    options={[
+                      { value: 'Cef', label: 'CEF' },
+                      { value: 'Rfc5424', label: 'RFC 5424' },
+                    ]}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {syslog.format === 'Cef'
+                      ? 'Common Event Format – für Microsoft Sentinel (CommonSecurityLog), ArcSight, QRadar u. a.'
+                      : 'Strukturierte Daten nach RFC 5424 mit Klartext – für Splunk, Graylog, Elastic u. a.'}
+                  </p>
+                </div>
+              </div>
+            ) : type === 'LogAnalytics' ? (
+              <div className="grid gap-4 rounded-lg border bg-muted/20 p-3.5">
+                <p className="text-xs text-muted-foreground">
+                  Eine App-Registrierung mit der Rolle „Monitoring Metrics Publisher“ auf der Datensammlungsregel sendet die Ereignisse über die Logs Ingestion API in eine eigene Tabelle.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Mandanten-ID" htmlFor="ch-la-tenant" required error={fieldError('tenantId')}>
+                    <Input id="ch-la-tenant" value={la.tenantId} onChange={(e) => setL('tenantId', e.target.value)} placeholder="00000000-0000-0000-0000-000000000000" className="font-mono text-[12.5px]" autoComplete="off" spellCheck={false} aria-invalid={!!fieldError('tenantId') || undefined} />
+                  </Field>
+                  <Field label="Anwendungs-ID (Client)" htmlFor="ch-la-client" required error={fieldError('clientId')}>
+                    <Input id="ch-la-client" value={la.clientId} onChange={(e) => setL('clientId', e.target.value)} placeholder="00000000-0000-0000-0000-000000000000" className="font-mono text-[12.5px]" autoComplete="off" spellCheck={false} aria-invalid={!!fieldError('clientId') || undefined} />
+                  </Field>
+                </div>
+                <Field
+                  label="Geheimer Clientschlüssel"
+                  htmlFor="ch-la-secret"
+                  required={!hasStoredSecret}
+                  error={fieldError('clientSecret')}
+                  hint={hasStoredSecret ? 'Ein Schlüssel ist gespeichert. Leer lassen, um ihn beizubehalten.' : 'Wird verschlüsselt gespeichert und nie wieder angezeigt.'}
+                >
+                  <Input id="ch-la-secret" type="password" autoComplete="new-password" value={la.clientSecret} onChange={(e) => setL('clientSecret', e.target.value)} placeholder={hasStoredSecret ? '•••••••• (unverändert)' : ''} aria-invalid={!!fieldError('clientSecret') || undefined} />
+                </Field>
+                <Field label="Datensammlungsendpunkt (DCE)" htmlFor="ch-la-dce" required error={fieldError('endpointUrl')} hint="Logs-Ingestion-Adresse des Endpunkts">
+                  <Input id="ch-la-dce" value={la.endpointUrl} onChange={(e) => setL('endpointUrl', e.target.value)} placeholder="https://tiermodel-dce-abcd.westeurope-1.ingest.monitor.azure.com" className="font-mono text-[12.5px]" autoComplete="off" spellCheck={false} inputMode="url" aria-invalid={!!fieldError('endpointUrl') || undefined} />
+                </Field>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Unveränderliche ID der Regel (DCR)" htmlFor="ch-la-dcr" required error={fieldError('dcrImmutableId')}>
+                    <Input id="ch-la-dcr" value={la.dcrImmutableId} onChange={(e) => setL('dcrImmutableId', e.target.value)} placeholder="dcr-0123456789abcdef…" className="font-mono text-[12.5px]" autoComplete="off" spellCheck={false} aria-invalid={!!fieldError('dcrImmutableId') || undefined} />
+                  </Field>
+                  <Field label="Stream" htmlFor="ch-la-stream" required error={fieldError('streamName')}>
+                    <Input id="ch-la-stream" value={la.streamName} onChange={(e) => setL('streamName', e.target.value)} placeholder="Custom-TierModel_CL" className="font-mono text-[12.5px]" autoComplete="off" spellCheck={false} aria-invalid={!!fieldError('streamName') || undefined} />
+                  </Field>
+                </div>
+              </div>
+            ) : (
+              <Field
+                label={typeMeta[type].targetLabel}
+                htmlFor="ch-target"
+                required={targetRequired}
+                error={touched || target ? tError ?? undefined : undefined}
+                hint={
+                  type === 'Email'
+                    ? 'Adressen eingeben oder vorschlagen lassen, mit Enter oder Komma übernehmen. Versand über den SMTP-Server rechts.'
+                    : channel && !typeChanged
+                      ? 'Die gespeicherte URL wird aus Sicherheitsgründen nur gekürzt angezeigt. Leer lassen, um sie beizubehalten.'
+                      : type === 'Teams'
+                        ? 'Webhook-URL eines Teams-Kanals (Workflows → „Beim Empfang einer Webhookanforderung posten“).'
+                        : 'Der Dienst sendet ein JSON-Dokument per HTTP POST an diese Adresse.'
+                }
+              >
+                {type === 'Email' ? (
+                  <MultiCombobox
+                    id="ch-target"
+                    values={splitAddresses(target)}
+                    onChange={(v) => setTarget(v.join(', '))}
+                    options={addressOptions}
+                    mono
+                    placeholder="admin@contoso.com"
+                    emptyText="Adresse eingeben und mit Enter übernehmen"
+                    validateCustom={(v) => (EMAIL_RE.test(v) ? null : `„${v}“ ist keine gültige E-Mail-Adresse`)}
+                    invalid={(touched || !!target) && !!tError}
+                  />
+                ) : (
+                  <Input
+                    id="ch-target"
+                    value={target}
+                    onChange={(e) => setTarget(e.target.value)}
+                    placeholder={placeholder}
+                    className="font-mono text-[13px]"
+                    autoComplete="off"
+                    spellCheck={false}
+                    inputMode="url"
+                    aria-invalid={(touched || !!target) && !!tError ? true : undefined}
+                  />
+                )}
+              </Field>
+            )}
             <div className="grid gap-2">
               <p className="text-[13px] font-medium">Ereignisse</p>
+              {siem && (
+                <p className="-mt-1 text-xs text-muted-foreground">
+                  Jedes Ereignis wird als eigene Meldung mit festen Feldern gesendet; bei „Privilegierte Gruppen“ je Änderung und je neuem Befund eine Meldung.
+                </p>
+              )}
               <div className="grid gap-2">
                 {eventMeta.map((e) => (
                   <label
@@ -433,6 +674,23 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
                     </span>
                   </label>
                 ))}
+                {siem && (
+                  <label
+                    htmlFor="ch-ev-changelog"
+                    className={cn(
+                      'flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors hover:bg-accent/40',
+                      forwardChangeLog && 'border-primary/40 bg-primary/[0.04]',
+                    )}
+                  >
+                    <Checkbox id="ch-ev-changelog" checked={forwardChangeLog} onCheckedChange={(v) => setForwardChangeLog(v === true)} className="mt-0.5" />
+                    <span className="grid">
+                      <span className="flex items-center gap-1.5 text-[13px] font-medium [&_svg]:size-3.5 [&_svg]:text-muted-foreground"><FileClock />Änderungsprotokoll weiterleiten</span>
+                      <span className="text-xs text-muted-foreground">
+                        Jeder Eintrag (Anmeldungen, Benutzer, Einstellungen, Konfiguration, Läufe) wird zeitnah weitergeleitet. Bei Überlast werden Einträge verworfen und am Kanal gezählt.
+                      </span>
+                    </span>
+                  </label>
+                )}
               </div>
             </div>
             <label htmlFor="ch-enabled" className="flex items-center justify-between gap-4 rounded-lg border px-3.5 py-3">

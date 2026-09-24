@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using MimeKit;
 using TierModel.Service.Data;
 using TierModel.Service.Monitoring;
+using TierModel.Service.Notifications.Siem;
 using TierModel.Service.Runs;
 
 namespace TierModel.Service.Notifications;
@@ -30,7 +31,8 @@ public class NotificationQueue
 
 public record NotificationMessage(NotificationEvent? Event, string Title, string Text, IReadOnlyList<(string Label, string Value)> Facts, string? Url, string Color);
 
-public class NotificationService(AppDbContext db, SettingsService settings, ChangeLogService changeLog, IHttpClientFactory httpFactory, ILogger<NotificationService> logger)
+public class NotificationService(AppDbContext db, SettingsService settings, ChangeLogService changeLog, IHttpClientFactory httpFactory, SiemSender siem,
+    ILogger<NotificationService> logger)
 {
     public static readonly TimeSpan[] RetryDelays = [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)];
 
@@ -149,7 +151,21 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
         PrivilegedEvaluation? evaluation = null;
         if (e == NotificationEvent.PrivilegedChange)
             evaluation = PrivilegedEvaluation.Deserialize(await db.PrivilegedSnapshots.AsNoTracking().Where(p => p.RunId == runId).Select(p => p.Evaluation).FirstOrDefaultAsync(ct));
-        await SendToAsync(channels, BuildMessage(e, run, (await settings.GetAsync(ct)).PublicBaseUrl, plan, evaluation), ct);
+        var publicBaseUrl = (await settings.GetAsync(ct)).PublicBaseUrl;
+        // SIEM channels get structured events: one per membership change and new finding of a monitor run.
+        IReadOnlyList<SiemEvent>? siemEvents = null;
+        if (channels.Any(c => SiemChannelConfig.IsSiem(c.Type)))
+        {
+            if (e == NotificationEvent.PrivilegedChange && evaluation is not null)
+            {
+                var snapshotId = await db.PrivilegedSnapshots.AsNoTracking().Where(p => p.RunId == runId).Select(p => p.Id).FirstOrDefaultAsync(ct);
+                var previous = PrivilegedEvaluation.Deserialize(await db.PrivilegedSnapshots.AsNoTracking()
+                    .Where(p => p.DomainId == 1 && p.Id < snapshotId).OrderByDescending(p => p.Id).Select(p => p.Evaluation).FirstOrDefaultAsync(ct));
+                siemEvents = SiemEvents.ForMonitor(run, evaluation, previous, publicBaseUrl);
+            }
+            else siemEvents = [SiemEvents.ForRun(e, run, publicBaseUrl)];
+        }
+        await SendToAsync(channels, BuildMessage(e, run, publicBaseUrl, plan, evaluation), ct, siemEvents);
     }
 
     /// <summary>Sends a ready-made message (events without a run) to every channel that wants its event.</summary>
@@ -160,7 +176,8 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
         if (channels.Count > 0) await SendToAsync(channels, message, ct);
     }
 
-    private async Task SendToAsync(List<NotificationChannel> channels, NotificationMessage message, CancellationToken ct)
+    private async Task SendToAsync(List<NotificationChannel> channels, NotificationMessage message, CancellationToken ct,
+        IReadOnlyList<SiemEvent>? siemEvents = null)
     {
         foreach (var channel in channels)
         {
@@ -169,7 +186,8 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
             {
                 try
                 {
-                    await SendAsync(channel, message, ct);
+                    if (siemEvents is not null && SiemChannelConfig.IsSiem(channel.Type)) await siem.SendAsync(channel, siemEvents, ct);
+                    else await SendAsync(channel, message, ct);
                     error = null;
                     break;
                 }
@@ -194,6 +212,11 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
 
     public async Task SendAsync(NotificationChannel channel, NotificationMessage message, CancellationToken ct)
     {
+        if (SiemChannelConfig.IsSiem(channel.Type))
+        {
+            await siem.SendAsync(channel, [SiemEvents.FromMessage(message)], ct);
+            return;
+        }
         var target = settings.Secrets.Unprotect(channel.TargetProtected);
         switch (channel.Type)
         {

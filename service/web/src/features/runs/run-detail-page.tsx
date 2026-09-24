@@ -41,7 +41,7 @@ export function Component() {
     // Awaiting approval: someone else may approve/reject at any time, so keep refreshing (a bit slower).
     refetchInterval: (q) => {
       const st = q.state.data?.status
-      return st === 'Queued' || st === 'Running' ? 5000 : st === 'AwaitingApproval' ? 8000 : false
+      return st === 'Queued' || st === 'Running' ? 5000 : st === 'AwaitingApproval' ? 8000 : st === 'Scheduled' ? 15000 : false
     },
   })
   const log = useRunLog(id, run.data?.status)
@@ -49,6 +49,7 @@ export function Component() {
   const status = log.status && run.data && statusRank(log.status) > statusRank(run.data.status) ? log.status : run.data?.status
   const active = status === 'Queued' || status === 'Running'
   const awaiting = status === 'AwaitingApproval'
+  const scheduled = status === 'Scheduled'
   // While awaiting approval there is no log yet: show the pinned configuration; switch to the live log once approved.
   const wasAwaiting = React.useRef<boolean | null>(null)
   React.useEffect(() => {
@@ -109,7 +110,7 @@ export function Component() {
                     {r.kind === 'Deploy' ? (r.mode === 'Apply' ? 'Deploy' : 'Deploy (Planung)') : r.kind === 'Monitor' ? 'Überwachung' : 'Audit'}{' '}
                     <span className="font-mono text-muted-foreground">#{r.id}</span>
                   </h1>
-                  <RunStatusBadge status={status ?? r.status} />
+                  <RunStatusBadge status={status ?? r.status} scheduledFor={r.scheduledFor} />
                   {r.kind === 'Deploy' && (
                     <Badge variant={r.mode === 'Apply' ? 'danger' : 'info'}>{r.mode === 'Apply' ? 'Anwenden' : 'WhatIf'}</Badge>
                   )}
@@ -129,7 +130,7 @@ export function Component() {
                 </p>
               </div>
             </div>
-            {canCancel && active && (
+            {canCancel && (active || scheduled) && (
               <Button
                 variant="outline"
                 className="text-destructive hover:text-destructive"
@@ -137,7 +138,9 @@ export function Component() {
                 onClick={async () => {
                   const ok = await confirm({
                     title: `Lauf #${r.id} abbrechen?`,
-                    description: r.status === 'Running' ? 'Der laufende PowerShell-Prozess wird beendet. Bereits durchgeführte Änderungen bleiben bestehen.' : 'Der Lauf wird aus der Warteschlange entfernt.',
+                    description: r.status === 'Running'
+                      ? 'Der laufende PowerShell-Prozess wird beendet. Bereits durchgeführte Änderungen bleiben bestehen.'
+                      : scheduled ? 'Der Lauf wird nicht im Wartungsfenster gestartet.' : 'Der Lauf wird aus der Warteschlange entfernt.',
                     confirmText: 'Lauf abbrechen',
                     cancelText: 'Weiterlaufen lassen',
                     destructive: true,
@@ -151,6 +154,7 @@ export function Component() {
           </div>
 
           {awaiting && <ApprovalPanel run={r} onShowConfig={() => setTab('config')} />}
+          {scheduled && <ScheduledPanel run={r} />}
 
           <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Meta label="Bereich">
@@ -214,7 +218,9 @@ export function Component() {
                 emptyText={
                   awaiting
                     ? 'Der Lauf startet erst nach der Freigabe – dann erscheint hier die Ausgabe.'
-                    : status === 'Rejected'
+                    : scheduled
+                      ? 'Der Lauf startet automatisch im nächsten Wartungsfenster – dann erscheint hier die Ausgabe.'
+                      : status === 'Rejected'
                       ? 'Der Lauf wurde nicht ausgeführt (Freigabe abgelehnt oder abgelaufen).'
                       : undefined
                 }
@@ -244,7 +250,26 @@ export function Component() {
   )
 }
 
-const lifecycle: Record<RunStatus, number> = { AwaitingApproval: 0, Queued: 1, Running: 2, Succeeded: 3, Failed: 3, Cancelled: 3, Rejected: 3 }
+/** Apply waiting for a maintenance window (roadmap 4). */
+function ScheduledPanel({ run }: { run: RunDetail }) {
+  const isAdmin = useCan('Admin')
+  return (
+    <div className="mb-6 flex gap-3 rounded-xl border border-sky-500/30 bg-sky-500/5 px-4 py-3.5 text-[13px] text-sky-950 dark:text-sky-100">
+      <CalendarClock className="mt-0.5 size-5 shrink-0 text-sky-600 dark:text-sky-300" />
+      <div className="grid gap-1">
+        <p className="font-medium">Geplant für {run.scheduledFor ? formatDateTime(run.scheduledFor) : 'das nächste Wartungsfenster'}</p>
+        <p className="text-sky-900/80 dark:text-sky-200/80">
+          Änderungen im Active Directory werden nur in Wartungsfenstern angewendet. Der Lauf wird dann automatisch gestartet und wendet die
+          {run.planRunId ? ` geprüfte Konfiguration der Planung #${run.planRunId}` : ' freigegebene Konfiguration'} an. Fällt der Termin in eine Sperrzeit,
+          verschiebt er sich auf das erste Fenster danach.
+          {isAdmin && <> Fenster und Sperrzeiten: <Link to="/admin/wartungsfenster" className="font-medium underline underline-offset-2">Wartungsfenster</Link>.</>}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+const lifecycle: Record<RunStatus, number> = { AwaitingApproval: 0, Scheduled: 0.5, Queued: 1, Running: 2, Succeeded: 3, Failed: 3, Cancelled: 3, Rejected: 3 }
 function statusRank(s: RunStatus) {
   return lifecycle[s] ?? 0
 }

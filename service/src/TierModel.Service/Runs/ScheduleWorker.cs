@@ -54,6 +54,7 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
             try
             {
                 await QueueDueAsync(stoppingToken);
+                await PromoteScheduledAsync(stoppingToken);
                 await ExpireApprovalsAsync(stoppingToken);
                 if (DateTimeOffset.UtcNow - _lastCleanup > TimeSpan.FromDays(1))
                 {
@@ -112,6 +113,14 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
             }
         }
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Applies waiting for a maintenance window (roadmap 4) are queued once it opens.</summary>
+    private async Task PromoteScheduledAsync(CancellationToken ct)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var n = await scope.ServiceProvider.GetRequiredService<Maintenance.MaintenanceService>().PromoteDueAsync(DateTimeOffset.UtcNow, ct);
+        if (n > 0) logger.LogInformation("{Count} scheduled apply run(s) queued: maintenance window open", n);
     }
 
     private async Task ExpireApprovalsAsync(CancellationToken ct)

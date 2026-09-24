@@ -10,6 +10,13 @@ import type {
   TemplateFiles,
   ApproveRequest,
   AuthOptions,
+  EntraAuthSettings,
+  EntraAuthUpdate,
+  EntraMetadataCheck,
+  ReportSchedule,
+  ReportScheduleInput,
+  ReportType,
+  ReportTypeInfo,
   ChangeEntry,
   ChannelInput,
   Compliance,
@@ -199,6 +206,8 @@ export const api = {
     options: () => request<AuthOptions>('/api/auth/options', { noRedirect: true }),
     /** Browser navigation (Negotiate), never fetch. */
     windowsLoginUrl: (returnUrl: string) => `/api/auth/windows?returnUrl=${enc(returnUrl)}`,
+    /** Browser navigation to Microsoft Entra ID (OpenID Connect), never fetch. */
+    entraLoginUrl: (returnUrl: string) => `/api/auth/entra?returnUrl=${enc(returnUrl)}`,
   },
   users: {
     list: () => get<User[]>('/api/users'),
@@ -292,6 +301,9 @@ export const api = {
     update: (body: SettingsUpdate) => put<Settings>('/api/settings', body),
     windowsAuth: () => get<WindowsAuthSettings>('/api/settings/windows-auth'),
     updateWindowsAuth: (body: WindowsAuthUpdate) => put<WindowsAuthSettings>('/api/settings/windows-auth', body),
+    entraAuth: () => get<EntraAuthSettings>('/api/settings/entra-auth'),
+    updateEntraAuth: (body: EntraAuthUpdate) => put<EntraAuthSettings>('/api/settings/entra-auth', body),
+    checkEntraAuth: (tenantId: string) => post<EntraMetadataCheck>('/api/settings/entra-auth/check', { tenantId }),
   },
   notifications: {
     channels: () => get<NotificationChannel[]>('/api/notifications/channels'),
@@ -301,5 +313,14 @@ export const api = {
     testChannel: (id: number) => post<void>(`/api/notifications/channels/${id}/test`),
     smtp: () => get<SmtpSettings>('/api/notifications/smtp'),
     updateSmtp: (body: SmtpUpdate) => put<SmtpSettings>('/api/notifications/smtp', body),
+  },
+  reports: {
+    types: () => get<ReportTypeInfo[]>('/api/reports'),
+    /** Document URL (iframe preview or download). from/to: yyyy-MM-dd. */
+    url: (type: ReportType, p: { from?: string; to?: string; format: 'pdf' | 'html'; download?: boolean }) =>
+      `/api/reports/${enc(type)}${qs({ from: p.from, to: p.to, format: p.format, download: p.download === undefined ? undefined : String(p.download) })}`,
+    schedules: () => get<ReportSchedule[]>('/api/reports/schedules'),
+    updateSchedules: (body: ReportScheduleInput[]) => put<ReportSchedule[]>('/api/reports/schedules', body),
+    sendSchedule: (id: string) => post<void>(`/api/reports/schedules/${enc(id)}/send`),
   },
 }

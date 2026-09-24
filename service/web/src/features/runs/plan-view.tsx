@@ -48,6 +48,7 @@ import {
   type SentencePart,
 } from './plan-model'
 import { requestFromRun, useApplyPlan } from './plan-apply'
+import { MaintenanceNotice } from './maintenance-notice'
 
 const kindStyle: Record<ActionKind, { icon: React.ReactNode; tone: string; text: string }> = {
   create: { icon: <Plus />, tone: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300', text: 'text-emerald-600 dark:text-emerald-400' },
@@ -335,7 +336,8 @@ export function PlanApplyBar({ run }: { run: RunDetail }) {
   const a = run.planApplicability
   if (run.status !== 'Succeeded' || !a) return null
   const changes = run.plan ? planTotal(run.plan) : undefined
-  const reason = !canApply ? 'Anwenden erfordert die Rolle Operator.' : a.applicable ? undefined : a.reason ?? 'Diese Planung kann nicht angewendet werden.'
+  const reason = !canApply ? 'Anwenden erfordert die Rolle Operator.' : !a.applicable ? a.reason ?? 'Diese Planung kann nicht angewendet werden.'
+    : apply.frozen ? 'Während einer Sperrzeit kann nicht angewendet werden.' : undefined
   return (
     <Card className={cn('flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3', a.applicable ? 'border-sky-500/30' : 'bg-muted/30')}>
       <span className={cn('grid size-9 shrink-0 place-content-center rounded-lg [&_svg]:size-4', a.applicable ? 'bg-sky-500/10 text-sky-600 dark:text-sky-300' : 'bg-muted text-muted-foreground')}>
@@ -368,6 +370,7 @@ export function PlanApplyBar({ run }: { run: RunDetail }) {
           </Button>
         </span>
       </Tooltip>
+      {a.applicable && canApply && <MaintenanceNotice className="basis-full" />}
     </Card>
   )
 }
