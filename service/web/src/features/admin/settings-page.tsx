@@ -6,6 +6,7 @@ import { api } from '@/api/client'
 import type { Settings, SettingsUpdate } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Combobox } from '@/components/ui/combobox'
 import { Input } from '@/components/ui/input'
 import { Field } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -13,6 +14,7 @@ import { Switch } from '@/components/ui/switch'
 import { Page, PageHeader } from '@/components/shared/page-header'
 import { RequireAuth } from '@/features/auth/auth'
 import { settingsQuery } from '@/features/runs/run-request-form'
+import { languageError, useDomainControllerOptions, useLanguageOptions } from '@/features/config/lookups'
 
 export function Component() {
   return (
@@ -24,6 +26,8 @@ export function Component() {
 
 function SettingsPage() {
   const q = useQuery(settingsQuery)
+  const dcOptions = useDomainControllerOptions()
+  const languageOptions = useLanguageOptions()
   const qc = useQueryClient()
   const [form, setForm] = React.useState<Settings | null>(null)
   React.useEffect(() => {
@@ -43,7 +47,8 @@ function SettingsPage() {
   const retentionInvalid = form ? !Number.isInteger(form.runRetentionDays) || (form.runRetentionDays < 0 || form.runRetentionDays > 3650) : false
   const timeoutInvalid = form ? !Number.isInteger(form.approvalTimeoutHours) || form.approvalTimeoutHours < 1 || form.approvalTimeoutHours > 720 : false
   const urlError = form ? publicUrlError(form.publicBaseUrl) : null
-  const invalid = retentionInvalid || timeoutInvalid || !!urlError
+  const langError = form ? (form.admlLanguage.trim() ? languageError(form.admlLanguage.trim()) : 'Bitte eine Sprache wählen.') : null
+  const invalid = retentionInvalid || timeoutInvalid || !!urlError || !!langError
 
   return (
     <Page className="max-w-3xl">
@@ -67,11 +72,30 @@ function SettingsPage() {
             </CardHeader>
             <CardContent className="grid gap-5">
               <Field label="Standard-Domain-Controller" htmlFor="st-dc" hint="FQDN des bevorzugten DCs, z. B. dc01.contoso.local">
-                <Input id="st-dc" className="font-mono" value={form.defaultPreferredDc} onChange={(e) => setForm({ ...form, defaultPreferredDc: e.target.value })} />
+                <Combobox
+                  id="st-dc"
+                  mono
+                  value={form.defaultPreferredDc}
+                  onChange={(v) => setForm({ ...form, defaultPreferredDc: v })}
+                  options={dcOptions}
+                  placeholder="dc01.contoso.local"
+                  searchPlaceholder="DC suchen oder FQDN eingeben …"
+                  emptyText="Keine Domain Controller gefunden – FQDN eingeben"
+                />
               </Field>
               <div className="grid gap-5 sm:grid-cols-2">
-                <Field label="ADML-Sprache" htmlFor="st-lang" hint="z. B. en-US oder de-DE">
-                  <Input id="st-lang" className="font-mono" value={form.admlLanguage} onChange={(e) => setForm({ ...form, admlLanguage: e.target.value })} />
+                <Field label="ADML-Sprache" htmlFor="st-lang" error={langError ?? undefined} hint="Sprachen mit vorhandenen ADML-Dateien stehen oben">
+                  <Combobox
+                    id="st-lang"
+                    mono
+                    value={form.admlLanguage}
+                    onChange={(v) => setForm({ ...form, admlLanguage: v })}
+                    options={languageOptions}
+                    placeholder="Sprache wählen"
+                    searchPlaceholder="Sprache suchen, z. B. de-DE …"
+                    validateCustom={languageError}
+                    invalid={!!langError}
+                  />
                 </Field>
                 <Field label="Aufbewahrung von Läufen (Tage)" htmlFor="st-ret" error={retentionInvalid ? 'Bitte eine ganze Zahl von 0 bis 3650 angeben (0 = unbegrenzt).' : undefined}>
                   <Input id="st-ret" type="number" min={0} max={3650} value={Number.isNaN(form.runRetentionDays) ? '' : form.runRetentionDays} onChange={(e) => setForm({ ...form, runRetentionDays: e.target.valueAsNumber })} aria-invalid={retentionInvalid || undefined} />

@@ -22,6 +22,7 @@ export function MultiCombobox({
   disabled,
   mono,
   invalid,
+  validateCustom,
 }: {
   values: string[]
   onChange: (v: string[]) => void
@@ -36,6 +37,8 @@ export function MultiCombobox({
   disabled?: boolean
   mono?: boolean
   invalid?: boolean
+  /** Returns an error for a typed value that must not be added (e.g. malformed e-mail address). */
+  validateCustom?: (v: string) => string | null
 }) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
@@ -44,6 +47,7 @@ export function MultiCombobox({
   const lower = values.map((v) => v.toLowerCase())
   const has = (v: string) => lower.includes(v.toLowerCase())
   const showCustom = allowCustom && trimmed && !has(trimmed) && !options.some((o) => o.value.toLowerCase() === trimmed.toLowerCase())
+  const customError = showCustom && validateCustom ? validateCustom(trimmed) : null
   const labelOf = (v: string) => options.find((o) => o.value.toLowerCase() === v.toLowerCase())
 
   const setSearchText = (s: string) => {
@@ -111,6 +115,10 @@ export function MultiCombobox({
                 onFocus={() => setOpen(true)}
                 onKeyDown={(e) => {
                   if (e.key === 'Backspace' && !search && values.length) remove(values[values.length - 1])
+                  if ((e.key === ',' || e.key === ';') && allowCustom && trimmed) {
+                    e.preventDefault()
+                    if (!(validateCustom?.(trimmed))) add(trimmed)
+                  }
                   if (e.key === 'Escape') setOpen(false)
                 }}
                 placeholder={values.length ? '' : placeholder}
@@ -134,12 +142,19 @@ export function MultiCombobox({
             {showCustom && (
               <Command.Item
                 value={`__custom__${trimmed}`}
+                disabled={!!customError}
                 onSelect={() => add(trimmed)}
-                className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm data-[selected=true]:bg-accent"
+                className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm data-[disabled=true]:opacity-100 data-[selected=true]:bg-accent"
               >
-                <Plus className="size-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Hinzufügen:</span>
-                <span className={cn('truncate', mono && 'font-mono text-xs')}>{trimmed}</span>
+                {customError ? (
+                  <span className="text-xs text-destructive">{customError}</span>
+                ) : (
+                  <>
+                    <Plus className="size-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">Hinzufügen:</span>
+                    <span className={cn('truncate', mono && 'font-mono text-xs')}>{trimmed}</span>
+                  </>
+                )}
               </Command.Item>
             )}
             {options

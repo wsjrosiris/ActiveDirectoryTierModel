@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
+import { MultiCombobox } from '@/components/ui/multi-combobox'
 import { Field } from '@/components/ui/label'
 import { Segmented } from '@/components/ui/segmented'
 import { Select } from '@/components/ui/select'
@@ -244,6 +245,12 @@ function ChannelCard({ channel: c, onEdit, smtpMissing }: { channel: Notificatio
 
 const emptyEvents: ChannelEvents = { drift: true, failure: true, apply: false, approval: false }
 
+const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+$/
+
+function splitAddresses(v: string) {
+  return v.split(/[,;]/).map((x) => x.trim()).filter(Boolean)
+}
+
 function targetError(type: ChannelType, target: string, required: boolean): string | null {
   const t = target.trim()
   if (!t) return required ? (type === 'Email' ? 'Mindestens einen Empfänger angeben.' : 'URL erforderlich.') : null
@@ -270,6 +277,17 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
   const [target, setTarget] = React.useState('')
   const [events, setEvents] = React.useState<ChannelEvents>(emptyEvents)
   const [touched, setTouched] = React.useState(false)
+  const allChannels = useQuery({ queryKey: channelsKey, queryFn: api.notifications.channels })
+  const smtpData = useQuery({ queryKey: smtpKey, queryFn: api.notifications.smtp })
+  // Addresses already used elsewhere, as suggestions.
+  const addressOptions = React.useMemo(() => {
+    const set = new Map<string, string>()
+    for (const c of allChannels.data ?? [])
+      if (c.type === 'Email') for (const a of splitAddresses(c.target)) if (!set.has(a.toLowerCase())) set.set(a.toLowerCase(), `Kanal „${c.name}“`)
+    const from = smtpData.data?.from?.trim()
+    if (from && !set.has(from.toLowerCase())) set.set(from.toLowerCase(), 'Absenderadresse (SMTP)')
+    return [...set.entries()].map(([value, hint]) => ({ value, hint, icon: <Mail className="size-4 text-muted-foreground" /> }))
+  }, [allChannels.data, smtpData.data])
 
   React.useEffect(() => {
     if (!value) return
@@ -358,7 +376,7 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
               error={touched || target ? tError ?? undefined : undefined}
               hint={
                 type === 'Email'
-                  ? 'Mehrere Empfänger durch Komma trennen. Versand über den SMTP-Server rechts.'
+                  ? 'Adressen eingeben oder vorschlagen lassen, mit Enter oder Komma übernehmen. Versand über den SMTP-Server rechts.'
                   : channel && !typeChanged
                     ? 'Die gespeicherte URL wird aus Sicherheitsgründen nur gekürzt angezeigt. Leer lassen, um sie beizubehalten.'
                     : type === 'Teams'
@@ -366,17 +384,31 @@ function ChannelSheet({ value, onClose }: { value: NotificationChannel | 'new' |
                       : 'Der Dienst sendet ein JSON-Dokument per HTTP POST an diese Adresse.'
               }
             >
-              <Input
-                id="ch-target"
-                value={target}
-                onChange={(e) => setTarget(e.target.value)}
-                placeholder={placeholder}
-                className="font-mono text-[13px]"
-                autoComplete="off"
-                spellCheck={false}
-                inputMode={type === 'Email' ? 'email' : 'url'}
-                aria-invalid={(touched || !!target) && !!tError ? true : undefined}
-              />
+              {type === 'Email' ? (
+                <MultiCombobox
+                  id="ch-target"
+                  values={splitAddresses(target)}
+                  onChange={(v) => setTarget(v.join(', '))}
+                  options={addressOptions}
+                  mono
+                  placeholder="admin@contoso.com"
+                  emptyText="Adresse eingeben und mit Enter übernehmen"
+                  validateCustom={(v) => (EMAIL_RE.test(v) ? null : `„${v}“ ist keine gültige E-Mail-Adresse`)}
+                  invalid={(touched || !!target) && !!tError}
+                />
+              ) : (
+                <Input
+                  id="ch-target"
+                  value={target}
+                  onChange={(e) => setTarget(e.target.value)}
+                  placeholder={placeholder}
+                  className="font-mono text-[13px]"
+                  autoComplete="off"
+                  spellCheck={false}
+                  inputMode="url"
+                  aria-invalid={(touched || !!target) && !!tError ? true : undefined}
+                />
+              )}
             </Field>
             <div className="grid gap-2">
               <p className="text-[13px] font-medium">Ereignisse</p>

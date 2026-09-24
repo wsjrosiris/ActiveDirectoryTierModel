@@ -1,13 +1,15 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Server } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 import { api } from '@/api/client'
 import type { RunRequest, Scope } from '@/api/types'
-import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Combobox } from '@/components/ui/combobox'
 import { Field } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { scopeLabels, scopes } from '@/lib/labels'
 import { cn } from '@/lib/utils'
+import { languageError, useDomainControllerOptions, useLanguageOptions } from '@/features/config/lookups'
 
 export const settingsQuery = { queryKey: ['settings'], queryFn: api.settings.get, staleTime: 5 * 60_000 }
 
@@ -31,6 +33,7 @@ export function hasInclude(r: RunRequest) {
 
 export function runRequestError(r: RunRequest): string | null {
   if (!r.preferredDc.trim()) return 'Bitte einen Domain Controller angeben.'
+  if (r.admlLanguage && languageError(r.admlLanguage)) return 'Die ADML-Sprache hat ein ungültiges Format (z. B. en-US).'
   if (r.scope === null && !hasInclude(r)) return 'Ohne Bereich muss mindestens ein Add-on aktiviert sein.'
   if (!includesAllowed(r.scope) && hasInclude(r)) return 'Add-ons sind nur mit „Vollständig“ oder „Kein Bereich“ möglich.'
   return null
@@ -72,6 +75,8 @@ export function RunRequestFields({
   compact?: boolean
 }) {
   const settings = useRunRequestDefaults(value, onChange)
+  const dcOptions = useDomainControllerOptions()
+  const languageOptions = useLanguageOptions()
   const set = <K extends keyof RunRequest>(k: K, v: RunRequest[K]) => onChange({ ...value, [k]: v })
   const includes: { key: 'includeMsa' | 'includeGmsa' | 'includeDmsa' | 'includeWinLaps'; label: string; hint: string }[] = [
     { key: 'includeMsa', label: 'MSA', hint: 'Managed Service Accounts' },
@@ -83,13 +88,37 @@ export function RunRequestFields({
     <fieldset disabled={disabled} className="grid min-w-0 gap-6">
       <div className={cn('grid gap-4', !compact && 'sm:grid-cols-2')}>
         <Field label="Domain Controller" htmlFor={`${idPrefix}-dc`} required hint={settings ? `Standard: ${settings.defaultPreferredDc || '–'}` : undefined}>
-          <div className="relative">
-            <Server className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input id={`${idPrefix}-dc`} className="pl-9 font-mono" value={value.preferredDc} onChange={(e) => set('preferredDc', e.target.value)} placeholder="dc01.contoso.local" />
-          </div>
+          <Combobox
+            id={`${idPrefix}-dc`}
+            mono
+            value={value.preferredDc}
+            onChange={(v) => set('preferredDc', v)}
+            options={dcOptions}
+            placeholder="dc01.contoso.local"
+            searchPlaceholder="DC suchen oder FQDN eingeben …"
+            emptyText="Keine Domain Controller gefunden – FQDN eingeben"
+            disabled={disabled}
+          />
         </Field>
-        <Field label="ADML-Sprache" htmlFor={`${idPrefix}-lang`} hint="Leer = Standard aus den Einstellungen">
-          <Input id={`${idPrefix}-lang`} className="font-mono" value={value.admlLanguage ?? ''} onChange={(e) => set('admlLanguage', e.target.value || undefined)} placeholder={settings?.admlLanguage ?? 'en-US'} />
+        <Field label="ADML-Sprache" htmlFor={`${idPrefix}-lang`} error={languageError(value.admlLanguage ?? '') ?? undefined} hint={`Leer = Standard aus den Einstellungen (${settings?.admlLanguage || 'en-US'})`}>
+          <div className="flex gap-1.5">
+            <Combobox
+              id={`${idPrefix}-lang`}
+              mono
+              value={value.admlLanguage ?? ''}
+              onChange={(v) => set('admlLanguage', v || undefined)}
+              options={languageOptions}
+              placeholder={`Standard (${settings?.admlLanguage || 'en-US'})`}
+              searchPlaceholder="Sprache suchen, z. B. de-DE …"
+              validateCustom={languageError}
+              disabled={disabled}
+            />
+            {value.admlLanguage && !disabled && (
+              <Button type="button" variant="ghost" size="icon" aria-label="Auf Standard zurücksetzen" onClick={() => set('admlLanguage', undefined)}>
+                <RotateCcw />
+              </Button>
+            )}
+          </div>
         </Field>
       </div>
 

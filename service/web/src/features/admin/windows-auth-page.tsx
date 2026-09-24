@@ -1,18 +1,19 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Info, KeyRound, Plus, Save, ShieldAlert, UsersRound, X } from 'lucide-react'
+import { AlertTriangle, Info, KeyRound, Save, ShieldAlert, UsersRound, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, ApiError } from '@/api/client'
 import type { GroupRef, Role, WindowsAuthSettings } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import { MultiCombobox } from '@/components/ui/multi-combobox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip } from '@/components/ui/tooltip'
 import { Page, PageHeader } from '@/components/shared/page-header'
 import { RequireAuth } from '@/features/auth/auth'
+import { usePrincipalOptions } from '@/features/config/lookups'
 import { errorMessage } from '@/lib/query'
 import { roleDescriptions, roleLabels, roles } from '@/lib/roles'
 import { cn } from '@/lib/utils'
@@ -31,6 +32,8 @@ const queryKey = ['settings', 'windows-auth'] as const
 interface Entry {
   value: string
   ref?: GroupRef
+  /** display name of a group picked from the AD search (value is then its SID) */
+  label?: string
 }
 
 interface FormState {
@@ -240,23 +243,27 @@ function WindowsAuthPage() {
 }
 
 function RoleGroupsRow({ role, entries, onChange, errors }: { role: Role; entries: Entry[]; onChange: (e: Entry[]) => void; errors?: string[] }) {
-  const [text, setText] = React.useState('')
   const [hint, setHint] = React.useState<string | null>(null)
+  const [search, setSearch] = React.useState('')
+  const { options, loading } = usePrincipalOptions(search, { sidValues: true })
   const id = `wa-${role}`
 
   const add = (raw: string) => {
-    const parts = raw.split(/[\n;,]+/).map((p) => p.trim()).filter(Boolean)
-    if (!parts.length) return
-    const bad = parts.find((p) => entryFormatError(p))
+    const v = raw.trim()
+    if (!v) return
+    const bad = entryFormatError(v)
     if (bad) {
-      setHint(`„${bad}“ – ${entryFormatError(bad)}`)
+      setHint(`„${v}“ – ${bad}`)
       return
     }
     const known = new Set(entries.flatMap((e) => [e.value.toLowerCase(), e.ref?.name.toLowerCase(), e.ref?.sid.toLowerCase()].filter(Boolean) as string[]))
-    const fresh = parts.filter((p, i) => !known.has(p.toLowerCase()) && parts.findIndex((x) => x.toLowerCase() === p.toLowerCase()) === i)
-    if (fresh.length) onChange([...entries, ...fresh.map((value) => ({ value }))])
-    setText('')
-    setHint(fresh.length < parts.length ? 'Bereits vorhandene Einträge wurden übersprungen.' : null)
+    if (known.has(v.toLowerCase())) {
+      setHint('Diese Gruppe ist bereits zugeordnet.')
+      return
+    }
+    const picked = options.find((o) => o.value.toLowerCase() === v.toLowerCase())
+    onChange([...entries, { value: v, label: picked?.label }])
+    setHint(null)
   }
 
   return (
@@ -283,7 +290,7 @@ function RoleGroupsRow({ role, entries, onChange, errors }: { role: Role; entrie
                   {e.ref && sidOnly(e.ref) ? (
                     <span className="truncate font-mono text-[12px] font-medium" title={e.ref.sid}>{e.ref.sid}</span>
                   ) : (
-                    <span className="truncate text-[13px] font-medium" title={e.ref?.name || e.value}>{e.ref?.name || e.value}</span>
+                    <span className="truncate text-[13px] font-medium" title={e.ref?.name || e.value}>{e.ref?.name || e.label || e.value}</span>
                   )}
                   {e.ref ? (
                     sidOnly(e.ref) ? (
@@ -292,7 +299,7 @@ function RoleGroupsRow({ role, entries, onChange, errors }: { role: Role; entrie
                       <span className="truncate font-mono text-[10.5px] text-muted-foreground" title={e.ref.sid}>{e.ref.sid}</span>
                     )
                   ) : (
-                    <span className="text-[10.5px] text-primary">neu – wird beim Speichern aufgelöst</span>
+                    <span className="text-[10.5px] text-primary">{e.label ? `${e.value} · neu` : 'neu – wird beim Speichern aufgelöst'}</span>
                   )}
                 </span>
                 <button
@@ -307,36 +314,19 @@ function RoleGroupsRow({ role, entries, onChange, errors }: { role: Role; entrie
             ))}
           </ul>
         )}
-        <div className="flex gap-2">
-          <Input
-            id={id}
-            value={text}
-            placeholder={entries.length ? 'Weitere Gruppe hinzufügen …' : 'CONTOSO\\Tier0-Admins oder S-1-5-21-…'}
-            className="h-8 font-mono text-[13px] placeholder:font-sans"
-            autoComplete="off"
-            spellCheck={false}
-            aria-invalid={!!errors?.length || undefined}
-            onChange={(e) => { setText(e.target.value); setHint(null) }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                add(text)
-              } else if (e.key === 'Backspace' && !text && entries.length) {
-                onChange(entries.slice(0, -1))
-              }
-            }}
-            onPaste={(e) => {
-              const t = e.clipboardData.getData('text')
-              if (/[\n;,]/.test(t)) {
-                e.preventDefault()
-                add(t)
-              }
-            }}
-          />
-          <Button type="button" variant="outline" size="sm" disabled={!text.trim()} onClick={() => add(text)}>
-            <Plus /> Hinzufügen
-          </Button>
-        </div>
+        <MultiCombobox
+          id={id}
+          values={[]}
+          onChange={(v) => v[0] && add(v[0])}
+          options={options}
+          onSearchChange={(q) => { setSearch(q); setHint(null) }}
+          loading={loading}
+          mono
+          invalid={!!errors?.length}
+          validateCustom={entryFormatError}
+          placeholder={entries.length ? 'Weitere Gruppe suchen oder DOMÄNE\\Gruppe / SID eingeben …' : 'Gruppe im AD suchen oder CONTOSO\\Tier0-Admins / S-1-5-21-… eingeben'}
+          emptyText={'Keine Gruppe gefunden – DOMÄNE\\Gruppe oder SID eingeben'}
+        />
         {errors?.length ? (
           <div role="alert" className="grid gap-0.5 text-xs text-destructive">
             {errors.map((m, i) => <p key={i}>{m}</p>)}

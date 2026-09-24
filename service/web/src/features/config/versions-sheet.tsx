@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Columns2, History, Loader2, RotateCcw, Rows3 } from 'lucide-react'
+import { History, Loader2, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { Badge } from '@/components/ui/badge'
@@ -9,12 +9,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { EmptyState } from '@/components/ui/empty-state'
 import { Textarea } from '@/components/ui/input'
 import { Field } from '@/components/ui/label'
-import { Segmented } from '@/components/ui/segmented'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useCan } from '@/features/auth/auth'
 import { cn, formatDateTime, formatRelative } from '@/lib/utils'
-import { DiffView } from './diff-view'
+import { diffSection } from '@/lib/structured-diff'
+import { ChangeList } from './change-list'
 import { draftStore, useDraftState } from './draft-store'
 import { versionsQuery } from './queries'
 import { useAfterConfigChange } from './save-dialog'
@@ -34,7 +34,6 @@ export function VersionsSheet({
   const versions = useQuery({ ...versionsQuery(sectionKey), enabled: open })
   const base = useDraftState((s) => s.bases[sectionKey])
   const [selected, setSelected] = React.useState<number | null>(null)
-  const [mode, setMode] = React.useState<'unified' | 'split'>('unified')
   const [restoreOpen, setRestoreOpen] = React.useState(false)
   const [comment, setComment] = React.useState('')
   const after = useAfterConfigChange()
@@ -64,6 +63,12 @@ export function VersionsSheet({
       setSelected(null)
     },
   })
+
+  // What changed from the selected version to the current one.
+  const diff = React.useMemo(
+    () => (version.data && base ? diffSection(sectionKey, version.data.content, base.content) : null),
+    [version.data, base, sectionKey],
+  )
 
   const dirty = draftStore.isDirty(sectionKey)
   const isCurrent = selected === base?.version
@@ -119,16 +124,6 @@ export function VersionsSheet({
                     <span className="text-muted-foreground"> → aktuell (v{base?.version})</span>
                   </p>
                   <div className="ml-auto flex items-center gap-2">
-                    <Segmented
-                      aria-label="Diff-Darstellung"
-                      value={mode}
-                      onValueChange={setMode}
-                      options={[
-                        { value: 'unified', label: 'Einheitlich', icon: <Rows3 /> },
-                        { value: 'split', label: 'Nebeneinander', icon: <Columns2 /> },
-                      ]}
-                      className="[&_button]:h-7 [&_button]:text-xs"
-                    />
                     {canEdit && !isCurrent && (
                       <Button size="sm" variant="outline" onClick={() => setRestoreOpen(true)}>
                         <RotateCcw /> Wiederherstellen
@@ -138,14 +133,8 @@ export function VersionsSheet({
                 </div>
                 {version.isLoading || !base ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Lädt …</div>
-                ) : version.data ? (
-                  <DiffView
-                    key={`${selected}-${mode}`}
-                    before={JSON.stringify(version.data.content, null, 2)}
-                    after={JSON.stringify(base.content, null, 2)}
-                    mode={mode}
-                    maxHeight="calc(100dvh - 220px)"
-                  />
+                ) : diff ? (
+                  <ChangeList key={selected} diff={diff} maxHeight="calc(100dvh - 260px)" />
                 ) : null}
               </>
             )}

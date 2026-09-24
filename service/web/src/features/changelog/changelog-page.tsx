@@ -21,6 +21,7 @@ import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Segmented } from '@/components/ui/segmented'
 import { Skeleton } from '@/components/ui/skeleton'
+import { KeyValueList } from '@/components/shared/key-value-list'
 import { Page, PageHeader } from '@/components/shared/page-header'
 import { actionLabels, entityTypeLabels, sectionFallbackTitles } from '@/lib/labels'
 import { cn, formatDateTime, formatNumber, formatRelative } from '@/lib/utils'
@@ -172,9 +173,19 @@ function Details({ c }: { c: ChangeEntry }) {
     return (
       <div className="grid gap-2 text-[13px]">
         <Link to={`/laeufe/${c.entityId}`} className="text-primary hover:underline">Lauf #{c.entityId} öffnen</Link>
-        {typeof d === 'object' && <pre className="overflow-x-auto rounded-md bg-card p-3 font-mono text-[12px]">{JSON.stringify(d, null, 2)}</pre>}
+        {d !== null && d !== undefined && <KeyValueList value={d} />}
       </div>
     )
   }
-  return <pre className="overflow-x-auto rounded-md border bg-card p-3 font-mono text-[12px]">{typeof d === 'string' ? d : JSON.stringify(d, null, 2)}</pre>
+  if (typeof d === 'string') {
+    // details may be a JSON document stored as text – show it as fields, too
+    try {
+      const parsed = JSON.parse(d)
+      if (parsed && typeof parsed === 'object') return <KeyValueList value={parsed} />
+    } catch {
+      /* plain text */
+    }
+    return <p className="text-[13px] whitespace-pre-wrap">{d}</p>
+  }
+  return <KeyValueList value={d} />
 }

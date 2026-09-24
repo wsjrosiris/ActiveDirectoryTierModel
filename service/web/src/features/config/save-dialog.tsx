@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Columns2, Rows3, Save } from 'lucide-react'
+import { AlertTriangle, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, ApiError } from '@/api/client'
 import type { Section } from '@/api/types'
@@ -8,11 +8,11 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/input'
 import { Field } from '@/components/ui/label'
-import { Segmented } from '@/components/ui/segmented'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { errorMessage } from '@/lib/query'
 import { sectionFallbackTitles } from '@/lib/labels'
-import { computeDiff, DiffStats, DiffView } from './diff-view'
+import { diffSection, type SectionDiff } from '@/lib/structured-diff'
+import { ChangeList, DiffCounts } from './change-list'
 import { draftStore } from './draft-store'
 import { sectionQuery } from './queries'
 
@@ -34,7 +34,6 @@ export function useAfterConfigChange() {
 export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpenChange: (o: boolean) => void; keys: string[] }) {
   const [active, setActive] = React.useState(keys[0])
   const [comment, setComment] = React.useState('')
-  const [mode, setMode] = React.useState<'unified' | 'split'>('unified')
   const [saving, setSaving] = React.useState(false)
   const [conflict, setConflict] = React.useState<{ key: string; remaining: string[] } | null>(null)
   const after = useAfterConfigChange()
@@ -49,21 +48,16 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
   const diffs = React.useMemo(() => {
     if (!open) return {}
     const s = draftStore.getState()
-    const out: Record<string, { before: string; after: string; added: number; removed: number }> = {}
-    for (const k of keys) {
-      const before = JSON.stringify(s.bases[k]?.content ?? null, null, 2)
-      const aft = JSON.stringify(s.drafts[k], null, 2)
-      const { added, removed } = computeDiff(before, aft)
-      out[k] = { before, after: aft, added, removed }
-    }
+    const out: Record<string, SectionDiff> = {}
+    for (const k of keys) out[k] = diffSection(k, s.bases[k]?.content ?? null, s.drafts[k])
     return out
   }, [open, keys])
 
   const save = async () => {
     const invalid = draftStore.invalidJsonKeys()
     if (invalid.length) {
-      toast.error('Ungültiges JSON', {
-        description: `„${invalid.map((k) => sectionFallbackTitles[k] ?? k).join('“, „')}“ enthält einen Syntaxfehler. Bitte zuerst korrigieren – sonst würde der letzte gültige Stand gespeichert.`,
+      toast.error('Ungültige Eingaben', {
+        description: `„${invalid.map((k) => sectionFallbackTitles[k] ?? k).join('“, „')}“ enthält ungültige Eingaben. Bitte zuerst korrigieren – sonst würde der letzte gültige Stand gespeichert.`,
       })
       return
     }
@@ -122,17 +116,16 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
     setConflict(null)
     onOpenChange(false)
     toast('Entwurf auf neuesten Stand gesetzt', {
-      description: 'Ihre Änderungen bleiben erhalten. Der Diff zeigt jetzt auch, welche Änderungen der anderen Person Ihr Speichern zurücknehmen würde.',
+      description: 'Ihre Änderungen bleiben erhalten. Die Änderungsliste zeigt jetzt auch, welche Änderungen der anderen Person Ihr Speichern zurücknehmen würde.',
     })
   }
 
   const d = diffs[active]
-  const total = Object.values(diffs).reduce((a, x) => ({ added: a.added + x.added, removed: a.removed + x.removed }), { added: 0, removed: 0 })
 
   return (
     <>
       <Dialog open={open && !conflict} onOpenChange={(o) => !saving && onOpenChange(o)}>
-        <DialogContent className="max-w-5xl gap-5">
+        <DialogContent className="max-w-4xl gap-5">
           <DialogHeader>
             <DialogTitle>Änderungen speichern</DialogTitle>
             <DialogDescription>
@@ -146,7 +139,7 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
                   {keys.map((k) => (
                     <TabsTrigger key={k} value={k} className="gap-2">
                       {sectionFallbackTitles[k] ?? k}
-                      {diffs[k] && <DiffStats added={diffs[k].added} removed={diffs[k].removed} />}
+                      {diffs[k] && <DiffCounts diff={diffs[k]} />}
                     </TabsTrigger>
                   ))}
                 </TabsList>
@@ -154,21 +147,11 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
             ) : (
               <div className="flex items-center gap-3 text-sm">
                 <span className="font-medium">{sectionFallbackTitles[active] ?? active}</span>
-                <DiffStats added={total.added} removed={total.removed} />
+                {d && <DiffCounts diff={d} />}
               </div>
             )}
-            <Segmented
-              aria-label="Diff-Darstellung"
-              value={mode}
-              onValueChange={setMode}
-              options={[
-                { value: 'unified', label: 'Einheitlich', icon: <Rows3 /> },
-                { value: 'split', label: 'Nebeneinander', icon: <Columns2 /> },
-              ]}
-              className="[&_button]:h-7 [&_button]:text-xs"
-            />
           </div>
-          {d && <DiffView key={active + mode} before={d.before} after={d.after} mode={mode} maxHeight="45vh" />}
+          {d && <ChangeList key={active} diff={d} maxHeight="45vh" />}
           <form
             className="grid gap-4"
             onSubmit={(e) => {
@@ -214,7 +197,7 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
                   <div className="grid min-w-0 gap-1.5">
                     <DialogTitle>Konflikt beim Speichern</DialogTitle>
                     <DialogDescription>
-                      „{sectionFallbackTitles[conflict.key] ?? conflict.key}“ wurde inzwischen von jemand anderem geändert. Ihre Version basiert auf einem veralteten Stand. „Neu laden“ verwirft Ihre Änderungen. „Weiter bearbeiten“ behält sie; der nächste Diff zeigt dann auch, welche Änderungen der anderen Person Ihr Speichern zurücknehmen würde.
+                      „{sectionFallbackTitles[conflict.key] ?? conflict.key}“ wurde inzwischen von jemand anderem geändert. Ihre Version basiert auf einem veralteten Stand. „Neu laden“ verwirft Ihre Änderungen. „Weiter bearbeiten“ behält sie; die nächste Änderungsliste zeigt dann auch, welche Änderungen der anderen Person Ihr Speichern zurücknehmen würde.
                       {conflict.remaining.length > 1 && ` ${conflict.remaining.length - 1} weitere Sektion(en) wurden noch nicht gespeichert.`}
                     </DialogDescription>
                   </div>
