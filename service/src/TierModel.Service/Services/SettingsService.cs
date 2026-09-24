@@ -10,12 +10,14 @@ public record SettingsDto(
     string DefaultPreferredDc, string AdmlLanguage, int RunRetentionDays,
     bool RequireApproval, int ApprovalTimeoutHours, string PublicBaseUrl,
     bool RequirePlanBeforeApply, int PlanMaxAgeHours,
-    string FrameworkPath, string PwshPath);
+    string FrameworkPath, string PwshPath,
+    int StaleDays = 90, int PasswordMaxAgeDays = 365);
 
 public record UpdateSettingsRequest(
     string DefaultPreferredDc, string AdmlLanguage, int RunRetentionDays,
     bool? RequireApproval, int? ApprovalTimeoutHours, string? PublicBaseUrl,
-    bool? RequirePlanBeforeApply = null, int? PlanMaxAgeHours = null);
+    bool? RequirePlanBeforeApply = null, int? PlanMaxAgeHours = null,
+    int? StaleDays = null, int? PasswordMaxAgeDays = null);
 
 public record GroupRef(string Name, string Sid);
 
@@ -38,6 +40,8 @@ public class SettingsService(AppDbContext db, IOptions<TierModelOptions> options
     private const string PublicBaseUrlKey = "publicBaseUrl";
     private const string RequirePlanKey = "requirePlanBeforeApply";
     private const string PlanMaxAgeKey = "planMaxAgeHours";
+    private const string StaleDaysKey = "hygieneStaleDays";
+    private const string PasswordMaxAgeKey = "hygienePasswordMaxAgeDays";
     private const string WindowsAuthKey = "windowsAuth";
     private const string SmtpKey = "smtp";
 
@@ -59,7 +63,9 @@ public class SettingsService(AppDbContext db, IOptions<TierModelOptions> options
             !bool.TryParse(stored.GetValueOrDefault(RequirePlanKey), out var requirePlan) || requirePlan,
             int.TryParse(stored.GetValueOrDefault(PlanMaxAgeKey), out var planHours) ? planHours : 24,
             o.FrameworkPath,
-            o.PwshPath);
+            o.PwshPath,
+            int.TryParse(stored.GetValueOrDefault(StaleDaysKey), out var stale) ? stale : 90,
+            int.TryParse(stored.GetValueOrDefault(PasswordMaxAgeKey), out var pwAge) ? pwAge : 365);
     }
 
     public async Task UpdateAsync(UpdateSettingsRequest r, CancellationToken ct = default)
@@ -72,6 +78,8 @@ public class SettingsService(AppDbContext db, IOptions<TierModelOptions> options
         if (r.PublicBaseUrl is { } url) await SetAsync(PublicBaseUrlKey, url.Trim().TrimEnd('/'), ct);
         if (r.RequirePlanBeforeApply is { } requirePlan) await SetAsync(RequirePlanKey, requirePlan.ToString(), ct);
         if (r.PlanMaxAgeHours is { } planHours) await SetAsync(PlanMaxAgeKey, planHours.ToString(), ct);
+        if (r.StaleDays is { } stale) await SetAsync(StaleDaysKey, stale.ToString(), ct);
+        if (r.PasswordMaxAgeDays is { } pwAge) await SetAsync(PasswordMaxAgeKey, pwAge.ToString(), ct);
     }
 
     public async Task<WindowsAuthConfig> GetWindowsAuthAsync(CancellationToken ct = default)

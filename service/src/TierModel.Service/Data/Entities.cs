@@ -9,7 +9,8 @@ public enum Role
     Admin = 3,
 }
 
-public enum RunKind { Deploy, Audit }
+/// <summary>Monitor: snapshot of the privileged groups (Watch-TierModelPrivilegedGroups.ps1).</summary>
+public enum RunKind { Deploy, Audit, Monitor }
 
 public enum RunStatus { Queued, Running, Succeeded, Failed, Cancelled, AwaitingApproval, Rejected }
 
@@ -122,6 +123,8 @@ public class Schedule
 {
     public long Id { get; set; }
     public required string Name { get; set; }
+    /// <summary>Audit or Monitor; monitor schedules ignore scope and include flags.</summary>
+    public RunKind Kind { get; set; } = RunKind.Audit;
     public required string Cron { get; set; }
     public required string TimeZone { get; set; }
     public bool Enabled { get; set; } = true;
@@ -167,6 +170,7 @@ public class NotificationChannel
     public bool OnApply { get; set; }
     public bool OnApproval { get; set; }
     public bool OnCertificate { get; set; }
+    public bool OnPrivilegedChange { get; set; }
     public DateTimeOffset? LastSentAt { get; set; }
     public string? LastError { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
@@ -176,4 +180,27 @@ public class Setting
 {
     public required string Key { get; set; }
     public required string Value { get; set; }
+}
+
+/// <summary>
+/// Result of one monitor run: the normalised privileged.json (<see cref="Data"/>) and its evaluation against the
+/// previous snapshot and the desired configuration (<see cref="Evaluation"/>). Counts are kept as columns for lists and charts.
+/// </summary>
+public class PrivilegedSnapshot
+{
+    public long Id { get; set; }
+    public long RunId { get; set; }
+    public DateTimeOffset TakenAt { get; set; }
+    /// <summary>Preparation for several domains (roadmap 17); always 1 for now.</summary>
+    public int DomainId { get; set; } = 1;
+    /// <summary>jsonb: normalised snapshot (camelCase, arrays always arrays), see <see cref="Monitoring.PrivilegedSnapshotData"/>.</summary>
+    public required string Data { get; set; }
+    /// <summary>jsonb: <see cref="Monitoring.PrivilegedEvaluation"/>.</summary>
+    public required string Evaluation { get; set; }
+    public int GroupCount { get; set; }
+    public int MemberCount { get; set; }
+    public int ChangeCount { get; set; }
+    public int UnexpectedCount { get; set; }
+    public int HygieneCount { get; set; }
+    public int AttackPathCount { get; set; }
 }

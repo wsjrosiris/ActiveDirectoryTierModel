@@ -7,6 +7,9 @@ import type {
   AuthOptions,
   ChangeEntry,
   ChannelInput,
+  Compliance,
+  PrivilegedChanges,
+  PrivilegedOverview,
   ChangePasswordRequest,
   CreateUserRequest,
   Dashboard,
@@ -226,6 +229,9 @@ export const api = {
       get<Paged<RunSummary>>(`/api/runs${qs({ kind: p.kind, status: p.status, page: p.page ?? 1, pageSize: p.pageSize ?? 25 })}`),
     deploy: (body: DeployRequest) => post<RunSummary>('/api/runs/deploy', body),
     audit: (body: RunRequest) => post<RunSummary>('/api/runs/audit', body),
+    monitor: (preferredDc: string) => post<RunSummary>('/api/runs/monitor', { preferredDc }),
+    /** Planning run for one area of an audit's findings (Operator). */
+    remediate: (auditId: number, area: string) => post<RunSummary>(`/api/runs/${auditId}/remediate`, { area }),
     get: (id: number) => get<RunDetail>(`/api/runs/${id}`),
     log: (id: number, after: number, signal?: AbortSignal) =>
       get<LogResponse>(`/api/runs/${id}/log?after=${after}`, signal),
@@ -261,6 +267,11 @@ export const api = {
       get<Paged<ChangeEntry>>(`/api/changelog${qs({ entityType: p.entityType, page: p.page ?? 1, pageSize: p.pageSize ?? 50 })}`),
   },
   dashboard: () => get<Dashboard>('/api/dashboard'),
+  privileged: {
+    overview: () => get<PrivilegedOverview>('/api/privileged'),
+    changes: (limit = 50) => get<PrivilegedChanges>(`/api/privileged/changes?limit=${limit}`),
+  },
+  compliance: () => get<Compliance>('/api/compliance'),
   settings: {
     get: () => get<Settings>('/api/settings'),
     update: (body: SettingsUpdate) => put<Settings>('/api/settings', body),

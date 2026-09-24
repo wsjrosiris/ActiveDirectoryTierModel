@@ -25,7 +25,7 @@ export function Component() {
       <PageHeader
         icon={<Activity />}
         title="Läufe"
-        description="Alle Deploy- und Audit-Läufe mit Status, Dauer und Protokoll."
+        description="Alle Deploys, Audits und Überwachungen mit Status, Dauer und Protokoll."
         actions={canEdit && <Button asChild><Link to="/deploy"><Rocket /> Neuer Deploy</Link></Button>}
       />
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -37,6 +37,7 @@ export function Component() {
             { value: 'all', label: 'Alle' },
             { value: 'Deploy', label: 'Deploys' },
             { value: 'Audit', label: 'Audits' },
+            { value: 'Monitor', label: 'Überwachungen' },
           ]}
         />
         <div className="w-52">

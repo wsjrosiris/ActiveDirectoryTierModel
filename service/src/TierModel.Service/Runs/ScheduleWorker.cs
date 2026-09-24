@@ -5,12 +5,16 @@ using TierModel.Service.Data;
 
 namespace TierModel.Service.Runs;
 
-/// <summary>Queues scheduled audits when they are due and removes expired run data once a day.</summary>
+/// <summary>Queues scheduled audits and monitor runs when they are due and removes expired run data once a day.</summary>
 public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptions> options, WorkerHeartbeats heartbeats, ILogger<ScheduleWorker> logger) : BackgroundService
 {
     public const string HeartbeatName = "ScheduleWorker";
     private DateTimeOffset _lastCleanup = DateTimeOffset.MinValue;
     private DateTimeOffset _lastCertificateCheck = DateTimeOffset.MinValue;
+
+    public static RunRequest RequestFor(Schedule s) => s.Kind == RunKind.Monitor
+        ? new(s.PreferredDc, null, false, false, false, false, null)
+        : new(s.PreferredDc, s.Scope, s.IncludeMsa, s.IncludeGmsa, s.IncludeDmsa, s.IncludeWinLaps, s.AdmlLanguage);
 
     public static DateTimeOffset? NextOccurrence(string cron, string timeZone, DateTimeOffset after)
     {
@@ -85,12 +89,11 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
             var busy = s.LastRunId is { } last && await db.Runs.AnyAsync(r => r.Id == last && (r.Status == RunStatus.Queued || r.Status == RunStatus.Running), ct);
             if (!busy)
             {
-                var run = await runs.EnqueueAsync(RunKind.Audit,
-                    new RunRequest(s.PreferredDc, s.Scope, s.IncludeMsa, s.IncludeGmsa, s.IncludeDmsa, s.IncludeWinLaps, s.AdmlLanguage),
+                var run = await runs.EnqueueAsync(s.Kind == RunKind.Monitor ? RunKind.Monitor : RunKind.Audit, RequestFor(s),
                     confirmApply: false, $"Zeitplan: {s.Name}", RunTrigger.Schedule, s.Id, ct);
                 s.LastRunId = run.Id;
                 s.LastRunAt = now;
-                logger.LogInformation("Schedule {Schedule} queued audit run {RunId}", s.Name, run.Id);
+                logger.LogInformation("Schedule {Schedule} queued {Kind} run {RunId}", s.Name, s.Kind, run.Id);
             }
             else
             {

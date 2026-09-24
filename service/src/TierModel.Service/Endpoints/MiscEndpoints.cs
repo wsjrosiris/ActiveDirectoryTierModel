@@ -71,6 +71,8 @@ public static class MiscEndpoints
             if (r.RunRetentionDays is < 0 or > 3650) errors["runRetentionDays"] = ["0 bis 3650 Tage (0 = unbegrenzt)."];
             if (r.ApprovalTimeoutHours is < 1 or > 720) errors["approvalTimeoutHours"] = ["1 bis 720 Stunden."];
             if (r.PlanMaxAgeHours is < 1 or > 720) errors["planMaxAgeHours"] = ["1 bis 720 Stunden."];
+            if (r.StaleDays is < 1 or > 3650) errors["staleDays"] = ["1 bis 3650 Tage."];
+            if (r.PasswordMaxAgeDays is < 1 or > 3650) errors["passwordMaxAgeDays"] = ["1 bis 3650 Tage."];
             if (!string.IsNullOrWhiteSpace(r.PublicBaseUrl)
                 && !(Uri.TryCreate(r.PublicBaseUrl.Trim(), UriKind.Absolute, out var url) && url.Scheme is "https" or "http"))
                 errors["publicBaseUrl"] = ["Vollständige Adresse angeben, z. B. https://tiermodel01.contoso.com:8443"];
@@ -83,6 +85,8 @@ public static class MiscEndpoints
             if (r.RequirePlanBeforeApply is { } rp && rp != before.RequirePlanBeforeApply)
                 approvalText += rp ? ", Anwenden nur nach Planung EIN" : ", Anwenden nur nach Planung AUS";
             if (r.PlanMaxAgeHours is { } ph && ph != before.PlanMaxAgeHours) approvalText += $", Planung gültig {ph} Stunden";
+            if (r.StaleDays is { } sd && sd != before.StaleDays) approvalText += $", inaktive Konten ab {sd} Tagen";
+            if (r.PasswordMaxAgeDays is { } pa && pa != before.PasswordMaxAgeDays) approvalText += $", maximales Passwortalter {pa} Tage";
             log.Add(ctx.User.UserName(), "settings.update", "settings", null,
                 $"Einstellungen geändert: DC '{r.DefaultPreferredDc}', ADML {r.AdmlLanguage}, Aufbewahrung {r.RunRetentionDays} Tage{approvalText}");
             await db.SaveChangesAsync();

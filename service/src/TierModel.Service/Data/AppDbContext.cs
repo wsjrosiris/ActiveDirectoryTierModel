@@ -13,6 +13,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ChangeEntry> ChangeLog => Set<ChangeEntry>();
     public DbSet<Setting> Settings => Set<Setting>();
     public DbSet<NotificationChannel> NotificationChannels => Set<NotificationChannel>();
+    public DbSet<PrivilegedSnapshot> PrivilegedSnapshots => Set<PrivilegedSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -67,6 +68,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.ToTable("schedules");
             e.Property(x => x.Scope).HasConversion<string>().HasMaxLength(24);
+            // Existing schedules are audits.
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(24).HasDefaultValue(RunKind.Audit).HasSentinel(RunKind.Deploy);
         });
 
         b.Entity<ChangeEntry>(e =>
@@ -82,6 +85,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.ToTable("notification_channels");
             e.Property(x => x.Type).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.Name).HasMaxLength(100);
+        });
+
+        b.Entity<PrivilegedSnapshot>(e =>
+        {
+            e.ToTable("privileged_snapshots");
+            e.Property(x => x.Data).HasColumnType("jsonb");
+            e.Property(x => x.Evaluation).HasColumnType("jsonb");
+            e.Property(x => x.DomainId).HasDefaultValue(1);
+            e.HasIndex(x => new { x.DomainId, x.Id });
+            e.HasIndex(x => x.RunId).IsUnique();
+            e.HasOne<Run>().WithMany().HasForeignKey(x => x.RunId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<Setting>(e =>

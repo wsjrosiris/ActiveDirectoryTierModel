@@ -236,6 +236,8 @@ public class HealthService(
             .Select(r => new { r.Id, r.FinishedAt }).FirstOrDefaultAsync(ct);
         var apply = await db.Runs.Where(r => r.Kind == RunKind.Deploy && r.Mode == RunMode.Apply && r.Status == RunStatus.Succeeded).OrderByDescending(r => r.Id)
             .Select(r => new { r.Id, r.FinishedAt }).FirstOrDefaultAsync(ct);
+        var monitor = await db.Runs.Where(r => r.Kind == RunKind.Monitor && r.Status == RunStatus.Succeeded).OrderByDescending(r => r.Id)
+            .Select(r => new { r.Id, r.FinishedAt }).FirstOrDefaultAsync(ct);
         var since = DateTimeOffset.UtcNow.AddDays(-1);
         var failed24h = await db.Runs.CountAsync(r => r.Status == RunStatus.Failed && r.FinishedAt >= since, ct);
         var auditAge = audit?.FinishedAt is { } at ? DateTimeOffset.UtcNow - at : (TimeSpan?)null;
@@ -250,6 +252,7 @@ public class HealthService(
             new("Audit", Describe(audit?.Id, audit?.FinishedAt)),
             new("Deploy (Planung)", Describe(plan?.Id, plan?.FinishedAt)),
             new("Deploy (Anwenden)", Describe(apply?.Id, apply?.FinishedAt)),
+            new("Überwachung", Describe(monitor?.Id, monitor?.FinishedAt)),
             new("Fehlgeschlagen (24 Std.)", failed24h.ToString()),
         ]);
     }

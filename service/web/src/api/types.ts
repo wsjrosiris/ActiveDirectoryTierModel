@@ -140,7 +140,7 @@ export interface DeployRequest extends RunRequest {
   planRunId?: number | null
 }
 
-export type RunKind = 'Deploy' | 'Audit'
+export type RunKind = 'Deploy' | 'Audit' | 'Monitor'
 export type RunStatus = 'AwaitingApproval' | 'Queued' | 'Running' | 'Succeeded' | 'Failed' | 'Cancelled' | 'Rejected'
 
 export interface RunSummary {
@@ -187,11 +187,15 @@ export interface Finding {
   resourceType: string
   identifier: string
   details: string
+  /** ous, groups, users, acls, gpos, admx, msa, gmsa, dmsa, winlaps (newer framework versions). */
+  area?: string
+  severity?: Severity
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [k: string]: any
 }
 
 export interface RunDetail extends RunSummary {
+  /** Audit: auditSummary counts · Monitor: MonitorSummary. */
   summary: Record<string, number> | null
   findings: Finding[]
   configVersions: Record<string, number>
@@ -291,8 +295,11 @@ export interface Paged<T> {
 
 // ---------- Zeitpläne ----------
 
+export type ScheduleKind = 'Audit' | 'Monitor'
+
 export interface Schedule extends RunRequest {
   id: number
+  kind: ScheduleKind
   name: string
   cron: string
   timeZone: string
@@ -352,6 +359,10 @@ export interface Settings {
   planMaxAgeHours: number
   frameworkPath: string
   pwshPath: string
+  /** Hygiene: accounts without logon for this many days are stale. */
+  staleDays: number
+  /** Hygiene: maximum password age of privileged user accounts. */
+  passwordMaxAgeDays: number
 }
 
 export type SettingsUpdate = Omit<Settings, 'frameworkPath' | 'pwshPath'>
@@ -386,6 +397,8 @@ export interface ChannelEvents {
   apply: boolean
   approval: boolean
   certificate: boolean
+  /** Changes in privileged groups or new privileged findings (monitor runs). */
+  privileged: boolean
 }
 
 export interface NotificationChannel {
@@ -463,3 +476,155 @@ export interface TemplateFiles { admx: TemplateFile[]; adml: Record<string, Temp
 export interface DomainControllers { available: boolean; items: { name: string; site: string | null }[]; recent: string[] }
 export interface AdGroup { name: string; samAccountName: string; sid: string; distinguishedName: string | null; description: string | null }
 export interface AdGroups { available: boolean; items: AdGroup[] }
+
+// ---------- Privilegierte Zugriffe (Überwachung) ----------
+
+export type Severity = 'High' | 'Medium' | 'Low'
+
+export interface MonitorSummary {
+  groupCount: number
+  memberCount: number
+  accountCount: number
+  addedCount: number
+  removedCount: number
+  unexpectedCount: number
+  hygieneCount: number
+  hygieneHighCount: number
+  attackPathCount: number
+  errorCount: number
+  baseline: boolean
+}
+
+export interface PrivilegedMember {
+  sid: string
+  samAccountName: string | null
+  name: string
+  objectClass: string
+  distinguishedName: string | null
+  direct: boolean
+  /** Nested groups, outermost first. */
+  via: string[]
+  enabled: boolean | null
+  unexpected: boolean
+  /** Why the member is expected (e.g. "Tier-0-Konto laut Konfiguration"). */
+  note: string | null
+}
+
+export interface PrivilegedGroup {
+  sid: string
+  name: string
+  wellKnownName: string | null
+  source: 'builtin' | 'config' | string
+  tier: number | null
+  distinguishedName: string | null
+  memberCount: number
+  directCount: number
+  unexpectedCount: number
+  members: PrivilegedMember[]
+}
+
+export interface UnexpectedMember {
+  groupSid: string
+  groupName: string
+  memberSid: string
+  memberSam: string | null
+  memberName: string
+  objectClass: string
+  direct: boolean
+  via: string[]
+  enabled: boolean | null
+}
+
+export interface HygieneFinding {
+  rule: string
+  title: string
+  severity: Severity
+  sid: string
+  account: string
+  distinguishedName: string | null
+  objectClass: string
+  tier: number | null
+  value: string
+}
+
+export interface AttackPath {
+  objectDn: string
+  objectType: string
+  objectName: string
+  principalSid: string
+  principalName: string
+  principalClass: string
+  rights: string[]
+  memberCount: number | null
+  sampleMembers: string[]
+  inherited: boolean
+  severity: Severity
+  sentence: string
+  membershipPath: string | null
+}
+
+export interface MembershipChange {
+  change: 'Added' | 'Removed'
+  groupSid: string
+  groupName: string
+  memberSid: string
+  memberSam: string | null
+  memberName: string
+  objectClass: string
+  direct: boolean
+  via: string[]
+}
+
+export interface PrivilegedOverview {
+  snapshot: {
+    runId: number
+    takenAt: string
+    preferredDc: string | null
+    domain: string | null
+    baseline: boolean
+    groupCount: number
+    memberCount: number
+    accountCount: number
+    errors: string[]
+  } | null
+  thresholds: { staleDays: number; passwordMaxAgeDays: number }
+  groups: PrivilegedGroup[]
+  unexpected: UnexpectedMember[]
+  hygiene: HygieneFinding[]
+  attackPaths: AttackPath[]
+  /** Latest monitor run of any status. */
+  lastRun: RunSummary | null
+  monitorSchedules: number
+  snapshotCount: number
+}
+
+export interface PrivilegedChanges {
+  items: { runId: number; takenAt: string; changes: MembershipChange[] }[]
+  snapshotCount: number
+  firstSnapshotAt: string | null
+}
+
+// ---------- Compliance ----------
+
+export interface ComplianceDeduction {
+  category: 'audit' | 'unexpected' | 'hygiene' | 'attackPath'
+  severity: Severity | null
+  label: string
+  count: number
+  pointsEach: number
+  points: number
+}
+
+export interface TierCompliance {
+  tier: 0 | 1 | 2
+  score: number
+  deductions: ComplianceDeduction[]
+}
+
+export interface Compliance {
+  weights: { auditDrift: Record<Severity, number>; unexpectedMember: number; hygiene: Record<Severity, number>; attackPath: number }
+  audit: { runId: number; at: string } | null
+  monitor: { runId: number; at: string } | null
+  current: TierCompliance[] | null
+  history: { date: string; tier0: number | null; tier1: number | null; tier2: number | null }[]
+}

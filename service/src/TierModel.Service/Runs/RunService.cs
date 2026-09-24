@@ -57,10 +57,11 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
         db.Runs.Add(run);
         await db.SaveChangesAsync(ct);
 
-        var what = kind == RunKind.Audit ? "Audit" : run.Mode == RunMode.Apply ? "Deploy (Anwenden)" : "Deploy (Planung)";
+        var what = RunTitle(run);
         if (run.PlanRunId is { } planId) what += $" nach Planung #{planId}";
-        var scope = run.Scope?.ToString() ?? string.Join(", ", RunSummaryDto.IncludeList(run.IncludeMsa, run.IncludeGmsa, run.IncludeDmsa, run.IncludeWinLaps));
-        changeLog.Add(user, kind == RunKind.Audit ? "run.audit" : "run.deploy", "run", run.Id.ToString(),
+        var scope = kind == RunKind.Monitor ? "privilegierte Gruppen"
+            : run.Scope?.ToString() ?? string.Join(", ", RunSummaryDto.IncludeList(run.IncludeMsa, run.IncludeGmsa, run.IncludeDmsa, run.IncludeWinLaps));
+        changeLog.Add(user, kind switch { RunKind.Audit => "run.audit", RunKind.Monitor => "run.monitor", _ => "run.deploy" }, "run", run.Id.ToString(),
             run.Status == RunStatus.AwaitingApproval
                 ? $"{what} #{run.Id} zur Freigabe eingereicht: {scope} über {run.PreferredDc}"
                 : $"{what} #{run.Id} gestartet: {scope} über {run.PreferredDc}");
@@ -69,6 +70,14 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
         else queue.Notify();
         return run;
     }
+
+    /// <summary>German name of a run's kind, e.g. "Deploy (Planung)".</summary>
+    public static string RunTitle(Run run) => run.Kind switch
+    {
+        RunKind.Audit => "Audit",
+        RunKind.Monitor => "Überwachung",
+        _ => run.Mode == RunMode.Apply ? "Deploy (Anwenden)" : "Deploy (Planung)",
+    };
 
     private async Task<Dictionary<string, int>> CurrentVersionsAsync(CancellationToken ct) =>
         (await config.SnapshotAsync(ct)).ToDictionary(x => x.Def.Key, x => x.Version);

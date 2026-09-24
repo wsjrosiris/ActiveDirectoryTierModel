@@ -1,4 +1,4 @@
-import { Activity, Bell, HeartPulse, FileClock, KeyRound, LayoutDashboard, Rocket, ScanSearch, Settings2, SlidersHorizontal, Users, type LucideIcon } from 'lucide-react'
+import { Activity, Bell, ShieldUser, HeartPulse, FileClock, KeyRound, LayoutDashboard, Rocket, ScanSearch, Settings2, SlidersHorizontal, Users, type LucideIcon } from 'lucide-react'
 import type { Role } from '@/api/types'
 
 export interface NavItem {
@@ -15,6 +15,7 @@ export const mainNav: NavItem[] = [
   { to: '/konfiguration/ous', label: 'Konfiguration', icon: SlidersHorizontal, match: '/konfiguration', keywords: 'config ous gruppen acl gpo' },
   { to: '/deploy', label: 'Deploy', icon: Rocket, keywords: 'bereitstellen ausrollen anwenden whatif' },
   { to: '/audits', label: 'Audits', icon: ScanSearch, keywords: 'prüfung drift zeitplan' },
+  { to: '/privilegiert', label: 'Privilegierte Zugriffe', icon: ShieldUser, keywords: 'überwachung tier 0 domain admins mitglieder hygiene angriffspfade monitor geschützte gruppen' },
   { to: '/laeufe', label: 'Läufe', icon: Activity, keywords: 'runs jobs log warteschlange' },
   { to: '/aenderungen', label: 'Änderungsprotokoll', icon: FileClock, keywords: 'changelog audit log verlauf' },
 ]

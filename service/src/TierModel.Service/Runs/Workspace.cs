@@ -11,6 +11,10 @@ namespace TierModel.Service.Runs;
 public static class Workspace
 {
     private static readonly string[] Files = ["Deploy-TierModel.ps1", "Audit-TierModel.ps1"];
+    /// <summary>Newer framework scripts; older framework versions do not have them (the run using them then fails with a clear message).</summary>
+    private static readonly string[] OptionalFiles = [MonitorScript];
+
+    public const string MonitorScript = "Watch-TierModelPrivilegedGroups.ps1";
     private static readonly string[] Directories = ["modules", "config"];
 
     public static string RunsRoot(TierModelOptions o) => Path.Combine(o.WorkPath, "runs");
@@ -28,6 +32,8 @@ public static class Workspace
         Directory.CreateDirectory(root);
 
         foreach (var f in Files)
+            File.Copy(Path.Combine(source, f), Path.Combine(root, f));
+        foreach (var f in OptionalFiles.Where(f => File.Exists(Path.Combine(source, f))))
             File.Copy(Path.Combine(source, f), Path.Combine(root, f));
         foreach (var d in Directories)
             CopyDirectory(Path.Combine(source, d), Path.Combine(root, d));

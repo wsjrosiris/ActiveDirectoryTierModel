@@ -6,11 +6,12 @@ using MailKit.Security;
 using Microsoft.EntityFrameworkCore;
 using MimeKit;
 using TierModel.Service.Data;
+using TierModel.Service.Monitoring;
 using TierModel.Service.Runs;
 
 namespace TierModel.Service.Notifications;
 
-public enum NotificationEvent { Drift, Failure, Apply, ApprovalRequested, CertificateExpiring }
+public enum NotificationEvent { Drift, Failure, Apply, ApprovalRequested, CertificateExpiring, PrivilegedChange }
 
 /// <summary>A run event (message built from the run) or a ready-made message for events without a run.</summary>
 public record NotificationRequest(NotificationEvent Event, long RunId, NotificationMessage? Message = null);
@@ -40,12 +41,14 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
         NotificationEvent.Apply => c.OnApply,
         NotificationEvent.ApprovalRequested => c.OnApproval,
         NotificationEvent.CertificateExpiring => c.OnCertificate,
+        NotificationEvent.PrivilegedChange => c.OnPrivilegedChange,
         _ => false,
     };
 
-    /// <summary>Events a finished run triggers.</summary>
-    public static IEnumerable<NotificationEvent> EventsFor(Run run)
+    /// <summary>Events a finished run triggers. <paramref name="privilegedChange"/>: a monitor run found changes or new findings.</summary>
+    public static IEnumerable<NotificationEvent> EventsFor(Run run, bool privilegedChange = false)
     {
+        if (run.Kind == RunKind.Monitor && run.Status == RunStatus.Succeeded && privilegedChange) yield return NotificationEvent.PrivilegedChange;
         if (run.Status == RunStatus.Failed) yield return NotificationEvent.Failure;
         if (run.Kind == RunKind.Audit && run.Status == RunStatus.Succeeded && run.DriftCount > 0) yield return NotificationEvent.Drift;
         if (run.Kind == RunKind.Deploy && run.Mode == RunMode.Apply && run.Status == RunStatus.Succeeded) yield return NotificationEvent.Apply;
@@ -65,10 +68,11 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
         return parts.Count == 0 ? null : string.Join(", ", parts);
     }
 
-    public static NotificationMessage BuildMessage(NotificationEvent e, Run run, string publicBaseUrl, DeployPlan? plan = null)
+    public static NotificationMessage BuildMessage(NotificationEvent e, Run run, string publicBaseUrl, DeployPlan? plan = null,
+        PrivilegedEvaluation? evaluation = null)
     {
-        var what = run.Kind == RunKind.Audit ? "Audit" : run.Mode == RunMode.Apply ? "Deploy (Anwenden)" : "Deploy (Planung)";
-        var scope = run.Scope?.ToString() ?? "–";
+        var what = RunService.RunTitle(run);
+        var scope = run.Kind == RunKind.Monitor ? "Privilegierte Gruppen" : run.Scope?.ToString() ?? "–";
         var includes = RunSummaryDto.IncludeList(run.IncludeMsa, run.IncludeGmsa, run.IncludeDmsa, run.IncludeWinLaps);
         if (includes.Length > 0) scope += " + " + string.Join(", ", includes);
         var facts = new List<(string, string)>
@@ -89,6 +93,9 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
             NotificationEvent.ApprovalRequested => ($"Freigabe angefordert: Deploy #{run.Id}",
                 $"{run.RequestedBy} möchte Änderungen im Active Directory anwenden. Eine zweite Person mit der Rolle Operator muss freigeben"
                 + (run.ApprovalExpiresAt is { } exp ? $" (bis {exp.ToLocalTime():dd.MM.yyyy HH:mm})." : "."), "accent"),
+            NotificationEvent.PrivilegedChange => (PrivilegedTitle(evaluation),
+                evaluation is null ? "Die Überwachung hat Änderungen an privilegierten Gruppen festgestellt."
+                    : string.Join("\n", PrivilegedEvaluator.NotificationLines(evaluation)), "attention"),
             _ => ("TierModel Service", "", "default"),
         };
         if (e == NotificationEvent.ApprovalRequested && run.PlanRunId is { } planId)
@@ -99,8 +106,21 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
             if (plan is { Errors.Count: > 0 }) facts.Add(("Fehler in der Planung", plan.Errors.Count.ToString()));
         }
         if (run.FinishedAt is { } f) facts.Add(("Beendet", f.ToLocalTime().ToString("dd.MM.yyyy HH:mm")));
-        var url = string.IsNullOrWhiteSpace(publicBaseUrl) ? null : $"{publicBaseUrl.TrimEnd('/')}/laeufe/{run.Id}";
+        var url = string.IsNullOrWhiteSpace(publicBaseUrl) ? null
+            : e == NotificationEvent.PrivilegedChange ? $"{publicBaseUrl.TrimEnd('/')}/privilegiert" : $"{publicBaseUrl.TrimEnd('/')}/laeufe/{run.Id}";
         return new NotificationMessage(e, title, text, facts, url, color);
+    }
+
+    private static string PrivilegedTitle(PrivilegedEvaluation? e)
+    {
+        if (e is null) return "Änderung an privilegierten Gruppen";
+        var parts = new List<string>();
+        var added = e.Changes.Count(c => c.Change == "Added");
+        var removed = e.Changes.Count - added;
+        if (added > 0) parts.Add($"{added} hinzugefügt");
+        if (removed > 0) parts.Add($"{removed} entfernt");
+        if (e.NewFindings.Count > 0) parts.Add($"{e.NewFindings.Count} neue{(e.NewFindings.Count == 1 ? "r" : "")} Befund{(e.NewFindings.Count == 1 ? "" : "e")}");
+        return "Privilegierte Gruppen: " + (parts.Count == 0 ? "Änderung erkannt" : string.Join(", ", parts));
     }
 
     public static NotificationMessage TestMessage(string publicBaseUrl) => new(null, "Testnachricht vom TierModel Service",
@@ -126,7 +146,10 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
         DeployPlan? plan = null;
         if (e == NotificationEvent.ApprovalRequested && run.PlanRunId is { } planId)
             plan = DeployPlanReader.Deserialize(await db.Runs.AsNoTracking().Where(r => r.Id == planId).Select(r => r.Plan).FirstOrDefaultAsync(ct));
-        await SendToAsync(channels, BuildMessage(e, run, (await settings.GetAsync(ct)).PublicBaseUrl, plan), ct);
+        PrivilegedEvaluation? evaluation = null;
+        if (e == NotificationEvent.PrivilegedChange)
+            evaluation = PrivilegedEvaluation.Deserialize(await db.PrivilegedSnapshots.AsNoTracking().Where(p => p.RunId == runId).Select(p => p.Evaluation).FirstOrDefaultAsync(ct));
+        await SendToAsync(channels, BuildMessage(e, run, (await settings.GetAsync(ct)).PublicBaseUrl, plan, evaluation), ct);
     }
 
     /// <summary>Sends a ready-made message (events without a run) to every channel that wants its event.</summary>
@@ -212,7 +235,8 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
                     ["body"] = new object[]
                     {
                         new { type = "TextBlock", size = "Medium", weight = "Bolder", text = m.Title, wrap = true, color = m.Color },
-                        new { type = "TextBlock", text = m.Text, wrap = true },
+                        // Adaptive Cards need an empty line for a visible line break.
+                        new { type = "TextBlock", text = m.Text.Replace("\n", "\n\n"), wrap = true },
                         new { type = "FactSet", facts = m.Facts.Select(f => new { title = f.Label, value = f.Value }).ToArray() },
                     },
                     ["actions"] = m.Url is null ? Array.Empty<object>() : new object[] { new { type = "Action.OpenUrl", title = "Im TierModel Service öffnen", url = m.Url } },
@@ -260,7 +284,7 @@ public class NotificationService(AppDbContext db, SettingsService settings, Chan
         var html = $"""
             <div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#111">
             <h2 style="font-size:18px;margin:0 0 8px">{System.Net.WebUtility.HtmlEncode(m.Title)}</h2>
-            <p>{System.Net.WebUtility.HtmlEncode(m.Text)}</p>
+            <p>{System.Net.WebUtility.HtmlEncode(m.Text).Replace("\n", "<br>")}</p>
             <table style="border-collapse:collapse">{string.Concat(m.Facts.Select(f =>
                 $"<tr><td style=\"padding:2px 12px 2px 0;color:#555\">{System.Net.WebUtility.HtmlEncode(f.Label)}</td><td>{System.Net.WebUtility.HtmlEncode(f.Value)}</td></tr>"))}</table>
             {(m.Url is null ? "" : $"<p><a href=\"{System.Net.WebUtility.HtmlEncode(m.Url)}\">Im TierModel Service öffnen</a></p>")}

@@ -23,7 +23,7 @@ import {
 import type { ChangeEntry, Dashboard, RunSummary } from '@/api/types'
 import { useDashboardQuery } from '@/components/layout/app-layout'
 import { Page, PageHeader } from '@/components/shared/page-header'
-import { RunKindIcon, RunStatusBadge } from '@/components/shared/badges'
+import { RunKindIcon, RunStatusBadge, runKindText } from '@/components/shared/badges'
 import { OuTree } from '@/components/shared/ou-tree'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -373,7 +373,7 @@ function RecentRuns({ runs, loading, className }: { runs?: RunSummary[]; loading
       <CardHeader>
         <div>
           <CardTitle>Letzte Läufe</CardTitle>
-          <CardDescription>Deploys und Audits</CardDescription>
+          <CardDescription>Deploys, Audits und Überwachungen</CardDescription>
         </div>
         <Button variant="ghost" size="xs" asChild className="text-muted-foreground">
           <Link to="/laeufe">Alle <ArrowRight /></Link>
@@ -396,7 +396,7 @@ function RecentRuns({ runs, loading, className }: { runs?: RunSummary[]; loading
                   <RunKindIcon kind={r.kind} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-medium">
-                      #{r.id} · {r.kind === 'Deploy' ? (r.mode === 'Apply' ? 'Deploy' : 'Deploy (Plan)') : 'Audit'}
+                      #{r.id} · {runKindText(r)}
                       {r.kind === 'Audit' && r.driftCount !== null && (
                         <span className={cn('ml-2 text-xs font-normal', r.driftCount ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
                           {r.driftCount ? `${r.driftCount} Drift` : 'kein Drift'}

@@ -14,7 +14,90 @@ if [ -n "$command" ]; then
   echo "fake-pwsh: -Command not supported" >&2; exit 1
 fi
 call=$(grep -E "^& " "$wrapper")
-name=$(echo "$call" | grep -oE "(Deploy|Audit)-TierModel\.ps1")
+name=$(echo "$call" | grep -oE "(Deploy|Audit)-TierModel\.ps1|Watch-TierModelPrivilegedGroups\.ps1")
+# Watch-TierModelPrivilegedGroups.ps1: write a privileged.json per the contract. The content rotates through three states
+# (counter file next to the run folders), so consecutive runs show added/removed members and new findings.
+# A DC name containing "nomon" writes no file, "badmon" a broken one.
+if [ "$name" = "Watch-TierModelPrivilegedGroups.ps1" ]; then
+  out=$(echo "$call" | sed -nE "s/.*-OutputPath '([^']*)'.*/\1/p")
+  dc=$(echo "$call" | sed -nE "s/.*-PreferredDc '([^']*)'.*/\1/p")
+  counter="$(dirname "$(dirname "$wrapper")")/.fake-monitor-counter"
+  n=$(( $(cat "$counter" 2>/dev/null || echo 0) + 1 )); echo $n > "$counter"
+  state=$(( (n - 1) % 3 ))
+  echo "Watch TierModel privileged groups (fake), state $state"
+  echo "Reading protected groups from $dc ..."; sleep 0.3
+  mkdir -p "$(dirname "$out")"
+  if echo "$dc" | grep -q nomon; then echo "Snapshot skipped (fake: DC name contains 'nomon')"; echo "Script completed successfully."; exit 0; fi
+  if echo "$dc" | grep -q badmon; then echo '{ "metadata": { "version": "1", ' > "$out"; echo "Script completed successfully."; exit 0; fi
+  D="S-1-5-21-1004336348-1177238915-682003330"; B="DC=contoso,DC=local"
+  T0="OU=Tier 0 Accounts,OU=Tier 0,OU=Tier Model Administration,$B"
+  ago() { date -u -d "-$1 days" +%Y-%m-%dT%H:%M:%SZ; }
+  now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  admin='{ "sid": "'$D'-500", "samAccountName": "Administrator", "name": "Administrator", "objectClass": "user", "distinguishedName": "CN=Administrator,CN=Users,'$B'", "direct": true, "via": [], "enabled": true }'
+  alice_via='{ "sid": "'$D'-1201", "samAccountName": "t0-alice", "name": "Alice Admin (T0)", "objectClass": "user", "distinguishedName": "CN=Alice Admin (T0),'$T0'", "direct": false, "via": ["Tier 0 Admins"], "enabled": true }'
+  jan='{ "sid": "'$D'-2301", "samAccountName": "helpdesk-jan", "name": "Jan Helpdesk", "objectClass": "user", "distinguishedName": "CN=Jan Helpdesk,OU=Users,OU=Tier 2,OU=Tier Model Administration,'$B'", "direct": true, "via": [], "enabled": true }'
+  da_members="$admin,"'
+      { "sid": "'$D'-1105", "samAccountName": "Tier0Admins", "name": "Tier 0 Admins", "objectClass": "group", "distinguishedName": "CN=Tier 0 Admins,OU=Tier 0 Groups,OU=Tier 0,OU=Tier Model Administration,'$B'", "direct": true, "via": [], "enabled": null },'"
+      $alice_via"
+  [ $state -eq 1 ] && da_members="$da_members, $jan"
+  t0_members='{ "sid": "'$D'-1201", "samAccountName": "t0-alice", "name": "Alice Admin (T0)", "objectClass": "user", "distinguishedName": "CN=Alice Admin (T0),'$T0'", "direct": true, "via": [], "enabled": true }'
+  [ $state -ne 1 ] && t0_members="$t0_members"', { "sid": "'$D'-1202", "samAccountName": "t0-bob", "name": "Bob Admin (T0)", "objectClass": "user", "distinguishedName": "CN=Bob Admin (T0),'$T0'", "direct": true, "via": [], "enabled": true }'
+  [ $state -eq 2 ] && t0_members="$t0_members"', { "sid": "'$D'-1203", "samAccountName": "t0-carol", "name": "Carol Admin (T0)", "objectClass": "user", "distinguishedName": "CN=Carol Admin (T0),'$T0'", "direct": true, "via": [], "enabled": true }'
+  jan_account=""; [ $state -eq 1 ] && jan_account=', { "sid": "'$D'-2301", "samAccountName": "helpdesk-jan", "distinguishedName": "CN=Jan Helpdesk,OU=Users,OU=Tier 2,OU=Tier Model Administration,'$B'", "objectClass": "user", "tier": 0, "enabled": true, "lastLogon": "'$(ago 1)'", "passwordLastSet": "'$(ago 40)'", "passwordNeverExpires": false, "accountNotDelegated": false, "protectedUsers": false, "adminCount": 1, "servicePrincipalNames": [], "memberOfPrivileged": ["Domain Admins", "Administrators"] }'
+  extra_acl=""; [ $state -eq 2 ] && extra_acl=', { "objectDn": "OU=Tier 0,OU=Tier Model Administration,'$B'", "objectType": "Tier0OU", "objectName": "Tier 0", "principalSid": "'$D'-1310", "principalName": "CONTOSO\\Tier1ServerOperators", "principalClass": "group", "rights": ["WriteOwner"], "objectTypeGuid": null, "inherited": false, "memberCount": 4, "sampleMembers": ["t1-dave", "t1-erik", "t1-fatma", "t1-gregor"] }'
+  cat > "$out" <<J
+{
+  "metadata": { "version": "1", "preferredDc": "$dc", "timestamp": "$now", "domain": "contoso.local", "domainSid": "$D", "forestRootDomain": "contoso.local", "isForestRoot": true },
+  "groups": [
+    { "sid": "S-1-5-32-544", "name": "Administratoren", "wellKnownName": "Administrators", "source": "builtin", "tier": 0, "distinguishedName": "CN=Administratoren,CN=Builtin,$B",
+      "members": [ $admin,
+        { "sid": "$D-512", "samAccountName": "Domänen-Admins", "name": "Domänen-Admins", "objectClass": "group", "distinguishedName": "CN=Domänen-Admins,CN=Users,$B", "direct": true, "via": [], "enabled": null },
+        { "sid": "$D-519", "samAccountName": "Organisations-Admins", "name": "Organisations-Admins", "objectClass": "group", "distinguishedName": "CN=Organisations-Admins,CN=Users,$B", "direct": true, "via": [], "enabled": null },
+        { "sid": "$D-1105", "samAccountName": "Tier0Admins", "name": "Tier 0 Admins", "objectClass": "group", "distinguishedName": "CN=Tier 0 Admins,OU=Tier 0 Groups,OU=Tier 0,OU=Tier Model Administration,$B", "direct": false, "via": ["Domänen-Admins"], "enabled": null },
+        { "sid": "$D-1201", "samAccountName": "t0-alice", "name": "Alice Admin (T0)", "objectClass": "user", "distinguishedName": "CN=Alice Admin (T0),$T0", "direct": false, "via": ["Domänen-Admins", "Tier 0 Admins"], "enabled": true } ] },
+    { "sid": "$D-512", "name": "Domänen-Admins", "wellKnownName": "Domain Admins", "source": "builtin", "tier": 0, "distinguishedName": "CN=Domänen-Admins,CN=Users,$B",
+      "members": [ $da_members ] },
+    { "sid": "$D-519", "name": "Organisations-Admins", "wellKnownName": "Enterprise Admins", "source": "builtin", "tier": 0, "distinguishedName": "CN=Organisations-Admins,CN=Users,$B", "members": [ $admin ] },
+    { "sid": "$D-518", "name": "Schema-Admins", "wellKnownName": "Schema Admins", "source": "builtin", "tier": 0, "distinguishedName": "CN=Schema-Admins,CN=Users,$B", "members": [ $admin ] },
+    { "sid": "$D-516", "name": "Domänencontroller", "wellKnownName": "Domain Controllers", "source": "builtin", "tier": 0, "distinguishedName": "CN=Domänencontroller,CN=Users,$B",
+      "members": [
+        { "sid": "$D-1001", "samAccountName": "DC01\$", "name": "DC01", "objectClass": "computer", "distinguishedName": "CN=DC01,OU=Domain Controllers,$B", "direct": true, "via": [], "enabled": true },
+        { "sid": "$D-1002", "samAccountName": "DC02\$", "name": "DC02", "objectClass": "computer", "distinguishedName": "CN=DC02,OU=Domain Controllers,$B", "direct": true, "via": [], "enabled": true } ] },
+    { "sid": "S-1-5-32-551", "name": "Sicherungs-Operatoren", "wellKnownName": "Backup Operators", "source": "builtin", "tier": 0, "distinguishedName": "CN=Sicherungs-Operatoren,CN=Builtin,$B",
+      "members": [
+        { "sid": "$D-1401", "samAccountName": "svc-backup", "name": "svc-backup", "objectClass": "user", "distinguishedName": "CN=svc-backup,OU=Tier 1 Service Accounts,OU=Tier 1,OU=Tier Model Administration,$B", "direct": true, "via": [], "enabled": true },
+        { "sid": "$D-1402", "samAccountName": "t1-old", "name": "t1-old", "objectClass": "user", "distinguishedName": "CN=t1-old,OU=Tier 1 Accounts,OU=Tier 1,OU=Tier Model Administration,$B", "direct": true, "via": [], "enabled": false } ] },
+    { "sid": "$D-1105", "name": "Tier 0 Admins", "wellKnownName": null, "source": "config", "tier": 0, "distinguishedName": "CN=Tier 0 Admins,OU=Tier 0 Groups,OU=Tier 0,OU=Tier Model Administration,$B",
+      "members": [ $t0_members ] },
+    { "sid": "$D-1111", "name": "Tier 0 Service Accounts", "wellKnownName": null, "source": "config", "tier": 0, "distinguishedName": "CN=Tier 0 Service Accounts,OU=Tier 0 Groups,OU=Tier 0,OU=Tier Model Administration,$B",
+      "members": [
+        { "sid": "$D-1501", "samAccountName": "svc-t0-sync", "name": "svc-t0-sync", "objectClass": "user", "distinguishedName": "CN=svc-t0-sync,OU=Tier 0 Service Accounts,OU=Tier 0,OU=Tier Model Administration,$B", "direct": true, "via": [], "enabled": true } ] }
+  ],
+  "accounts": [
+    { "sid": "$D-500", "samAccountName": "Administrator", "distinguishedName": "CN=Administrator,CN=Users,$B", "objectClass": "user", "tier": 0, "enabled": true, "lastLogon": "$(ago 3)", "passwordLastSet": "$(ago 412)", "passwordNeverExpires": false, "accountNotDelegated": false, "protectedUsers": false, "adminCount": 1, "servicePrincipalNames": [], "memberOfPrivileged": ["Administrators", "Domain Admins", "Enterprise Admins", "Schema Admins"] },
+    { "sid": "$D-1201", "samAccountName": "t0-alice", "distinguishedName": "CN=Alice Admin (T0),$T0", "objectClass": "user", "tier": 0, "enabled": true, "lastLogon": "$(ago 1)", "passwordLastSet": "$(ago 30)", "passwordNeverExpires": false, "accountNotDelegated": true, "protectedUsers": true, "adminCount": 1, "servicePrincipalNames": [], "memberOfPrivileged": ["Tier 0 Admins", "Domain Admins", "Administrators"] },
+    { "sid": "$D-1202", "samAccountName": "t0-bob", "distinguishedName": "CN=Bob Admin (T0),$T0", "objectClass": "user", "tier": 0, "enabled": true, "lastLogon": "$(ago 204)", "passwordLastSet": "$(ago 210)", "passwordNeverExpires": true, "accountNotDelegated": true, "protectedUsers": true, "adminCount": 1, "servicePrincipalNames": [], "memberOfPrivileged": ["Tier 0 Admins"] },
+    { "sid": "$D-1501", "samAccountName": "svc-t0-sync", "distinguishedName": "CN=svc-t0-sync,OU=Tier 0 Service Accounts,OU=Tier 0,OU=Tier Model Administration,$B", "objectClass": "user", "tier": 0, "enabled": true, "lastLogon": "$(ago 0)", "passwordLastSet": "$(ago 800)", "passwordNeverExpires": true, "accountNotDelegated": false, "protectedUsers": false, "adminCount": 1, "servicePrincipalNames": ["MSSQLSvc/sql01.contoso.local:1433"], "memberOfPrivileged": ["Tier 0 Service Accounts"] },
+    { "sid": "$D-1401", "samAccountName": "svc-backup", "distinguishedName": "CN=svc-backup,OU=Tier 1 Service Accounts,OU=Tier 1,OU=Tier Model Administration,$B", "objectClass": "user", "tier": 0, "enabled": true, "lastLogon": "$(ago 2)", "passwordLastSet": "$(ago 100)", "passwordNeverExpires": false, "accountNotDelegated": true, "protectedUsers": false, "adminCount": 1, "servicePrincipalNames": ["backup/bkp01.contoso.local"], "memberOfPrivileged": ["Backup Operators"] },
+    { "sid": "$D-1402", "samAccountName": "t1-old", "distinguishedName": "CN=t1-old,OU=Tier 1 Accounts,OU=Tier 1,OU=Tier Model Administration,$B", "objectClass": "user", "tier": 0, "enabled": false, "lastLogon": "$(ago 500)", "passwordLastSet": "$(ago 600)", "passwordNeverExpires": false, "accountNotDelegated": false, "protectedUsers": false, "adminCount": 1, "servicePrincipalNames": [], "memberOfPrivileged": ["Backup Operators"] },
+    { "sid": "$D-1601", "samAccountName": "t1-dave", "distinguishedName": "CN=t1-dave,OU=Tier 1 Accounts,OU=Tier 1,OU=Tier Model Administration,$B", "objectClass": "user", "tier": 1, "enabled": true, "lastLogon": null, "passwordLastSet": "$(ago 20)", "passwordNeverExpires": false, "accountNotDelegated": false, "protectedUsers": false, "adminCount": null, "servicePrincipalNames": [], "memberOfPrivileged": [] },
+    { "sid": "$D-1001", "samAccountName": "DC01\$", "distinguishedName": "CN=DC01,OU=Domain Controllers,$B", "objectClass": "computer", "tier": 0, "enabled": true, "lastLogon": "$(ago 0)", "passwordLastSet": "$(ago 12)", "passwordNeverExpires": false, "accountNotDelegated": false, "protectedUsers": false, "adminCount": null, "servicePrincipalNames": ["ldap/dc01.contoso.local"], "memberOfPrivileged": ["Domain Controllers"] }$jan_account
+  ],
+  "adminCountOrphans": [
+    { "sid": "$D-1701", "samAccountName": "ehemals-admin", "distinguishedName": "CN=ehemals-admin,OU=Users,OU=Tier 2,OU=Tier Model Administration,$B", "objectClass": "user" }
+  ],
+  "aclFindings": [
+    { "objectDn": "CN=Domänen-Admins,CN=Users,$B", "objectType": "ProtectedGroup", "objectName": "Domänen-Admins", "principalSid": "$D-1301", "principalName": "CONTOSO\\\\Helpdesk", "principalClass": "group", "rights": ["WriteDacl"], "objectTypeGuid": null, "inherited": false, "memberCount": 12, "sampleMembers": ["helpdesk-jan", "helpdesk-lea", "helpdesk-max"] },
+    { "objectDn": "$B", "objectType": "DomainRoot", "objectName": "contoso.local", "principalSid": "$D-1302", "principalName": "CONTOSO\\\\svc-legacy-sync", "principalClass": "user", "rights": ["AllExtendedRights"], "objectTypeGuid": null, "inherited": false, "memberCount": null, "sampleMembers": [] },
+    { "objectDn": "OU=Tier 0,OU=Tier Model Administration,$B", "objectType": "Tier0OU", "objectName": "Tier 0", "principalSid": "$D-1106", "principalName": "CONTOSO\\\\Tier0Operators", "principalClass": "group", "rights": ["GenericWrite"], "objectTypeGuid": null, "inherited": false, "memberCount": 2, "sampleMembers": ["t0-alice", "t0-bob"] }$extra_acl
+  ],
+  "errors": []
+}
+J
+  echo "Snapshot written: $out"
+  echo "Script completed successfully."
+  exit 0
+fi
 logpath=$(echo "$call" | sed -nE "s/.*-LogPath '([^']*)'.*/\1/p")
 base=$(echo "$call" | sed -nE "s/.*-OutputFileBase ([A-Za-z]+).*/\1/p")
 echo "Deploy TierModel orchestration starting." ; echo "Call: $call"
@@ -27,8 +110,8 @@ if [ "$name" = "Audit-TierModel.ps1" ]; then
   cat > "$logpath/$base-$(date +%m%d%y-%H%M).json" <<J
 { "auditSummary": { "TotalChecked": 158, "DriftCount": 2, "MissingCount": 1, "UnexpectedCount": 0, "MismatchCount": 1, "OrphanedGpoLinkCount": 0, "SecurityDeltaCount": 0 },
   "driftFindings": [
-    { "Type": "Missing", "ResourceType": "OU", "Identifier": "OU=Tier 1 Accounts,OU=Tier 1,OU=Tier Model Administration,DC=contoso,DC=local", "Details": "OU does not exist" },
-    { "Type": "Mismatch", "ResourceType": "Group", "Identifier": "Tier0Admins", "Details": "groupscope: expected Universal, actual Global" } ],
+    { "Type": "Missing", "ResourceType": "OU", "Identifier": "OU=Tier 1 Accounts,OU=Tier 1,OU=Tier Model Administration,DC=contoso,DC=local", "Details": "OU does not exist", "Area": "ous", "Severity": "Medium" },
+    { "Type": "Mismatch", "ResourceType": "Group", "Identifier": "Tier0Admins", "Details": "groupscope: expected Universal, actual Global", "Area": "groups", "Severity": "High" } ],
   "metadata": { "scope": "FullDeployment" } }
 J
 fi

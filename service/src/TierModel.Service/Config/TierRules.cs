@@ -52,7 +52,11 @@ public static partial class TierRules
         return TierOf(dn);
     }
 
-    private static string Bare(string principal)
+    /// <summary>Whether a principal ("CONTOSO\\Domain Admins" or "Domain Admins") is Tier 0 by definition (built-in English names).</summary>
+    public static bool IsBuiltinTier0Principal(string? principal) =>
+        !string.IsNullOrWhiteSpace(principal) && Tier0Principals.Contains(Bare(principal));
+
+    public static string Bare(string principal)
     {
         var i = principal.LastIndexOf('\\');
         return i >= 0 ? principal[(i + 1)..] : principal;

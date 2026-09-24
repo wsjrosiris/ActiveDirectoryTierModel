@@ -47,6 +47,7 @@ export const actionLabels: Record<string, string> = {
   'config.restore': 'Version wiederhergestellt',
   'run.deploy': 'Deploy gestartet',
   'run.audit': 'Audit gestartet',
+  'run.monitor': 'Überwachung gestartet',
   'run.cancel': 'Lauf abgebrochen',
   'run.approve': 'Deploy freigegeben',
   'run.reject': 'Deploy abgelehnt',
@@ -107,4 +108,89 @@ export const sectionFallbackTitles: Record<string, string> = {
   metadata: 'Metadaten',
   'guid-mappings': 'GUID-Zuordnungen',
   dependencies: 'Abhängigkeiten',
+}
+
+export const severityLabels: Record<string, string> = {
+  High: 'Hoch',
+  Medium: 'Mittel',
+  Low: 'Niedrig',
+}
+
+/** Areas of audit findings and plan actions. */
+export const areaLabels: Record<string, string> = {
+  ous: 'OUs',
+  groups: 'Gruppen',
+  users: 'Benutzer',
+  acls: 'OU-ACLs',
+  gpos: 'GPOs',
+  admx: 'ADMX',
+  msa: 'MSA',
+  gmsa: 'gMSA',
+  dmsa: 'dMSA',
+  winlaps: 'Windows LAPS',
+}
+
+/** Area of an audit finding: the report's `area`, or derived from the resource type of older framework versions. */
+export function findingArea(f: { area?: string; resourceType?: string }): string | null {
+  if (f.area && areaLabels[f.area]) return f.area
+  const r = (f.resourceType ?? '').toLowerCase()
+  if (r === 'ou' || r.includes('organizationalunit')) return 'ous'
+  if (r.includes('group') && !r.includes('policy')) return 'groups'
+  if (r === 'user' || r.includes('useraccount')) return 'users'
+  if (r.includes('gpo') || r.includes('gplink') || r.includes('grouppolicy')) return 'gpos'
+  if (r.includes('acl') || r.includes('accessrule') || r.includes('ace')) return 'acls'
+  if (r.includes('admx') || r.includes('adml')) return 'admx'
+  if (r.includes('winlaps') || r.includes('laps')) return 'winlaps'
+  if (r.includes('gmsa')) return 'gmsa'
+  if (r.includes('dmsa')) return 'dmsa'
+  if (r.includes('msa')) return 'msa'
+  return null
+}
+
+/** Scope/extension a remediation plan for this area uses (mirrors the service's mapping, for display only). */
+export const areaPlanLabels: Record<string, string> = {
+  ous: 'Nur OUs',
+  groups: 'Nur Gruppen',
+  users: 'Nur Benutzer',
+  acls: 'Nur OU-ACLs',
+  gpos: 'Nur GPOs',
+  admx: 'Nur ADMX',
+  msa: 'Add-on MSA',
+  gmsa: 'Add-on gMSA',
+  dmsa: 'Add-on dMSA',
+  winlaps: 'Add-on Windows LAPS',
+}
+
+export const objectClassLabels: Record<string, string> = {
+  user: 'Benutzer',
+  inetOrgPerson: 'Benutzer',
+  group: 'Gruppe',
+  computer: 'Computer',
+  'msDS-GroupManagedServiceAccount': 'gMSA',
+  'msDS-ManagedServiceAccount': 'MSA',
+  'msDS-DelegatedManagedServiceAccount': 'dMSA',
+  foreignSecurityPrincipal: 'Fremder Prinzipal',
+  other: 'Objekt',
+}
+
+export const aclObjectTypeLabels: Record<string, string> = {
+  DomainRoot: 'Domänenstamm',
+  AdminSDHolder: 'AdminSDHolder',
+  ProtectedGroup: 'Geschützte Gruppe',
+  Tier0OU: 'Tier-0-OU',
+  Tier0GPO: 'Tier-0-GPO',
+  DomainControllersOU: 'OU der Domänencontroller',
+}
+
+/** Short German explanation of dangerous AD rights. */
+export const rightDescriptions: Record<string, string> = {
+  GenericAll: 'Vollzugriff auf das Objekt',
+  GenericWrite: 'Darf alle Attribute schreiben',
+  WriteDacl: 'Darf die Berechtigungen ändern',
+  WriteOwner: 'Darf den Besitz übernehmen',
+  Owner: 'Ist Besitzer des Objekts',
+  AllExtendedRights: 'Alle erweiterten Rechte (z. B. Replikation, Kennwort zurücksetzen)',
+  WriteMember: 'Darf Mitglieder hinzufügen',
+  ResetPassword: 'Darf Kennwörter zurücksetzen',
+  WriteProperty: 'Darf Attribute schreiben',
 }

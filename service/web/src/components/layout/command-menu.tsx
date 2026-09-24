@@ -19,6 +19,7 @@ import {
   Download,
   CheckCircle2,
   ScrollText,
+  ShieldUser,
 } from 'lucide-react'
 import { Dialog as D } from 'radix-ui'
 import { api } from '@/api/client'
@@ -216,6 +217,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const { resolved, setTheme } = useTheme()
   const logout = useLogout()
   const canEdit = useCan('Editor')
+  const canOperate = useCan('Operator')
   const { data: me } = useMe()
 
   const run = (fn: () => void) => {
@@ -245,6 +247,11 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
             {canEdit && (
               <Command.Item className={itemCls} onSelect={() => run(() => navigate('/audits?start=1'))} value="audit starten prüfen">
                 <ScanSearch /> Audit starten …
+              </Command.Item>
+            )}
+            {canOperate && (
+              <Command.Item className={itemCls} onSelect={() => run(() => navigate('/privilegiert?check=1'))} value="privilegierte gruppen jetzt prüfen überwachung starten monitor tier 0">
+                <ShieldUser /> Privilegierte Gruppen jetzt prüfen …
               </Command.Item>
             )}
             <Command.Item className={itemCls} onSelect={() => run(() => navigate('/konfiguration/validierung'))} value="konfiguration validieren validierung">

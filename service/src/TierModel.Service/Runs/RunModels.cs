@@ -7,6 +7,12 @@ namespace TierModel.Service.Runs;
 
 public record RunRequest(string PreferredDc, DeployScope? Scope, bool IncludeMsa, bool IncludeGmsa, bool IncludeDmsa, bool IncludeWinLaps, string? AdmlLanguage);
 
+/// <summary>Monitor run (privileged groups): only the domain controller matters.</summary>
+public record MonitorRequest(string PreferredDc)
+{
+    public RunRequest ToRunRequest() => new(PreferredDc ?? "", null, false, false, false, false, null);
+}
+
 public record DeployRequest(string PreferredDc, DeployScope? Scope, bool IncludeMsa, bool IncludeGmsa, bool IncludeDmsa, bool IncludeWinLaps, string? AdmlLanguage, bool ConfirmApply, long? PlanRunId = null)
 {
     public RunRequest ToRunRequest() => new(PreferredDc, Scope, IncludeMsa, IncludeGmsa, IncludeDmsa, IncludeWinLaps, AdmlLanguage);
@@ -42,12 +48,25 @@ public static partial class RunValidation
     [GeneratedRegex(@"^[a-zA-Z]{2}-[a-zA-Z]{2}$")]
     private static partial Regex Language();
 
+    /// <summary>Field errors of a monitor run (only the domain controller).</summary>
+    public static Dictionary<string, string[]> ValidateMonitor(RunRequest r)
+    {
+        var errors = new Dictionary<string, string[]>();
+        ValidateDc(r.PreferredDc, errors);
+        return errors;
+    }
+
+    private static void ValidateDc(string? dc, Dictionary<string, string[]> errors)
+    {
+        if (string.IsNullOrWhiteSpace(dc) || dc.Length > 253 || !HostName().IsMatch(dc))
+            errors["preferredDc"] = ["Bitte einen gültigen Domänencontroller-Namen angeben (z. B. dc01.contoso.com)."];
+    }
+
     /// <summary>Returns field errors; empty when valid. Values end up as process arguments, so they are strictly checked.</summary>
     public static Dictionary<string, string[]> Validate(RunRequest r)
     {
         var errors = new Dictionary<string, string[]>();
-        if (string.IsNullOrWhiteSpace(r.PreferredDc) || r.PreferredDc.Length > 253 || !HostName().IsMatch(r.PreferredDc))
-            errors["preferredDc"] = ["Bitte einen gültigen Domänencontroller-Namen angeben (z. B. dc01.contoso.com)."];
+        ValidateDc(r.PreferredDc, errors);
         var anyInclude = r.IncludeMsa || r.IncludeGmsa || r.IncludeDmsa || r.IncludeWinLaps;
         if (r.Scope is { } scope && !Enum.IsDefined(scope))
             errors["scope"] = ["Unbekannter Bereich."];

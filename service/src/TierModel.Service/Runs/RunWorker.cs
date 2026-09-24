@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TierModel.Service.Config;
 using TierModel.Service.Data;
+using TierModel.Service.Monitoring;
 using TierModel.Service.Notifications;
 
 namespace TierModel.Service.Runs;
@@ -120,6 +121,7 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
         var log = new RunLogWriter(scopes, id);
         var status = RunStatus.Failed;
         string? message = null;
+        var privilegedChange = false;
         try
         {
             log.System($"Lauf #{id} gestartet: {Describe(run)}");
@@ -148,19 +150,32 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
 
             var wrapper = Path.Combine(workDir, "run.ps1");
             await File.WriteAllTextAsync(wrapper, BuildWrapperScript(run, workDir), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true), linked.Token);
-            log.System($"Aufruf: {(run.Kind == RunKind.Deploy ? "Deploy" : "Audit")}-TierModel.ps1 {string.Join(' ', ScriptParameters(run, workDir))}");
+            if (run.Kind == RunKind.Monitor && !File.Exists(Path.Combine(workDir, Workspace.MonitorScript)))
+                throw new InvalidOperationException($"Das Framework enthält {Workspace.MonitorScript} nicht – bitte das Framework unter '{o.FrameworkPath}' aktualisieren.");
+            log.System($"Aufruf: {ScriptName(run.Kind)} {string.Join(' ', ScriptParameters(run, workDir))}");
             var exitCode = await RunPowerShellAsync(o.PwshPath, workDir, PwshArguments(wrapper), log, linked.Token);
             run.ExitCode = exitCode;
 
             if (run.Kind == RunKind.Audit) ReadAuditReport(run, workDir, log);
             var plan = run.Kind == RunKind.Deploy && run.Mode == RunMode.Plan ? ReadDeployPlan(run, workDir, (text, level) => log.System(text, level)) : null;
+            string? monitorMessage = null;
+            if (run.Kind == RunKind.Monitor && exitCode == 0)
+            {
+                var sections = snapshot.ToDictionary(x => x.Def.Key, x => JsonNode.Parse(x.Content));
+                var settings = await scope.ServiceProvider.GetRequiredService<SettingsService>().GetAsync(CancellationToken.None);
+                (monitorMessage, privilegedChange) = await ProcessMonitorAsync(db, run, workDir, sections,
+                    new HygieneThresholds(settings.StaleDays, settings.PasswordMaxAgeDays), (text, level) => log.System(text, level));
+            }
 
             run.ErrorCount ??= log.ErrorLines;
             status = exitCode == 0 ? RunStatus.Succeeded : RunStatus.Failed;
             message = exitCode == 0
-                ? run.Kind == RunKind.Audit
-                    ? run.DriftCount is > 0 ? $"{run.DriftCount} Abweichung(en) gefunden" : "Keine Abweichungen"
-                    : run.Mode == RunMode.Apply ? "Bereitstellung abgeschlossen" : PlanMessage(plan)
+                ? run.Kind switch
+                {
+                    RunKind.Audit => run.DriftCount is > 0 ? $"{run.DriftCount} Abweichung(en) gefunden" : "Keine Abweichungen",
+                    RunKind.Monitor => monitorMessage,
+                    _ => run.Mode == RunMode.Apply ? "Bereitstellung abgeschlossen" : PlanMessage(plan),
+                }
                 : $"PowerShell wurde mit Code {exitCode} beendet";
         }
         catch (OperationCanceledException) when (cancel.IsCancellationRequested)
@@ -206,11 +221,12 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
             }
         }
         logger.LogInformation("Run {RunId} finished with {Status}: {Message}", id, status, message);
-        foreach (var e in NotificationService.EventsFor(run)) notifications.Enqueue(e, id);
+        foreach (var e in NotificationService.EventsFor(run, privilegedChange)) notifications.Enqueue(e, id);
     }
 
     private static string Describe(Run r)
     {
+        if (r.Kind == RunKind.Monitor) return $"Überwachung privilegierter Gruppen, DC {r.PreferredDc}, angefordert von {r.RequestedBy}";
         var what = r.Kind == RunKind.Audit ? "Audit" : r.Mode == RunMode.Apply ? "Deploy – ANWENDEN" : "Deploy – Planung";
         var includes = RunSummaryDto.IncludeList(r.IncludeMsa, r.IncludeGmsa, r.IncludeDmsa, r.IncludeWinLaps);
         return $"{what}, Bereich {r.Scope?.ToString() ?? "–"}{(includes.Length > 0 ? " + " + string.Join(", ", includes) : "")}, DC {r.PreferredDc}, angefordert von {r.RequestedBy}";
@@ -222,10 +238,23 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
     /// <summary>Single-quoted PowerShell string literal.</summary>
     private static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
 
-    /// <summary>Parameters passed to Deploy-/Audit-TierModel.ps1. Values are validated before they get here.</summary>
+    public static string ScriptName(RunKind kind) => kind switch
+    {
+        RunKind.Deploy => "Deploy-TierModel.ps1",
+        RunKind.Monitor => Workspace.MonitorScript,
+        _ => "Audit-TierModel.ps1",
+    };
+
+    /// <summary>Parameters passed to the framework script. Values are validated before they get here.</summary>
     public static List<string> ScriptParameters(Run run, string workDir)
     {
         var p = new List<string> { "-PreferredDc", Quote(run.PreferredDc) };
+        // Watch-TierModelPrivilegedGroups.ps1 reads its configuration from $PSScriptRoot\config like the other scripts.
+        if (run.Kind == RunKind.Monitor)
+        {
+            p.AddRange(["-OutputPath", Quote(Path.Combine(workDir, "out", PrivilegedSnapshotReader.FileName))]);
+            return p;
+        }
         if (run.Scope is { } scope) p.Add("-" + scope);
         if (run.IncludeMsa) p.Add("-IncludeMsa");
         if (run.IncludeGmsa) p.Add("-IncludeGmsa");
@@ -253,7 +282,7 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
     /// </summary>
     public static string BuildWrapperScript(Run run, string workDir)
     {
-        var script = run.Kind == RunKind.Deploy ? "Deploy-TierModel.ps1" : "Audit-TierModel.ps1";
+        var script = ScriptName(run.Kind);
         return $"""
             # Generated by TierModel Service for run #{run.Id} ({run.Kind}, requested by {run.RequestedBy.ReplaceLineEndings(" ")}).
             [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
@@ -385,5 +414,77 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, Notification
         {
             log.System($"Audit-Bericht konnte nicht gelesen werden: {ex.Message}", "error");
         }
+    }
+
+    /// <summary>
+    /// Reads out/privileged.json, evaluates it against the previous snapshot and the configuration used by this run, and
+    /// stores the snapshot. A missing or unusable file fails the run (<see cref="InvalidOperationException"/> with a German message).
+    /// </summary>
+    public static async Task<(string Message, bool Notify)> ProcessMonitorAsync(AppDbContext db, Run run, string workDir,
+        IReadOnlyDictionary<string, JsonNode?> sections, HygieneThresholds thresholds, Action<string, string> log)
+    {
+        var file = Path.Combine(workDir, "out", PrivilegedSnapshotReader.FileName);
+        if (!File.Exists(file))
+            throw new InvalidOperationException($"Überwachung fehlgeschlagen: Das Skript hat keine Ergebnisdatei ({PrivilegedSnapshotReader.FileName}) geschrieben.");
+        PrivilegedSnapshotData data;
+        try
+        {
+            data = PrivilegedSnapshotReader.Parse(await File.ReadAllTextAsync(file));
+        }
+        catch (FormatException ex)
+        {
+            throw new InvalidOperationException($"Überwachung fehlgeschlagen: {ex.Message}", ex);
+        }
+
+        var previous = await db.PrivilegedSnapshots.AsNoTracking()
+            .Where(s => s.DomainId == 1 && s.RunId != run.Id)
+            .OrderByDescending(s => s.Id)
+            .Select(s => new { s.Data, s.Evaluation })
+            .FirstOrDefaultAsync();
+        var evaluation = PrivilegedEvaluator.Evaluate(data, PrivilegedSnapshotReader.Deserialize(previous?.Data),
+            PrivilegedEvaluation.Deserialize(previous?.Evaluation), Tier0Config.From(sections), thresholds, DateTimeOffset.UtcNow);
+
+        db.PrivilegedSnapshots.Add(new PrivilegedSnapshot
+        {
+            RunId = run.Id,
+            TakenAt = data.Metadata.Timestamp ?? DateTimeOffset.UtcNow,
+            Data = PrivilegedSnapshotReader.Serialize(data),
+            Evaluation = evaluation.Serialize(),
+            GroupCount = data.Groups.Count,
+            MemberCount = data.MemberCount,
+            ChangeCount = evaluation.Changes.Count,
+            UnexpectedCount = evaluation.Unexpected.Count,
+            HygieneCount = evaluation.Hygiene.Count,
+            AttackPathCount = evaluation.AttackPaths.Count,
+        });
+        var added = evaluation.Changes.Count(c => c.Change == "Added");
+        run.DriftCount = evaluation.DriftCount;
+        run.ErrorCount = data.Errors.Count;
+        run.Summary = JsonSerializer.Serialize(new
+        {
+            groupCount = data.Groups.Count,
+            memberCount = data.MemberCount,
+            accountCount = data.Accounts.Count,
+            addedCount = added,
+            removedCount = evaluation.Changes.Count - added,
+            unexpectedCount = evaluation.Unexpected.Count,
+            hygieneCount = evaluation.Hygiene.Count,
+            hygieneHighCount = evaluation.Hygiene.Count(h => h.Severity == PrivilegedEvaluator.High),
+            attackPathCount = evaluation.AttackPaths.Count,
+            errorCount = data.Errors.Count,
+            baseline = evaluation.Baseline,
+        });
+
+        foreach (var error in data.Errors) log($"Teilfehler des Skripts: {error}", "warn");
+        log($"Momentaufnahme gelesen: {data.Groups.Count} Gruppe(n), {data.MemberCount} Mitgliedschaft(en), {data.Accounts.Count} Konto/Konten"
+            + (evaluation.Baseline ? " – erste Momentaufnahme, Änderungen werden ab dem nächsten Lauf erkannt." : "."), "info");
+
+        var parts = new List<string>();
+        if (evaluation.Changes.Count > 0) parts.Add($"{evaluation.Changes.Count} Änderung(en)");
+        if (evaluation.Unexpected.Count > 0) parts.Add($"{evaluation.Unexpected.Count} nicht erwartete(s) Mitglied(er)");
+        if (evaluation.Hygiene.Count > 0) parts.Add($"{evaluation.Hygiene.Count} Hygiene-Befund(e)");
+        if (evaluation.AttackPaths.Count > 0) parts.Add($"{evaluation.AttackPaths.Count} Angriffspfad(e)");
+        var message = parts.Count == 0 ? "Überwachung abgeschlossen: keine Auffälligkeiten" : "Überwachung abgeschlossen: " + string.Join(", ", parts);
+        return (message, evaluation.Notify);
     }
 }

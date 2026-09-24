@@ -9,19 +9,26 @@ namespace TierModel.Service.Endpoints;
 
 public static class RunEndpoints
 {
+    /// <param name="Kind">Audit (default) or Monitor; monitor schedules ignore scope, extensions and language.</param>
     public record ScheduleRequest(string Name, string Cron, string TimeZone, bool Enabled, string PreferredDc, DeployScope? Scope,
-        bool IncludeMsa, bool IncludeGmsa, bool IncludeDmsa, bool IncludeWinLaps, string? AdmlLanguage)
+        bool IncludeMsa, bool IncludeGmsa, bool IncludeDmsa, bool IncludeWinLaps, string? AdmlLanguage, RunKind? Kind = null)
     {
-        public RunRequest ToRunRequest() => new(PreferredDc, Scope, IncludeMsa, IncludeGmsa, IncludeDmsa, IncludeWinLaps, AdmlLanguage);
+        public RunKind EffectiveKind => Kind ?? RunKind.Audit;
+
+        public RunRequest ToRunRequest() => EffectiveKind == RunKind.Monitor
+            ? new(PreferredDc, null, false, false, false, false, null)
+            : new(PreferredDc, Scope, IncludeMsa, IncludeGmsa, IncludeDmsa, IncludeWinLaps, AdmlLanguage);
     }
 
-    public record ScheduleDto(long Id, string Name, string Cron, string TimeZone, bool Enabled, string PreferredDc, DeployScope? Scope,
+    public record ScheduleDto(long Id, string Name, RunKind Kind, string Cron, string TimeZone, bool Enabled, string PreferredDc, DeployScope? Scope,
         bool IncludeMsa, bool IncludeGmsa, bool IncludeDmsa, bool IncludeWinLaps, string? AdmlLanguage,
         DateTimeOffset? NextRunAt, DateTimeOffset? LastRunAt, long? LastRunId, string CreatedBy, DateTimeOffset CreatedAt)
     {
-        public static ScheduleDto From(Schedule s) => new(s.Id, s.Name, s.Cron, s.TimeZone, s.Enabled, s.PreferredDc, s.Scope,
+        public static ScheduleDto From(Schedule s) => new(s.Id, s.Name, s.Kind, s.Cron, s.TimeZone, s.Enabled, s.PreferredDc, s.Scope,
             s.IncludeMsa, s.IncludeGmsa, s.IncludeDmsa, s.IncludeWinLaps, s.AdmlLanguage, s.NextRunAt, s.LastRunAt, s.LastRunId, s.CreatedBy, s.CreatedAt);
     }
+
+    public record RemediationRequest(string Area);
 
     public static void MapRunEndpoints(this IEndpointRouteBuilder app)
     {
@@ -62,6 +69,31 @@ public static class RunEndpoints
             var run = await service.EnqueueAsync(RunKind.Audit, r, false, ctx.User.UserName());
             return Results.Accepted($"/api/runs/{run.Id}", RunSummaryDto.From(run));
         }).RequireAuthorization(nameof(Role.Editor));
+
+        // Snapshot of the privileged groups (roadmap 7–9). Operators only: it reads the whole privileged membership of the domain.
+        runs.MapPost("/monitor", async (MonitorRequest r, HttpContext ctx, RunService service) =>
+        {
+            var request = r.ToRunRequest();
+            var errors = RunValidation.ValidateMonitor(request);
+            if (errors.Count > 0) return Results.ValidationProblem(errors);
+            var run = await service.EnqueueAsync(RunKind.Monitor, request, false, ctx.User.UserName());
+            return Results.Accepted($"/api/runs/{run.Id}", RunSummaryDto.From(run));
+        }).RequireAuthorization(nameof(Role.Operator));
+
+        // Remediation by click (roadmap 5): a planning run for one area of an audit's findings, with the audit's DC and language.
+        runs.MapPost("/{id:long}/remediate", async (long id, RemediationRequest r, HttpContext ctx, AppDbContext db, RunService service) =>
+        {
+            var audit = await db.Runs.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
+            if (audit is null) return Results.NotFound();
+            if (audit.Kind != RunKind.Audit)
+                return Results.Problem(title: "Nur für Audits möglich", detail: "Eine Planung zur Behebung kann nur aus den Befunden eines Audits gestartet werden.", statusCode: 409);
+            if (Remediation.For(r?.Area, audit.PreferredDc, audit.AdmlLanguage) is not { } request)
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["area"] = [$"Unbekannter Bereich „{r?.Area}“."] });
+            var errors = RunValidation.Validate(request);
+            if (errors.Count > 0) return Results.ValidationProblem(errors);
+            var run = await service.EnqueueAsync(RunKind.Deploy, request, false, ctx.User.UserName());
+            return Results.Accepted($"/api/runs/{run.Id}", RunSummaryDto.From(run));
+        }).RequireAuthorization(nameof(Role.Operator));
 
         runs.MapGet("/{id:long}", async (long id, AppDbContext db, RunService service, CancellationToken ct) =>
         {
@@ -135,6 +167,7 @@ public static class RunEndpoints
             if (ValidateSchedule(r) is { } problem) return problem;
             var s = new Schedule
             {
+                Kind = r.EffectiveKind,
                 Name = r.Name.Trim(), Cron = r.Cron.Trim(), TimeZone = r.TimeZone, PreferredDc = r.PreferredDc.Trim(),
                 CreatedBy = ctx.User.UserName(), CreatedAt = DateTimeOffset.UtcNow,
             };
@@ -150,6 +183,7 @@ public static class RunEndpoints
         {
             var s = await db.Schedules.FindAsync(id);
             if (s is null) return Results.NotFound();
+            r = r with { Kind = r.Kind ?? s.Kind };   // clients that do not know the kind keep it
             if (ValidateSchedule(r) is { } problem) return problem;
             Apply(s, r);
             log.Add(ctx.User.UserName(), "schedule.update", "schedule", id.ToString(), $"Zeitplan '{s.Name}' geändert ({s.Cron}, {(s.Enabled ? "aktiv" : "inaktiv")})");
@@ -171,9 +205,7 @@ public static class RunEndpoints
         {
             var s = await db.Schedules.FindAsync(id);
             if (s is null) return Results.NotFound();
-            var run = await service.EnqueueAsync(RunKind.Audit,
-                new RunRequest(s.PreferredDc, s.Scope, s.IncludeMsa, s.IncludeGmsa, s.IncludeDmsa, s.IncludeWinLaps, s.AdmlLanguage),
-                false, ctx.User.UserName(), RunTrigger.Manual, s.Id);
+            var run = await service.EnqueueAsync(s.Kind, ScheduleWorker.RequestFor(s), false, ctx.User.UserName(), RunTrigger.Manual, s.Id);
             s.LastRunId = run.Id;
             s.LastRunAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync();
@@ -199,7 +231,12 @@ public static class RunEndpoints
 
     private static IResult? ValidateSchedule(ScheduleRequest r)
     {
-        var errors = RunValidation.Validate(r.ToRunRequest());
+        var errors = r.EffectiveKind switch
+        {
+            RunKind.Audit => RunValidation.Validate(r.ToRunRequest()),
+            RunKind.Monitor => RunValidation.ValidateMonitor(r.ToRunRequest()),
+            _ => new Dictionary<string, string[]> { ["kind"] = ["Zeitpläne gibt es nur für Audits und Überwachungen."] },
+        };
         if (string.IsNullOrWhiteSpace(r.Name) || r.Name.Length > 100) errors["name"] = ["Bitte einen Namen (max. 100 Zeichen) angeben."];
         if (ScheduleWorker.Validate(r.Cron?.Trim() ?? "", r.TimeZone ?? "") is { } cronError) errors["cron"] = [cronError];
         return errors.Count > 0 ? Results.ValidationProblem(errors) : null;
@@ -207,17 +244,19 @@ public static class RunEndpoints
 
     private static void Apply(Schedule s, ScheduleRequest r)
     {
+        var request = r.ToRunRequest();
+        s.Kind = r.EffectiveKind;
         s.Name = r.Name.Trim();
         s.Cron = r.Cron.Trim();
         s.TimeZone = r.TimeZone;
         s.Enabled = r.Enabled;
         s.PreferredDc = r.PreferredDc.Trim();
-        s.Scope = r.Scope;
-        s.IncludeMsa = r.IncludeMsa;
-        s.IncludeGmsa = r.IncludeGmsa;
-        s.IncludeDmsa = r.IncludeDmsa;
-        s.IncludeWinLaps = r.IncludeWinLaps;
-        s.AdmlLanguage = string.IsNullOrWhiteSpace(r.AdmlLanguage) ? null : r.AdmlLanguage.Trim();
+        s.Scope = request.Scope;
+        s.IncludeMsa = request.IncludeMsa;
+        s.IncludeGmsa = request.IncludeGmsa;
+        s.IncludeDmsa = request.IncludeDmsa;
+        s.IncludeWinLaps = request.IncludeWinLaps;
+        s.AdmlLanguage = string.IsNullOrWhiteSpace(request.AdmlLanguage) ? null : request.AdmlLanguage.Trim();
         s.NextRunAt = s.Enabled ? ScheduleWorker.NextOccurrence(s.Cron, s.TimeZone, DateTimeOffset.UtcNow) : null;
     }
 }
