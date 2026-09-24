@@ -105,7 +105,8 @@ Läufe werden in eine Warteschlange gestellt und nacheinander ausgeführt.
 ```ts
 type Scope = 'FullDeployment' | 'OuOnly' | 'GroupOnly' | 'UserOnly' | 'GposOnly' | 'OuAclsOnly' | 'AdmxOnly'
 interface RunRequest {
-  preferredDc: string; scope: Scope | null      // null nur erlaubt, wenn mind. ein include* gesetzt ist
+  preferredDc: string; scope: Scope | null      // null nur erlaubt, wenn mind. ein include* gesetzt ist;
+                                                 // include* nur mit scope 'FullDeployment' oder null (wie in den Skripten)
   includeMsa: boolean; includeGmsa: boolean; includeDmsa: boolean; includeWinLaps: boolean
   admlLanguage?: string                          // Standard aus Einstellungen
 }
@@ -134,12 +135,12 @@ interface LogLine { seq: number; at: string; stream: 'stdout' | 'stderr' | 'syst
 
 | Methode | Pfad | Body / Antwort |
 |---|---|---|
-| GET  | `/api/runs?kind=&status=&page=1&pageSize=25` | → `{ items: RunSummary[], total }` |
+| GET  | `/api/runs?kind=Audit&status=Succeeded&page=1&pageSize=25` | → `{ items: RunSummary[], total }` – Filter weglassen statt leer übergeben (leere Werte → 400) |
 | POST | `/api/runs/deploy` | `DeployRequest` → `RunSummary` (202) |
 | POST | `/api/runs/audit` | `RunRequest` → `RunSummary` (202) |
 | GET  | `/api/runs/{id}` | → `RunDetail` |
 | GET  | `/api/runs/{id}/log?after=0` | → `{ status: RunStatus, lines: LogLine[] }` (Zeilen mit `seq > after`, max. 2000) |
-| POST | `/api/runs/{id}/cancel` | → 204 (Operator) |
+| POST | `/api/runs/{id}/cancel` | → 204 (Operator); 404 unbekannt, 409 bereits beendet |
 
 ## Zeitpläne (geplante Audits)
 
@@ -187,7 +188,7 @@ interface ChangeEntry {
   lastDeploy: RunSummary | null
   driftTrend: { runId: number; at: string; driftCount: number }[]   // letzte 30 erfolgreiche Audits, aufsteigend
   recentRuns: RunSummary[]       // 8
-  recentChanges: ChangeEntry[]   // 8
+  recentChanges: ChangeEntry[]   // 8, ohne Anmeldeereignisse (entityType 'auth')
   queue: { running: number; queued: number }
   validation: { errors: number; warnings: number }
 }
@@ -195,7 +196,7 @@ interface ChangeEntry {
 
 ## Einstellungen (Lesen: alle, Schreiben: Admin)
 
-`GET /api/settings`, `PUT /api/settings` →
+`GET /api/settings`, `PUT /api/settings` (Body: `defaultPreferredDc`, `admlLanguage` – Pflicht, Format `xx-XX` –, `runRetentionDays` 0–3650) →
 `{ defaultPreferredDc: string, admlLanguage: string, runRetentionDays: number, frameworkPath: string (nur lesen), pwshPath: string (nur lesen) }`
 
 ## Sonstiges

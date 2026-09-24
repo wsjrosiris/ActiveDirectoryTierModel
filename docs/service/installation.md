@@ -98,7 +98,7 @@ Der Assistent zeigt Betriebssystem und Domäne und prüft PowerShell 7 sowie die
 
 | Frage | Vorschlag |
 |---|---|
-| Programmverzeichnis | `C:\Program Files\TierModelService` |
+| Programmverzeichnis | `C:\Program Files\TierModelService` – muss neu oder leer sein (das Dienstkonto erhält Rechte darauf, die Deinstallation entfernt die installierten Dateien) |
 | Datenverzeichnis | `C:\ProgramData\TierModelService` (Arbeitskopien und Berichte der Läufe) |
 
 ### 3. Datenbank
@@ -106,7 +106,7 @@ Der Assistent zeigt Betriebssystem und Domäne und prüft PowerShell 7 sowie die
 | Auswahl | Was passiert | Benötigt |
 |---|---|---|
 | **1 – Vorhandener Server** | Legt Datenbank und Datenbankbenutzer an (bzw. aktualisiert das Passwort, falls vorhanden) und entzieht `PUBLIC` alle Rechte an der Datenbank. | Hostname, Port, Administrator (z. B. `postgres`) und dessen Passwort. Bei entfernten Servern: Verschlüsselung wählen (Standard „TLS erforderlich“). |
-| **2 – Lokal installieren** | Installiert PostgreSQL unbeaufsichtigt (Server + Kommandozeilenwerkzeuge, ohne pgAdmin/StackBuilder), bindet es nur an `localhost` und legt dann Datenbank und Benutzer an. | Neues Passwort für den Superuser `postgres` – **im Passwort-Tresor ablegen**. |
+| **2 – Lokal installieren** | Installiert PostgreSQL unbeaufsichtigt (Server + Kommandozeilenwerkzeuge, ohne pgAdmin/StackBuilder), bindet es nur an `localhost` und legt dann Datenbank und Benutzer an. | Neues Passwort für den Superuser `postgres` (nur ASCII-Zeichen) – **im Passwort-Tresor ablegen**. |
 | **3 – Vorhandene Datenbank** | Verbindet nur. | Host, Port, Datenbank, Benutzer und dessen Passwort. Der Benutzer braucht das Recht, Tabellen anzulegen (Eigentümer der Datenbank). |
 
 Für 1 und 2 erzeugt der Assistent ein **zufälliges 32-stelliges Passwort** für den Datenbankbenutzer des Dienstes.
@@ -115,8 +115,9 @@ Es wird nur in der geschützten Dienstkonfiguration gespeichert.
 ### 4. Dienstkonto
 
 gMSA (empfohlen), Domänenkonto oder LocalSystem – siehe [Vorbereitung](#dienstkonto-vorbereiten-gmsa-empfohlen).
-Beim gMSA wird der Name **ohne `$`** eingegeben; der Assistent ergänzt Domäne und `$`, installiert das Konto
-bei Bedarf und prüft es. Beim Domänenkonto werden die Anmeldedaten gegen die Domäne geprüft.
+Beim gMSA wird der Name **ohne Domäne und `$`** eingegeben; der Assistent ergänzt die Domäne des Servers und `$`,
+installiert das Konto bei Bedarf und prüft es. Beim Domänenkonto werden die Anmeldedaten gegen die Domäne geprüft.
+Für alle Varianten prüft der Assistent, ob das Konto Mitglied von **Domain Admins** ist, und warnt sonst.
 Das Recht **„Als Dienst anmelden“** setzt der Assistent selbst.
 
 ### 5. Weboberfläche
@@ -190,9 +191,10 @@ C:\ProgramData\TierModelService\
 1. Neues Paket entpacken (nicht über das alte Programmverzeichnis).
 2. `Setup.cmd` **aus dem neuen Paket** starten → **Aktualisieren** wählen.
 
-Der Assistent stoppt den Dienst, sichert `app\` nach `app.bak`, ersetzt Programm- und Framework-Dateien
-(`appsettings.Production.json` bleibt erhalten), aktualisiert das Datenbankschema und startet den Dienst.
-Antwortet der Dienst danach nicht, bietet er an, die vorherige Programmversion wiederherzustellen.
+Der Assistent stoppt den Dienst, sichert `app\` und `framework\` nach `app.bak` bzw. `framework.bak`, ersetzt
+Programm- und Framework-Dateien (`appsettings.Production.json` bleibt erhalten), aktualisiert das Datenbankschema und
+startet den Dienst. Nach Erfolg werden die Sicherungen gelöscht. Antwortet der Dienst nicht, bietet er an, die
+vorherige Version wiederherzustellen.
 
 !!! warning "Datenbank vorher sichern"
     Schemaänderungen werden beim Rücksprung nicht zurückgenommen. Vor jedem Update eine Datenbanksicherung
@@ -206,7 +208,7 @@ anderes Zertifikat, anderes Dienstkonto) und registriert den Dienst neu. Daten i
 ## Deinstallieren
 
 `Setup.cmd` starten → **Deinstallieren** (oder `Setup.cmd -Uninstall`). Entfernt Dienst, Firewall-Regel und auf
-Wunsch das Programmverzeichnis. **Datenbank und Datenverzeichnis bleiben erhalten**; bei Bedarf manuell löschen:
+Wunsch die vom Installer angelegten Programmdateien (andere Dateien im Ordner bleiben unangetastet). **Datenbank und Datenverzeichnis bleiben erhalten**; bei Bedarf manuell löschen:
 
 ```sql
 DROP DATABASE tiermodel;

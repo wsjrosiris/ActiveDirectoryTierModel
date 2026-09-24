@@ -20,9 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Interactive installer `Setup.cmd` / `Install-TierModelService.ps1`: prerequisites (PowerShell 7, RSAT), local PostgreSQL install or existing server, database provisioning, gMSA/domain service account, certificate, firewall, service registration, first admin; update with rollback and uninstall.
   - `service/build/Build-Release.ps1` builds a self-contained `win-x64` release package.
 - `Deploy-TierModel.ps1`: new `-Unattended` switch that skips the interactive `-ConfirmApply` prompt for callers that have already obtained confirmation.
+- Documentation: new "TierModel Service" section in the MkDocs site (overview, installation, user guide, operations, security, development, REST API).
+
+### Fixed
+- `Test-TierModelPrerequisites`: Turkish hosts were rejected and Norwegian hosts accepted (Turkish is LCID `0x1f`, not `0x14`); English domains were detected as `ja-JP` because the Japanese built-in group names equal the English ones; Swedish/Danish group names corrected.
+- README: the language support is described as it actually behaves. The AD language is detected but not yet used, so localized domains remain unsupported. Test counts corrected (1,435 Pester tests).
 
 ### Removed
 - `Start-TierModelManager.ps1` and its screenshots/mockup. The script exposed unauthenticated endpoints (with `Access-Control-Allow-Origin: *`) that any website could use to run a deployment or overwrite config files. It also never passed the mandatory `-PreferredDc`, so its deploy and audit buttons did not work.
+
+## [1.3.0] - 2026-08-12
+
+### Added
+- **Additional host languages**: `Test-TierModelPrerequisites` accepts 19 host OS languages (English, German, French, Spanish, Italian, Dutch, Portuguese, Turkish, Japanese, Korean, Chinese, Polish, Russian, Swedish, Danish, Finnish, Greek, Czech, Hungarian) instead of English only.
+- The AD language is detected from the names of well-known groups (resolved by SID) and recorded in the environment snapshot (`AdLanguage`, `AdGroupNames`). Configuration and the Domain Admins check still use the English names, so localized domains are not yet supported.
+- Web management console `Start-TierModelManager.ps1` (replaced by the TierModel Service in 1.4.0).
+
+### Known issues
+- The language tests in `tests/Unit.Prerequisites.Tests.ps1`, `docs/language-support.md` and `docs/faq.md` still describe the English-only enforcement of 1.2.2.
 
 ## [1.2.2] - 2026-07-31
 

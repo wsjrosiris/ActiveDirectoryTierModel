@@ -108,6 +108,7 @@ The high-level migration path is:
 - Scoped deployments (e.g., `-OuAclsOnly`) may work with delegated permissions — to be confirmed per use case
 
 ### What language or locale is supported?
+- **This fork (v1.3.0+):** the host OS may use one of 19 languages; Active Directory must still use the English names of the well-known groups (localized domains are not supported yet). The points below describe the original English-only behaviour.
 - **English (`en-US`) only, at this time.** Both the **host** you run the scripts from (your workstation or the domain controller) and **Active Directory** must be English.
 - The tool runs **two fail-fast prerequisite checks** — one for the host OS install language, one for the well-known Active Directory group names — and stops with a clear message on a non-English environment **before making any change**.
 - Only 18 languages fully localize Windows Server (including AD group names); English is supported and the other 17 are detected and stopped. Language Interface Packs (e.g. Hindi, Bengali) and non-bold language packs (e.g. Arabic) keep English AD names and are unaffected.

@@ -45,6 +45,10 @@ Deshalb gilt:
 
 ## Bekannte Grenzen
 
+- Eine Sperre nach Fehlversuchen lässt sich von jedem auslösen, der einen Benutzernamen kennt (auch für
+  Administratoren). Deshalb die Oberfläche nur aus einem geschützten Netz erreichbar machen und notfalls per
+  Kommandozeile entsperren (`admin reset-password`).
+
 - Konten werden in der eigenen Datenbank verwaltet; es gibt (noch) keine Anmeldung per Kerberos/Entra ID und keine
   Mehr-Faktor-Authentifizierung. Die Oberfläche deshalb nur aus einem geschützten Netz erreichbar machen.
 - Das „Vier-Augen-Prinzip“ (Freigabe eines Deploys durch eine zweite Person) ist nicht erzwungen; die Trennung

@@ -1,168 +1,162 @@
 # 🏛️ Active Directory Tier Model
 
-> **Fork** von [microsoft/ActiveDirectoryTierModel](https://github.com/microsoft/ActiveDirectoryTierModel) mit erweiterten Features fuer den produktiven Einsatz.
+> **Fork** von [microsoft/ActiveDirectoryTierModel](https://github.com/microsoft/ActiveDirectoryTierModel) mit einem
+> Windows-Dienst samt Weboberfläche für den dauerhaften Betrieb.
 
-Dieses Repository basiert auf dem offiziellen Microsoft Active Directory Tier Model Framework und fuegt folgende Erweiterungen hinzu:
+Das Framework richtet ein Active-Directory-Tier-Model (Tier 0/1/2) deklarativ aus JSON-Konfiguration ein und erkennt
+Abweichungen (Drift). Dieser Fork ergänzt:
 
-| Feature | Status | Beschreibung |
-|---------|--------|-------------|
-| **Multi-Language Support** | ✅ Neu | 19 Sprachen (DE, EN, FR, ES, ...) statt nur Englisch |
-| **TierModel Service** | ✅ Neu | Windows-Dienst mit moderner Web-Oberfläche, PostgreSQL, Benutzern & Rollen |
-| **Installer** | ✅ Neu | `Setup.cmd` – interaktiver Assistent richtet alles automatisch ein |
-| **Versionierte Konfiguration** | ✅ Neu | Formulare statt JSON, jede Änderung als Version mit Diff und Wiederherstellung |
-| **Geplante Audits** | ✅ Neu | Drift-Erkennung per Zeitplan, Historie und Trend |
-
----
-
-## 📦 Original von Microsoft
-
-Das Kern-Framework stammt von Microsoft und bietet:
-
-- Declarative PowerShell-Deployments aus JSON-Konfiguration
-- Idempotent re-runs, Drift Detection, reproduzierbare Builds
-- OUs, Groups, Users, ACL Delegations, GPOs, ADMX, MSA/gMSA/dMSA, Windows LAPS
-- 1.766 Tests, 88.72% Code Coverage
-- [Original Dokumentation](https://microsoft.github.io/ActiveDirectoryTierModel) | [Original Repository](https://github.com/microsoft/ActiveDirectoryTierModel)
-
-### Originale Scripts (von Microsoft)
-| Script | Beschreibung |
-|--------|-------------|
-| `Deploy-TierModel.ps1` | Tier Model deployen |
-| `Audit-TierModel.ps1` | Drift Detection / Audit |
-
----
-
-## 🆕 Neue Features (dieser Fork)
-
-### 🌍 Multi-Language Support
-
-Das originale Microsoft-Framework unterstuetzt ausschliesslich Englisch (`en-US`). Dieser Fork entfernt diese Einschraenkung und unterstuetzt **19 Sprachen** sowohl fuer das Host-Betriebssystem als auch fuer Active Directory.
-
-**Geaenderte Dateien:**
-- `modules/TierModel/public/Test-TierModelPrerequisites.ps1` — Host-OS Check (Zeile 138-169) und AD-Gruppenname Check (Zeile 419-478)
-
-**Wie es funktioniert:**
-1. Liest `InstallLanguage` aus der Registry (`HKLM:\SYSTEM\CurrentControlSet\Control\Nls\Language`)
-2. Erkennt die AD-Sprache anhand der bekannten Gruppennamen (SID-basiert)
-3. Kein Fail-fast mehr - das System passt sich automatisch an
-
-<details>
-<summary>Alle 19 unterstuetzten Sprachen</summary>
-
-| Sprache | LCID | AD Gruppennamen |
-|---------|------|-----------------|
-| English (en-US) | `0x09` | Domain Admins, Server Operators, Account Operators |
-| **German (de-DE)** | `0x07` | Domänen-Admins, Server-Operatoren, Konten-Operatoren |
-| French (fr-FR) | `0x0c` | Administrateurs du domaine, Opérateurs de serveur |
-| Spanish (es-ES) | `0x0a` | Administradores del dominio, Operadores de servidor |
-| Italian (it-IT) | `0x10` | Amministratori del dominio, Operatori server |
-| Dutch (nl-NL) | `0x13` | Domeinbeheerders, Serveroperators |
-| Portuguese (pt-BR) | `0x16` | Administradores do domínio, Operadores de Servidor |
-| Turkish (tr-TR) | `0x14` | Etki Alanı Yöneticileri, Sunucu İşletmenleri |
-| Japanese (ja-JP) | `0x11` | ドメイン管理者, Server Operators |
-| Korean (ko-KR) | `0x12` | 도메인 관리자, 서버 운영자 |
-| Chinese (zh-CN) | `0x04` | 域管理员, 服务器操作员 |
-| Polish (pl-PL) | `0x15` | Administratorzy domeny, Operatorzy serwera |
-| Russian (ru-RU) | `0x19` | Администраторы домена, Операторы сервера |
-| Swedish (sv-SE) | `0x1d` | Domänadministratörer, Serveroperatörer |
-| Danish (da-DK) | `0x06` | Domæneadministratorer, Serveroperatører |
-| Finnish (fi-FI) | `0x0b` | Verkkotunnusylläpitäjät, Palvelimen operaattorit |
-| Greek (el-GR) | `0x08` | Διαχειριστές τομέα, Χειριστές διακομιστή |
-| Czech (cs-CZ) | `0x05` | Správci domény, Operátoři serveru |
-| Hungarian (hu-HU) | `0x0e` | Tartományrendszergazdák, Szerverüzemeltetők |
-
-</details>
-
----
-
-### 🖥️ TierModel Service (Web-Oberfläche + Windows-Dienst)
-
-Ein dauerhaft laufender Dienst auf einem Windows Server mit **PostgreSQL-Datenbank** und moderner Web-Oberfläche.
-Er ersetzt die frühere `Start-TierModelManager.ps1`.
+| Erweiterung | Beschreibung |
+|---|---|
+| **TierModel Service** | Windows-Dienst mit moderner Weboberfläche, PostgreSQL-Datenbank, Benutzern und Rollen |
+| **Installer** | `Setup.cmd` – ein Assistent fragt alles Nötige ab und richtet Dienst, Datenbank, Zertifikat und Firewall automatisch ein |
+| **Versionierte Konfiguration** | Formulare statt JSON-Dateien, jede Änderung als Version mit Autor, Kommentar, Diff und Wiederherstellung |
+| **Deploy & Audit per Klick** | Warteschlange, Live-Protokoll, Planen vor Anwenden, Freigabe nur durch Operatoren |
+| **Geplante Audits** | Drift-Erkennung per Zeitplan mit Verlauf im Dashboard |
+| **Weitere Host-Sprachen** | Deploy und Audit laufen auch auf Windows-Servern mit deutscher und 17 weiteren Systemsprachen ([Einschränkungen](#sprachen)) |
 
 | Dashboard | Konfiguration bearbeiten |
 |---|---|
-| ![Dashboard](service/docs/screenshots/dashboard-light.png) | ![ACL bearbeiten](service/docs/screenshots/config-edit-sheet-light.png) |
-| **Lauf mit Live-Log** | **Audit-Befunde** |
-| ![Lauf](service/docs/screenshots/run-log-dark.png) | ![Befunde](service/docs/screenshots/run-findings-light.png) |
-| **Deploy** | **OU-Struktur** |
-| ![Deploy](service/docs/screenshots/deploy-light.png) | ![OUs](service/docs/screenshots/config-ous-dark.png) |
-
-| Bereich | Funktionen |
-|---|---|
-| **Dashboard** | Kennzahlen, letzter Audit-/Deploy-Status, Drift-Trend, OU-Baum mit Tier-Farben, letzte Läufe und Änderungen |
-| **Konfiguration** | Formulare für OUs, Gruppen, Benutzer, ACLs, MSA/gMSA/dMSA, Windows LAPS; JSON-Editor für GPOs/ADMX; Rückgängig/Wiederholen, Diff vor dem Speichern, Versionen und Wiederherstellung, Validierung, OU-Umbenennung mit Referenz-Update |
-| **Deploy** | Planung (WhatIf) oder Anwenden – Anwenden nur für Operatoren und mit ausdrücklicher Bestätigung |
-| **Audits** | Sofort oder per Zeitplan (Cron + Zeitzone), Befunde je Lauf |
-| **Läufe** | Warteschlange, Live-Log, Abbrechen, verwendete Konfigurationsversionen |
-| **Änderungsprotokoll** | Wer hat wann was geändert, gestartet oder angemeldet |
-| **Administration** | Benutzer mit Rollen (Viewer, Editor, Operator, Admin), Einstellungen |
-
-**Installation:** Release-Paket auf dem Server entpacken, `Setup.cmd` starten – der Assistent prüft die Voraussetzungen,
-installiert bei Bedarf PowerShell 7, RSAT und PostgreSQL, legt Datenbank und DB-Benutzer an und richtet Dienstkonto (gMSA),
-HTTPS-Zertifikat, Firewall, Windows-Dienst und das erste Admin-Konto ein.
-
-➡️ Details, Architektur, Sicherheit und Entwicklung: **[service/README.md](service/README.md)** · REST-API: [service/docs/API.md](service/docs/API.md)
+| ![Dashboard](docs/service/img/dashboard-light.png) | ![ACL bearbeiten](docs/service/img/config-edit-sheet-light.png) |
+| **Lauf mit Live-Protokoll** | **Audit-Befunde** |
+| ![Lauf](docs/service/img/run-log-dark.png) | ![Befunde](docs/service/img/run-findings-light.png) |
 
 ---
 
-## 📋 Voraussetzungen
+## 🚀 Schnellstart
 
-- **PowerShell**: 7.0+
-- **Elevation**: Administrator-Rechte
-- **Domain Admin**: Mitglied in Domain Admins Gruppe
-- **Module**: ActiveDirectory, GroupPolicy
-- **Sprache**: 19 Sprachen unterstuetzt (kein English-only mehr)
-
-## 🚀 Erste Schritte
+### Variante A – TierModel Service (empfohlen)
 
 ```powershell
-# Repository klonen
-git clone https://github.com/wsjrosiris/ActiveDirectoryTierModel.git
-cd ActiveDirectoryTierModel
-
-# Release-Paket für den Server bauen (PowerShell 7, .NET 10 SDK, Node.js)
+# 1. Installationspaket bauen (Windows, Linux oder macOS mit PowerShell 7, .NET 10 SDK, Node.js 20+)
 pwsh service/build/Build-Release.ps1
-# → service/artifacts/TierModelService-<version>.zip auf den Server kopieren, entpacken, Setup.cmd starten
+#    → service/artifacts/TierModelService-<Version>.zip
 
-# Oder direkt deployen (original Microsoft Script)
-.\Deploy-TierModel.ps1 -PreferredDc dc01.contoso.com -FullDeployment
+# 2. ZIP auf den Windows Server kopieren, entpacken, Setup.cmd doppelklicken
 ```
+
+Der Assistent prüft die Voraussetzungen, installiert bei Bedarf PowerShell 7, die RSAT-Module und PostgreSQL,
+legt Datenbank und Datenbankbenutzer an und richtet Dienstkonto (gMSA), HTTPS-Zertifikat, Firewall, Windows-Dienst und
+das erste Administratorkonto ein. Anschließend ist die Oberfläche unter `https://<server>:8443/` erreichbar.
+
+➡️ **[Installationsanleitung](docs/service/installation.md)** – inklusive Vorbereitung des Dienstkontos.
+
+### Variante B – Skripte direkt (wie im Original)
+
+```powershell
+# Planen: zeigt, was sich ändern würde (keine Änderungen am AD)
+.\Deploy-TierModel.ps1 -PreferredDc dc01.contoso.com -FullDeployment
+
+# Anwenden (fragt zur Sicherheit nach)
+.\Deploy-TierModel.ps1 -PreferredDc dc01.contoso.com -FullDeployment -ConfirmApply
+
+# Drift prüfen, Bericht als JSON
+.\Audit-TierModel.ps1 -PreferredDc dc01.contoso.com -FullDeployment -OutputFormat Json -OutputFileBase audit
+```
+
+Statt `-FullDeployment` ist genau ein Teilbereich möglich (`-OuOnly`, `-GroupOnly`, `-UserOnly`, `-GposOnly`,
+`-OuAclsOnly`, `-AdmxOnly`). Die Erweiterungen `-IncludeMsa`, `-IncludeGmsa`, `-IncludeDmsa` und `-IncludeWinLaps`
+gehen nur zusammen mit `-FullDeployment` oder allein.
+
+## 📋 Voraussetzungen des Frameworks
+
+Deploy und Audit prüfen vor jedem Lauf (`Test-TierModelPrerequisites`):
+
+| Anforderung | Details |
+|---|---|
+| PowerShell | 7.0 oder neuer |
+| Rechte | Ausführung als Administrator; das ausführende Konto muss (auch verschachtelt) Mitglied von **Domain Admins** sein |
+| Module | `ActiveDirectory`, `GroupPolicy` (RSAT) und Pester 5.x (siehe `config/dependencies.json`) |
+| Domänencontroller | über `-PreferredDc` erreichbar |
+| Sprache | siehe [Sprachen](#sprachen) |
+
+Beim TierModel Service gelten diese Anforderungen für das **Dienstkonto**.
+
+## 🖥️ TierModel Service
+
+| Bereich | Funktionen |
+|---|---|
+| **Dashboard** | Kennzahlen, letzter Audit-/Deploy-Status, Drift-Verlauf, OU-Baum mit Tier-Farben, letzte Läufe und Änderungen |
+| **Konfiguration** | Formulare für OUs, Gruppen, Konten, ACL-Delegationen, MSA/gMSA/dMSA und Windows LAPS; JSON-Editor für GPOs, ADMX und Co.; Rückgängig/Wiederholen, Diff vor dem Speichern, Versionen und Wiederherstellung, Validierung, OUs umbenennen und verschieben mit Anpassung aller Verweise, Export |
+| **Deploy** | Planen (WhatIf) oder Anwenden – Anwenden nur für Operatoren, mit Bestätigung und nur ohne Validierungsfehler |
+| **Audits** | sofort oder per Zeitplan (Cron + Zeitzone), Befunde je Lauf |
+| **Läufe** | Warteschlange, Live-Protokoll, Abbrechen, verwendete Konfigurationsversionen |
+| **Änderungsprotokoll** | wer hat wann was geändert, gestartet oder freigegeben |
+| **Administration** | Benutzer mit Rollen (Betrachter, Bearbeiter, Operator, Administrator), Einstellungen |
+
+**Technik:** ASP.NET Core 10 als Windows-Dienst (self-contained, keine .NET-Installation nötig), PostgreSQL,
+React/TypeScript-Oberfläche, die der Dienst selbst ausliefert. Nur HTTPS, eigene Konten mit Sperre nach
+Fehlversuchen, CSRF-Schutz, Content-Security-Policy.
+
+### Dokumentation
+
+| | |
+|---|---|
+| [Überblick & Architektur](docs/service/index.md) | Wie der Dienst aufgebaut ist und einen Lauf ausführt |
+| [Installation](docs/service/installation.md) | Voraussetzungen, Dienstkonto, Assistent, Aktualisieren, Deinstallieren |
+| [Bedienung](docs/service/bedienung.md) | Rollen, Konfiguration, Deploy, Audits, Zeitpläne, Läufe |
+| [Betrieb](docs/service/betrieb.md) | Konfigurationsdatei, Protokolle, Sicherung, Zertifikat, Kommandozeile, Fehlerbehebung |
+| [Sicherheit](docs/service/sicherheit.md) | Einstufung als Tier-0-System, Schutzmaßnahmen, Härtung |
+| [Entwicklung](docs/service/entwicklung.md) | Lokale Umgebung, Tests, Release-Paket, Datenbank |
+| [REST-API](docs/service/api.md) | Endpunkte und Datenmodelle |
+
+Die Seiten sind Teil der MkDocs-Dokumentation (`mkdocs serve`).
+
+## <a id="sprachen"></a>🌍 Sprachen
+
+Das Original von Microsoft verlangt eine englische Umgebung. In diesem Fork gilt:
+
+- **Host-Betriebssystem:** Die Systemsprache (`InstallLanguage`) darf eine der folgenden sein: Englisch, Deutsch,
+  Französisch, Spanisch, Italienisch, Niederländisch, Portugiesisch, Türkisch, Japanisch, Koreanisch, Chinesisch,
+  Polnisch, Russisch, Schwedisch, Dänisch, Finnisch, Griechisch, Tschechisch, Ungarisch. Andere Sprachen werden
+  weiterhin abgelehnt.
+- **Active Directory:** Die Sprache der Domäne wird anhand der integrierten Gruppen (per SID) erkannt und im
+  Ergebnis der Voraussetzungsprüfung festgehalten (`AdLanguage`, `AdGroupNames`). Sie wird aber **noch nicht
+  verwendet**: Die Konfiguration und die Prüfung auf „Domain Admins“ arbeiten mit den **englischen** Gruppennamen.
+  **Domänen mit lokalisierten Gruppennamen (z. B. „Domänen-Admins“) werden daher derzeit nicht unterstützt.**
+
+Die Pester-Tests der Sprachprüfung (`tests/Unit.Prerequisites.Tests.ps1`) beschreiben noch das frühere
+Englisch-Verhalten und müssen angepasst werden.
 
 ## 📁 Projektstruktur
 
 ```
 ActiveDirectoryTierModel/
-├── Deploy-TierModel.ps1          # [Microsoft] Deploy Script
-├── Audit-TierModel.ps1           # [Microsoft] Audit Script
-├── service/                      # [NEU] TierModel Service
-│   ├── src/TierModel.Service/    #   ASP.NET Core 10 Backend (Windows-Dienst)
-│   ├── web/                      #   React-Oberfläche
-│   ├── installer/                #   Setup.cmd + Installationsassistent
-│   ├── build/                    #   Build-Release.ps1
-│   └── tests/                    #   Unit- und API-Tests
-├── config/                       # [Microsoft] Konfigurationsdateien
-│   ├── tiermodel-ous.json
-│   ├── tiermodel-groups.json
-│   ├── tiermodel-users.json
-│   ├── tiermodel-acls.json
-│   └── ...
-├── modules/TierModel/            # [Microsoft] PowerShell Modul
-│   ├── TierModel.psm1
-│   └── public/                   # 60+ Cmdlets
-├── tests/                        # [Microsoft] Pester Tests (1.766 Tests)
-├── docs/                         # [Microsoft] Dokumentation
-└── optional/                     # [Microsoft] Optionale Features
+├── Deploy-TierModel.ps1          Bereitstellung (Planen/Anwenden)
+├── Audit-TierModel.ps1           Drift-Erkennung
+├── config/                       Soll-Konfiguration (JSON), GPO-Sicherungen, ADMX/ADML
+├── modules/TierModel/            PowerShell-Modul (60 öffentliche Cmdlets)
+├── tests/                        Pester-Tests des Frameworks (1.435 Testfälle)
+├── optional/                     Authentication Silos, Sentinel-Regeln, Auditing, Migration
+├── service/                      TierModel Service
+│   ├── src/TierModel.Service/    Backend (ASP.NET Core 10)
+│   ├── web/                      Weboberfläche (React, TypeScript)
+│   ├── installer/                Setup.cmd + Installationsassistent
+│   ├── build/                    Build-Release.ps1
+│   └── tests/                    Unit- und API-Tests
+├── docs/                         Dokumentation (MkDocs), service/ = Dienst
+└── specs/                        Spezifikationen
+```
+
+## 🧪 Tests
+
+```powershell
+# Framework (Windows, Pester 5)
+./tests/Invoke-AllTests.ps1
+
+# Dienst
+dotnet test service/TierModel.Service.slnx
 ```
 
 ## 🔗 Links
 
-| | Link |
-|---|------|
-| **Fork** | https://github.com/wsjrosiris/ActiveDirectoryTierModel |
-| **Original** | https://github.com/microsoft/ActiveDirectoryTierModel |
-| **Doku (Microsoft)** | https://microsoft.github.io/ActiveDirectoryTierModel |
+| | |
+|---|---|
+| Dieser Fork | <https://github.com/wsjrosiris/ActiveDirectoryTierModel> |
+| Original | <https://github.com/microsoft/ActiveDirectoryTierModel> |
+| Dokumentation (Microsoft) | <https://microsoft.github.io/ActiveDirectoryTierModel> |
+| Änderungen | [CHANGELOG.md](CHANGELOG.md) |
 
 ---
 
-**Version**: 1.4.0 | **Basis**: Microsoft Tier Model v1.2.2 | **License**: MIT
+**Version**: 1.4.0 · **Basis**: Microsoft Tier Model 1.2.2 · **Lizenz**: MIT

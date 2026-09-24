@@ -203,7 +203,7 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
       </Dialog>
 
       <Dialog open={!!conflict} onOpenChange={(o) => !o && setConflict(null)}>
-        <DialogContent className="max-w-md" hideClose>
+        <DialogContent className="max-w-lg" hideClose>
           {conflict && (
             <>
               <DialogHeader className="pr-0">
@@ -211,16 +211,16 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
                   <div className="grid size-9 shrink-0 place-content-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
                     <AlertTriangle className="size-4" />
                   </div>
-                  <div className="grid gap-1.5">
+                  <div className="grid min-w-0 gap-1.5">
                     <DialogTitle>Konflikt beim Speichern</DialogTitle>
                     <DialogDescription>
-                      „{sectionFallbackTitles[conflict.key] ?? conflict.key}“ wurde inzwischen von jemand anderem geändert. Ihre Version basiert auf einem veralteten Stand. „Neu laden“ verwirft Ihre Änderungen; „Weiter bearbeiten“ behält sie und vergleicht sie künftig mit dem neuesten Stand.
+                      „{sectionFallbackTitles[conflict.key] ?? conflict.key}“ wurde inzwischen von jemand anderem geändert. Ihre Version basiert auf einem veralteten Stand. „Neu laden“ verwirft Ihre Änderungen. „Weiter bearbeiten“ behält sie; der nächste Diff zeigt dann auch, welche Änderungen der anderen Person Ihr Speichern zurücknehmen würde.
                       {conflict.remaining.length > 1 && ` ${conflict.remaining.length - 1} weitere Sektion(en) wurden noch nicht gespeichert.`}
                     </DialogDescription>
                   </div>
                 </div>
               </DialogHeader>
-              <DialogFooter>
+              <DialogFooter className="flex-wrap">
                 <Button variant="outline" onClick={() => keepEditing(conflict.key)}>
                   Weiter bearbeiten
                 </Button>

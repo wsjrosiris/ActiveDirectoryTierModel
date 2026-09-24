@@ -9,6 +9,9 @@
 | Programm | `C:\Program Files\TierModelService\app\TierModel.Service.exe` |
 | Zustand prüfen | `Get-Service TierModelService` bzw. `https://<server>:<port>/healthz` → `{"status":"ok"}` (200, sonst 503 = Datenbank nicht erreichbar) |
 
+Die Schlüssel, mit denen der Dienst Anmelde-Cookies schützt, liegen in `<WorkPath>\keys` (per DPAPI für das
+Dienstkonto verschlüsselt). Wer sie löscht, meldet alle Benutzer ab.
+
 Beim Start wendet der Dienst ausstehende Datenbankmigrationen an und importiert neu hinzugekommene
 Konfigurationsbereiche. Läufe, die beim Beenden noch liefen, werden als *Fehlgeschlagen* markiert
 („Der Dienst wurde während des Laufs beendet“).
@@ -61,6 +64,7 @@ Vorgaben in der Datei.
 | Dienst (Start, Fehler, abgeschlossene Läufe) | Ereignisanzeige › Windows-Protokolle › **Anwendung**, Quelle `TierModel.Service` |
 | Ausgabe jedes Laufs | Oberfläche › Läufe › Protokoll (Datenbank) |
 | Berichte der Skripte | `C:\ProgramData\TierModelService\runs\<Nr>\out\` (`deploy-*.log`, `audit-*.json`) |
+| Genauer Aufruf eines Laufs | `C:\ProgramData\TierModelService\runs\<Nr>\run.ps1` – lässt sich zur Fehlersuche als Dienstkonto erneut ausführen |
 | Installationsassistent | `C:\ProgramData\TierModelService\logs\setup-*.log` |
 | Fachliches Änderungsprotokoll | Oberfläche › Änderungsprotokoll (Datenbank) |
 

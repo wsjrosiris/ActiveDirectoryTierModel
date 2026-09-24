@@ -59,11 +59,13 @@ Felder, die das Formular nicht kennt, bleiben beim Speichern unverändert erhalt
 Die übrigen Bereiche (**GPOs, ADMX, ADML, Metadaten, GUID-Zuordnungen, Abhängigkeiten**) werden im JSON-Editor
 bearbeitet (Syntaxprüfung, Formatieren). Für GPOs gibt es zusätzlich eine Übersicht „OU → verknüpfte GPOs“.
 
-### OU umbenennen
+### OU umbenennen oder verschieben
 
-Beim Umbenennen einer OU zeigt eine Vorschau alle betroffenen Verweise: untergeordnete OUs, Gruppen- und
+Name und übergeordnete OU einer bestehenden OU werden über **Umbenennen / Verschieben …** geändert. Eine Vorschau
+zeigt alle betroffenen Verweise: untergeordnete OUs, Gruppen- und
 Kontopfade, ACL-/MSA-/gMSA-/dMSA-Ziele, LAPS-OUs und GPO-Verknüpfungen. Alle Verweise werden in einem Schritt
-angepasst und lassen sich mit einem Rückgängig zurücknehmen.
+angepasst und lassen sich mit einem Rückgängig zurücknehmen. Eine OU lässt sich nicht unter sich selbst verschieben;
+kollidiert das neue Ziel mit einer vorhandenen GPO-Verknüpfung, wird die Änderung abgelehnt.
 
 ### Speichern
 
@@ -71,9 +73,13 @@ angepasst und lassen sich mit einem Rückgängig zurücknehmen.
 **Speichern** zeigt für jeden geänderten Bereich einen Diff und verlangt einen **Kommentar**. Jeder gespeicherte
 Bereich erhält eine neue Version.
 
-Hat jemand anderes denselben Bereich inzwischen gespeichert, erscheint ein **Konflikt**:
-*Neu laden* verwirft den eigenen Entwurf, *Weiter bearbeiten* behält ihn und speichert anschließend auf Basis der
-neuesten Version.
+Hat jemand anderes denselben Bereich inzwischen gespeichert, erscheint ein **Konflikt** – auch dann, wenn die
+Oberfläche die neue Version im Hintergrund schon geladen hat:
+*Neu laden* verwirft den eigenen Entwurf; *Weiter bearbeiten* behält ihn, und der nächste Diff zeigt, welche
+Änderungen der anderen Person das eigene Speichern zurücknehmen würde.
+
+Enthält der JSON-Editor gerade ungültiges JSON, ist Speichern gesperrt. Läuft die Sitzung während des Speicherns ab,
+bleiben die Entwürfe erhalten: in einem neuen Tab anmelden und erneut speichern.
 
 ### Versionen
 
@@ -102,7 +108,8 @@ Solange **Fehler** bestehen, startet kein Deploy im Modus *Anwenden*.
     - **Anwenden** führt die Änderungen aus. Nur für Operatoren.
 2. **Domain Controller** (vorbelegt aus den Einstellungen) und optional die **ADML-Sprache**.
 3. **Bereich**: Vollständig oder nur OUs / Gruppen / Konten / GPOs / OU-ACLs / ADMX.
-4. **Add-ons**: MSA, gMSA, dMSA, Windows LAPS. „Kein Bereich“ ist möglich, wenn mindestens ein Add-on gewählt ist.
+4. **Add-ons**: MSA, gMSA, dMSA, Windows LAPS – nur zusammen mit „Vollständig“ oder mit „Kein Bereich“
+   (nur die Add-ons); so verlangen es die Skripte.
 5. Starten. Beim Anwenden muss zur Bestätigung `ANWENDEN` eingegeben werden.
 
 Anschließend öffnet sich der Lauf mit Live-Protokoll.
@@ -146,7 +153,8 @@ Die Detailseite eines Laufs enthält:
 - **Protokoll**: Live-Ausgabe mit Zeitstempel, farbig nach Fehler/Warnung/Erfolg, Filter, „Nur Probleme“,
   Kopieren und Herunterladen. „Folgen“ scrollt automatisch mit.
 - **Befunde** (Audits): Zusammenfassung (geprüft, Abweichungen, fehlend, unerwartet, abweichend, verwaiste
-  GPO-Links, Sicherheitsabweichungen) und filterbare Befundliste.
+  GPO-Links, Sicherheitsabweichungen) und filterbare Befundliste. Bei Audits nur mit Add-ons liefert das Skript
+  keine Einzelbefunde; die Anzahl der Abweichungen stammt dann aus der Zeile „Total Drift“ im Protokoll.
 - **Konfiguration**: welche Version jedes Bereichs der Lauf verwendet hat.
 - **Abbrechen** (Operator): beendet den PowerShell-Prozess samt Unterprozessen.
 
