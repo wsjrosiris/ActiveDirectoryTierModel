@@ -78,18 +78,22 @@ function OuForm({ value, onChange, errors, index }: FormProps) {
   return (
     <>
       <FormSection title="Allgemein">
-        <Field label="Name" htmlFor="ou-name" required error={errors.name} hint={existing ? 'Umbenennen aktualisiert alle Referenzen in anderen Sektionen.' : undefined}>
+        <Field label="Name" htmlFor="ou-name" required error={errors.name} hint={existing ? 'Umbenennen und Verschieben aktualisieren alle Referenzen in anderen Sektionen.' : undefined}>
           <div className="flex gap-2">
             <Input id="ou-name" value={value.name ?? ''} readOnly={existing} onChange={(e) => onChange(setField(value, 'name', e.target.value))} aria-invalid={!!errors.name} placeholder="z. B. Tier 0 Accounts" />
             {existing && (
               <Button type="button" variant="outline" onClick={() => setRenameOpen(true)}>
-                <Pencil /> Umbenennen …
+                <Pencil /> Umbenennen / Verschieben …
               </Button>
             )}
           </div>
         </Field>
-        <Field label="Übergeordnete OU" htmlFor="ou-path" required error={errors.path} hint="Relativer Pfad ohne Domänen-Suffix oder {{DOMAIN_DN}} für die oberste Ebene.">
-          <Combobox id="ou-path" mono value={value.path ?? ''} onChange={(v) => onChange(setField(value, 'path', v))} options={parentOptions} placeholder="Übergeordnete OU wählen" invalid={!!errors.path} />
+        <Field label="Übergeordnete OU" htmlFor="ou-path" required error={errors.path} hint={existing ? "Verschieben über „Umbenennen / Verschieben …“." : "Relativer Pfad ohne Domänen-Suffix oder {{DOMAIN_DN}} für die oberste Ebene."}>
+          {existing ? (
+            <Input id="ou-path" className="font-mono" value={value.path ?? ''} readOnly />
+          ) : (
+            <Combobox id="ou-path" mono value={value.path ?? ''} onChange={(v) => onChange(setField(value, 'path', v))} options={parentOptions} placeholder="Übergeordnete OU wählen" invalid={!!errors.path} />
+          )}
         </Field>
         <div className="rounded-lg border border-dashed bg-muted/30 px-3 py-2.5">
           <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Distinguished Name</p>
@@ -110,7 +114,7 @@ function OuForm({ value, onChange, errors, index }: FormProps) {
         </div>
       </FormSection>
       {existing && index !== null && (
-        <OuRenameDialog open={renameOpen} onOpenChange={setRenameOpen} index={index} onApplied={(name) => onChange({ ...value, name })} />
+        <OuRenameDialog open={renameOpen} onOpenChange={setRenameOpen} index={index} onApplied={(name, path) => onChange({ ...value, name, path })} />
       )}
     </>
   )
@@ -155,7 +159,7 @@ export function OusEditor(props: EditorProps) {
             e.path = 'Übergeordnete OU existiert nicht in der Konfiguration.'
           return e
         }}
-        extraActions={[{ label: 'Umbenennen …', icon: <Pencil />, onSelect: (_o, i) => setRename(i) }]}
+        extraActions={[{ label: 'Umbenennen / Verschieben …', icon: <Pencil />, onSelect: (_o, i) => setRename(i) }]}
         toolbarExtra={
           <Segmented
             aria-label="Ansicht"

@@ -185,7 +185,9 @@ export const api = {
   config: {
     sections: () => get<SectionSummary[]>('/api/config/sections'),
     section: (key: string) => get<Section>(`/api/config/sections/${enc(key)}`),
-    save: (key: string, body: SaveSectionRequest) => put<Section>(`/api/config/sections/${enc(key)}`, body),
+    // No login redirect: a full page load would discard all unsaved drafts. The save dialog explains instead.
+    save: (key: string, body: SaveSectionRequest) =>
+      request<Section>(`/api/config/sections/${enc(key)}`, { method: 'PUT', body, noRedirect: true }),
     versions: (key: string) => get<VersionInfo[]>(`/api/config/sections/${enc(key)}/versions`),
     version: (key: string, version: number) =>
       get<Section>(`/api/config/sections/${enc(key)}/versions/${version}`),

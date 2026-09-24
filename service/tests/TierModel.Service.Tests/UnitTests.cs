@@ -75,6 +75,25 @@ public class RunTests
         Assert.True(RunValidation.Validate(Request(dc)).ContainsKey("preferredDc"));
 
     [Fact]
+    public void Includes_require_full_deployment_or_no_scope()
+    {
+        Assert.True(RunValidation.Validate(new RunRequest("dc01", DeployScope.OuOnly, true, false, false, false, null)).ContainsKey("scope"));
+        Assert.Empty(RunValidation.Validate(new RunRequest("dc01", DeployScope.FullDeployment, true, false, false, false, null)));
+        Assert.Empty(RunValidation.Validate(new RunRequest("dc01", null, false, false, false, true, null)));
+    }
+
+    [Fact]
+    public void Undefined_scope_values_are_rejected() =>
+        Assert.True(RunValidation.Validate(Request(scope: (DeployScope)99)).ContainsKey("scope"));
+
+    [Fact]
+    public void Quotes_in_values_are_escaped_in_the_wrapper()
+    {
+        var run = new Run { Kind = RunKind.Audit, Scope = DeployScope.OuOnly, PreferredDc = "dc01", AdmlLanguage = "en-US", RequestedBy = "t" };
+        Assert.Contains("-LogPath '/w/o''brien/out'", RunWorker.BuildWrapperScript(run, "/w/o'brien").Replace('\\', '/'));
+    }
+
+    [Fact]
     public void Scope_or_include_is_required() =>
         Assert.True(RunValidation.Validate(Request(scope: null)).ContainsKey("scope"));
 
@@ -86,21 +105,24 @@ public class RunTests
     public void Apply_deploy_passes_confirm_and_unattended()
     {
         var run = new Run { Kind = RunKind.Deploy, Mode = RunMode.Apply, Scope = DeployScope.OuOnly, IncludeWinLaps = true, PreferredDc = "dc01", AdmlLanguage = "de-DE", RequestedBy = "t" };
-        var args = RunWorker.BuildArguments(run, "/w");
+        var args = RunWorker.ScriptParameters(run, "/w");
+        var script = RunWorker.BuildWrapperScript(run, "/w");
 
-        Assert.Equal(Path.Combine("/w", "Deploy-TierModel.ps1"), args[args.IndexOf("-File") + 1]);
+        Assert.Contains("'Deploy-TierModel.ps1'", script);
+        Assert.Contains("[Console]::OutputEncoding", script);
+        Assert.Contains("exit $LASTEXITCODE", script);
         Assert.Contains("-OuOnly", args);
         Assert.Contains("-IncludeWinLaps", args);
         Assert.Contains("-ConfirmApply", args);
         Assert.Contains("-Unattended", args);
-        Assert.Equal("de-DE", args[args.IndexOf("-AdmlLanguage") + 1]);
+        Assert.Equal("'de-DE'", args[args.IndexOf("-AdmlLanguage") + 1]);
     }
 
     [Fact]
     public void Plan_deploy_never_applies()
     {
         var run = new Run { Kind = RunKind.Deploy, Mode = RunMode.Plan, Scope = DeployScope.FullDeployment, PreferredDc = "dc01", AdmlLanguage = "en-US", RequestedBy = "t" };
-        var args = RunWorker.BuildArguments(run, "/w");
+        var args = RunWorker.ScriptParameters(run, "/w");
 
         Assert.DoesNotContain("-ConfirmApply", args);
         Assert.DoesNotContain("-Unattended", args);
@@ -110,9 +132,9 @@ public class RunTests
     public void Audit_requests_a_json_report()
     {
         var run = new Run { Kind = RunKind.Audit, Scope = DeployScope.GposOnly, PreferredDc = "dc01", AdmlLanguage = "en-US", RequestedBy = "t" };
-        var args = RunWorker.BuildArguments(run, "/w");
+        var args = RunWorker.ScriptParameters(run, "/w");
 
-        Assert.Equal(Path.Combine("/w", "Audit-TierModel.ps1"), args[args.IndexOf("-File") + 1]);
+        Assert.Contains("'Audit-TierModel.ps1'", RunWorker.BuildWrapperScript(run, "/w"));
         Assert.Equal("Json", args[args.IndexOf("-OutputFormat") + 1]);
         Assert.DoesNotContain("-ConfirmApply", args);
     }
@@ -126,6 +148,20 @@ public class RunTests
     [InlineData("stdout", "Processing OU Tier 0", "info")]
     public void Log_lines_are_classified(string stream, string text, string level) =>
         Assert.Equal(level, RunLogWriter.Classify(stream, text));
+}
+
+public class ConfigValidatorRobustnessTests
+{
+    [Fact]
+    public void Non_string_member_of_entries_do_not_crash_validation()
+    {
+        var sections = new Dictionary<string, JsonNode?>
+        {
+            ["users"] = JsonNode.Parse("""{"users":[{"samAccountName":"svc","ouPath":"{{DOMAIN_DN}}","memberOf":[{"a":1}]}]}"""),
+        };
+        var issues = ConfigValidator.Validate(sections);
+        Assert.Contains(issues, i => i.Severity == "Error" && i.Section == "users");
+    }
 }
 
 public class ScheduleTests

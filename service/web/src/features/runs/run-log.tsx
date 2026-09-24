@@ -7,6 +7,7 @@ import type { LogLine, RunStatus } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { cn, formatTime } from '@/lib/utils'
+import { ApiError } from '@/api/client'
 
 const ACTIVE: RunStatus[] = ['Queued', 'Running']
 
@@ -57,6 +58,8 @@ export function useRunLog(runId: number, initialStatus: RunStatus | undefined) {
       } catch (e) {
         if ((e as Error).name === 'AbortError' || stopped) return
         setLoaded(true)
+        // A missing run or missing permission will not fix itself: stop polling.
+        if (e instanceof ApiError && (e.status === 403 || e.status === 404)) return
         timer = setTimeout(tick, 3000)
       }
     }

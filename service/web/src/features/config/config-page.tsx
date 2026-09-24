@@ -76,9 +76,10 @@ export function Component() {
   const isDirty = dirtyKeys.includes(key)
   const FormEditor = FORM_EDITORS[key]
 
-  // ---- keyboard shortcuts
-  useHotkey('mod+z', () => canEdit && draftStore.undo() && toast('Rückgängig gemacht', { duration: 1200 }))
-  useHotkey(['mod+shift+z', 'mod+y'], () => canEdit && draftStore.redo() && toast('Wiederhergestellt', { duration: 1200 }))
+  // ---- keyboard shortcuts (history is off while a sheet/dialog is open: it edits a snapshot of an item)
+  const dialogOpen = () => !!document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')
+  useHotkey('mod+z', () => canEdit && !dialogOpen() && draftStore.undo() && toast('Rückgängig gemacht', { duration: 1200 }))
+  useHotkey(['mod+shift+z', 'mod+y'], () => canEdit && !dialogOpen() && draftStore.redo() && toast('Wiederhergestellt', { duration: 1200 }))
   useHotkey('mod+s', () => canEdit && dirtyKeys.length > 0 && setSaveOpen(true), { allowInInputs: true })
 
   // ---- leave-page guard
@@ -105,6 +106,7 @@ export function Component() {
     return () => window.removeEventListener('beforeunload', on)
   }, [dirtyKeys.length])
 
+  const jsonValidity = React.useCallback((valid: boolean) => draftStore.setJsonValid(key, valid), [key])
   const setContent = React.useCallback((next: unknown, tag?: string) => draftStore.apply({ [key]: next }, { tag }), [key])
 
   const discard = async () => {
@@ -280,7 +282,7 @@ export function Component() {
                   )}
                   <TabsContent value="json" className={key === 'gpos' ? undefined : 'mt-0'}>
                     <React.Suspense fallback={<Card className="grid h-96 place-content-center"><Loader2 className="size-5 animate-spin text-muted-foreground" /></Card>}>
-                      <JsonEditor value={content} onChange={(v) => setContent(v, `json-${key}`)} readOnly={!canEdit} height="calc(100dvh - 330px)" />
+                      <JsonEditor value={content} onChange={(v) => setContent(v, `json-${key}`)} onValidityChange={jsonValidity} readOnly={!canEdit} height="calc(100dvh - 330px)" />
                     </React.Suspense>
                   </TabsContent>
                 </Tabs>

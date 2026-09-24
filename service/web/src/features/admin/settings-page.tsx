@@ -38,7 +38,7 @@ function SettingsPage() {
   })
 
   const dirty = form && q.data && JSON.stringify(form) !== JSON.stringify(q.data)
-  const retentionInvalid = form ? !Number.isInteger(form.runRetentionDays) || form.runRetentionDays < 1 : false
+  const retentionInvalid = form ? !Number.isInteger(form.runRetentionDays) || (form.runRetentionDays < 0 || form.runRetentionDays > 3650) : false
 
   return (
     <Page className="max-w-3xl">
@@ -68,8 +68,8 @@ function SettingsPage() {
                 <Field label="ADML-Sprache" htmlFor="st-lang" hint="z. B. en-US oder de-DE">
                   <Input id="st-lang" className="font-mono" value={form.admlLanguage} onChange={(e) => setForm({ ...form, admlLanguage: e.target.value })} />
                 </Field>
-                <Field label="Aufbewahrung von Läufen (Tage)" htmlFor="st-ret" error={retentionInvalid ? 'Bitte eine ganze Zahl ≥ 1 angeben.' : undefined}>
-                  <Input id="st-ret" type="number" min={1} value={Number.isNaN(form.runRetentionDays) ? '' : form.runRetentionDays} onChange={(e) => setForm({ ...form, runRetentionDays: e.target.valueAsNumber })} aria-invalid={retentionInvalid || undefined} />
+                <Field label="Aufbewahrung von Läufen (Tage)" htmlFor="st-ret" error={retentionInvalid ? 'Bitte eine ganze Zahl von 0 bis 3650 angeben (0 = unbegrenzt).' : undefined}>
+                  <Input id="st-ret" type="number" min={0} max={3650} value={Number.isNaN(form.runRetentionDays) ? '' : form.runRetentionDays} onChange={(e) => setForm({ ...form, runRetentionDays: e.target.valueAsNumber })} aria-invalid={retentionInvalid || undefined} />
                 </Field>
               </div>
             </CardContent>

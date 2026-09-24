@@ -33,7 +33,16 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, IOptions<Tie
 
             if (next is { } id)
             {
-                await ExecuteRunAsync(id, stoppingToken);
+                try
+                {
+                    await ExecuteRunAsync(id, stoppingToken);
+                }
+                catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+                {
+                    // Never let a database hiccup stop the Windows service; the run is marked failed on a best-effort basis.
+                    logger.LogError(ex, "Run {RunId} could not be completed", id);
+                    await MarkFailedAsync(id, "Interner Fehler beim Abschluss des Laufs: " + ex.Message);
+                }
                 continue;
             }
             try
@@ -57,6 +66,23 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, IOptions<Tie
             .SetProperty(r => r.FinishedAt, DateTimeOffset.UtcNow)
             .SetProperty(r => r.Message, "Abgebrochen: Der Dienst wurde während des Laufs beendet."), ct);
         if (n > 0) logger.LogWarning("Marked {Count} interrupted run(s) as failed", n);
+    }
+
+    private async Task MarkFailedAsync(long id, string message)
+    {
+        try
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.Runs.Where(r => r.Id == id && (r.Status == RunStatus.Running || r.Status == RunStatus.Queued)).ExecuteUpdateAsync(u => u
+                .SetProperty(r => r.Status, RunStatus.Failed)
+                .SetProperty(r => r.FinishedAt, DateTimeOffset.UtcNow)
+                .SetProperty(r => r.Message, message));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Run {RunId} could not be marked as failed", id);
+        }
     }
 
     private async Task<long?> ClaimNextAsync(CancellationToken ct)
@@ -107,7 +133,10 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, IOptions<Tie
             var workDir = Workspace.Create(o, id, snapshot);
             log.System($"Arbeitsverzeichnis: {workDir}");
 
-            var exitCode = await RunPowerShellAsync(o.PwshPath, workDir, BuildArguments(run, workDir), log, linked.Token);
+            var wrapper = Path.Combine(workDir, "run.ps1");
+            await File.WriteAllTextAsync(wrapper, BuildWrapperScript(run, workDir), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true), linked.Token);
+            log.System($"Aufruf: {(run.Kind == RunKind.Deploy ? "Deploy" : "Audit")}-TierModel.ps1 {string.Join(' ', ScriptParameters(run, workDir))}");
+            var exitCode = await RunPowerShellAsync(o.PwshPath, workDir, PwshArguments(wrapper), log, linked.Token);
             run.ExitCode = exitCode;
 
             if (run.Kind == RunKind.Audit) ReadAuditReport(run, workDir, log);
@@ -149,7 +178,19 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, IOptions<Tie
         run.Status = status;
         run.Message = message;
         run.FinishedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(CancellationToken.None);
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await db.SaveChangesAsync(CancellationToken.None);
+                break;
+            }
+            catch (Exception ex) when (attempt < 5)
+            {
+                logger.LogWarning(ex, "Saving the result of run {RunId} failed (attempt {Attempt}), retrying", id, attempt);
+                await Task.Delay(TimeSpan.FromSeconds(2 * attempt), CancellationToken.None);
+            }
+        }
         logger.LogInformation("Run {RunId} finished with {Status}: {Message}", id, status, message);
     }
 
@@ -160,33 +201,53 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, IOptions<Tie
         return $"{what}, Bereich {r.Scope?.ToString() ?? "–"}{(includes.Length > 0 ? " + " + string.Join(", ", includes) : "")}, DC {r.PreferredDc}, angefordert von {r.RequestedBy}";
     }
 
-    public static List<string> BuildArguments(Run run, string workDir)
-    {
-        var script = run.Kind == RunKind.Deploy ? "Deploy-TierModel.ps1" : "Audit-TierModel.ps1";
-        var args = new List<string>
-        {
-            "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-            "-File", Path.Combine(workDir, script),
-            "-PreferredDc", run.PreferredDc,
-        };
-        if (run.Scope is { } scope) args.Add("-" + scope);
-        if (run.IncludeMsa) args.Add("-IncludeMsa");
-        if (run.IncludeGmsa) args.Add("-IncludeGmsa");
-        if (run.IncludeDmsa) args.Add("-IncludeDmsa");
-        if (run.IncludeWinLaps) args.Add("-IncludeWinLaps");
-        args.AddRange(["-AdmlLanguage", run.AdmlLanguage]);
+    public static List<string> PwshArguments(string wrapper) =>
+        ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", wrapper];
 
-        var outDir = Path.Combine(workDir, "out");
+    /// <summary>Single-quoted PowerShell string literal.</summary>
+    private static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
+
+    /// <summary>Parameters passed to Deploy-/Audit-TierModel.ps1. Values are validated before they get here.</summary>
+    public static List<string> ScriptParameters(Run run, string workDir)
+    {
+        var p = new List<string> { "-PreferredDc", Quote(run.PreferredDc) };
+        if (run.Scope is { } scope) p.Add("-" + scope);
+        if (run.IncludeMsa) p.Add("-IncludeMsa");
+        if (run.IncludeGmsa) p.Add("-IncludeGmsa");
+        if (run.IncludeDmsa) p.Add("-IncludeDmsa");
+        if (run.IncludeWinLaps) p.Add("-IncludeWinLaps");
+        p.AddRange(["-AdmlLanguage", Quote(run.AdmlLanguage)]);
+
+        var outDir = Quote(Path.Combine(workDir, "out"));
         if (run.Kind == RunKind.Deploy)
         {
-            if (run.Mode == RunMode.Apply) args.AddRange(["-ConfirmApply", "-Unattended"]);
-            args.AddRange(["-Logging", "-LogPath", outDir, "-OutputFileBase", "deploy"]);
+            if (run.Mode == RunMode.Apply) p.AddRange(["-ConfirmApply", "-Unattended"]);
+            p.AddRange(["-Logging", "-LogPath", outDir, "-OutputFileBase", "deploy"]);
         }
         else
         {
-            args.AddRange(["-OutputFormat", "Json", "-LogPath", outDir, "-OutputFileBase", "audit"]);
+            p.AddRange(["-OutputFormat", "Json", "-LogPath", outDir, "-OutputFileBase", "audit"]);
         }
-        return args;
+        return p;
+    }
+
+    /// <summary>
+    /// run.ps1 in the working copy: switches the console to UTF-8 (a service's hidden console would
+    /// otherwise use the OEM code page and garble umlauts and symbols) and calls the framework script.
+    /// It stays in the run folder, so an administrator can re-run exactly the same call for troubleshooting.
+    /// </summary>
+    public static string BuildWrapperScript(Run run, string workDir)
+    {
+        var script = run.Kind == RunKind.Deploy ? "Deploy-TierModel.ps1" : "Audit-TierModel.ps1";
+        return $"""
+            # Generated by TierModel Service for run #{run.Id} ({run.Kind}, requested by {run.RequestedBy.ReplaceLineEndings(" ")}).
+            [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+            $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+            $global:LASTEXITCODE = 0
+            & (Join-Path $PSScriptRoot '{script}') {string.Join(' ', ScriptParameters(run, workDir))}
+            exit $LASTEXITCODE
+
+            """;
     }
 
     private static async Task<int> RunPowerShellAsync(string pwsh, string workDir, List<string> args, RunLogWriter log, CancellationToken ct)
@@ -256,6 +317,13 @@ public class RunWorker(IServiceScopeFactory scopes, RunQueue queue, IOptions<Tie
             run.Summary = summary?.ToJsonString();
             run.Findings = findings.ToJsonString();
             run.DriftCount = summary?["driftCount"] is JsonValue d && d.TryGetValue<int>(out var drift) ? drift : findings.Count;
+            // Extension-only audits (-Include* without a scope) do not fill the report's summary;
+            // the script prints "Total Drift: N" instead.
+            if (run.Scope is null && log.LastTotalDrift is { } standaloneDrift && standaloneDrift > (run.DriftCount ?? 0))
+            {
+                run.DriftCount = standaloneDrift;
+                log.System($"Drift aus der Skriptausgabe übernommen (Erweiterungen ohne Bereich): {standaloneDrift}. Einzelbefunde stehen im Protokoll.", "warn");
+            }
             if (summary?["errorCount"] is JsonValue e && e.TryGetValue<int>(out var errors)) run.ErrorCount = errors;
             log.System($"Audit-Bericht gelesen: {report.Name}, {findings.Count} Abweichung(en).");
         }

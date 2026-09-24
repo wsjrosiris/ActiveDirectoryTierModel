@@ -33,16 +33,18 @@ public static class AuthEndpoints
                 return Results.Problem(title: "Benutzername und Passwort angeben", statusCode: 400);
 
             var (result, user) = await users.LoginAsync(r.Username, r.Password);
+            // Attacker-controlled text: keep it short (people sometimes type a password into the user field).
+            var attempted = r.Username.Trim() is var n && n.Length > 64 ? n[..64] + "…" : r.Username.Trim();
             switch (result)
             {
                 case LoginResult.LockedOut:
-                    log.Add(r.Username.Trim(), "auth.locked", "auth", user?.Id.ToString(), $"Anmeldung abgelehnt: Konto '{r.Username.Trim()}' ist gesperrt");
+                    log.Add(attempted, "auth.locked", "auth", user?.Id.ToString(), $"Anmeldung abgelehnt: Konto '{attempted}' ist gesperrt");
                     await db.SaveChangesAsync();
                     return Results.Problem(title: "Konto vorübergehend gesperrt",
                         detail: $"Zu viele Fehlversuche. Bitte in {AuthClaims.LockoutDuration.TotalMinutes:0} Minuten erneut versuchen oder einen Administrator kontaktieren.",
                         statusCode: StatusCodes.Status423Locked);
                 case LoginResult.Invalid:
-                    log.Add(r.Username.Trim(), "auth.login-failed", "auth", user?.Id.ToString(), $"Fehlgeschlagene Anmeldung für '{r.Username.Trim()}'");
+                    log.Add(attempted, "auth.login-failed", "auth", user?.Id.ToString(), $"Fehlgeschlagene Anmeldung für '{attempted}'");
                     await db.SaveChangesAsync();
                     return Results.Problem(title: "Benutzername oder Passwort ist falsch", statusCode: 401);
             }
@@ -123,10 +125,11 @@ public static class AuthEndpoints
             var changes = new List<string>();
             if (user.Role != r.Role) changes.Add($"Rolle {user.Role} → {r.Role}");
             if (user.IsActive != r.IsActive) changes.Add(r.IsActive ? "aktiviert" : "deaktiviert");
-            if (user.DisplayName != r.DisplayName.Trim()) changes.Add("Anzeigename geändert");
+            var displayName = string.IsNullOrWhiteSpace(r.DisplayName) ? user.Username : r.DisplayName.Trim();
+            if (user.DisplayName != displayName) changes.Add("Anzeigename geändert");
             if (user.Role != r.Role || user.IsActive != r.IsActive)
                 user.SecurityStamp = Guid.NewGuid().ToString("N");
-            user.DisplayName = string.IsNullOrWhiteSpace(r.DisplayName) ? user.Username : r.DisplayName.Trim();
+            user.DisplayName = displayName;
             user.Role = r.Role;
             user.IsActive = r.IsActive;
             if (changes.Count > 0)

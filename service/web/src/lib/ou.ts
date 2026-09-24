@@ -118,20 +118,27 @@ export interface RenameChange {
 }
 
 /**
- * Computes all reference updates caused by renaming the OU at `index` to `newName`.
+ * Computes all reference updates caused by renaming the OU at `index` to `newName` and/or
+ * moving it below `newPath` (its new parent, relative form or {{DOMAIN_DN}}).
  * Returns updated contents per section key (only for sections that change).
  */
 export function planOuRename(
   contents: Record<string, Json>,
   index: number,
   newName: string,
-): { changes: RenameChange[]; updated: Record<string, Json> } {
+  newPath?: string,
+): { changes: RenameChange[]; updated: Record<string, Json>; conflicts: string[] } {
   const ousContent = contents.ous
   const ous: OuItem[] = ousContent?.organizationUnits ?? []
   const target = ous[index]
+  const path = newPath ?? target.path
   const oldFull = ouFullDn(target)
-  const newFull = ouFullDn({ ...target, name: newName })
+  const newFull = ouFullDn({ ...target, name: newName, path })
   const changes: RenameChange[] = []
+  const conflicts: string[] = []
+  const parentFull = toFullDn(path).toLowerCase()
+  if (parentFull === oldFull.toLowerCase() || parentFull.endsWith(',' + oldFull.toLowerCase()))
+    conflicts.push('Eine OU kann nicht unter sich selbst oder eine ihrer Unter-OUs verschoben werden.')
   const updated: Record<string, Json> = {}
 
   const clone = (v: Json) => JSON.parse(JSON.stringify(v))
@@ -140,7 +147,11 @@ export function planOuRename(
   {
     const c = clone(ousContent)
     c.organizationUnits[index].name = newName
-    changes.push({ section: 'ous', label: target.name, field: 'name', before: target.name, after: newName })
+    if (newName !== target.name) changes.push({ section: 'ous', label: target.name, field: 'name', before: target.name, after: newName })
+    if (path !== target.path) {
+      c.organizationUnits[index].path = path
+      changes.push({ section: 'ous', label: newName, field: 'path', before: target.path, after: path })
+    }
     c.organizationUnits.forEach((o: OuItem, i: number) => {
       if (i === index || !o.path || o.path === DOMAIN) return
       const r = rebaseDn(toFullDn(o.path), oldFull, newFull)
@@ -191,6 +202,9 @@ export function planOuRename(
     for (const [k, v] of Object.entries(c.gpos)) {
       const r = rebaseDn(k, oldFull, newFull)
       if (r && r !== k) {
+        // Another GPO target already uses the new DN and is not itself renamed: merging would lose one of them.
+        const occupant = r in c.gpos ? rebaseDn(r, oldFull, newFull) : null
+        if (r in c.gpos && (!occupant || occupant === r)) conflicts.push(`GPO-Verknüpfungsziel „${r}“ existiert bereits.`)
         changes.push({ section: 'gpos', label: (v as Json)?.displayName ?? k, field: 'Schlüssel', before: k, after: r })
         next[r] = v
         touched = true
@@ -202,5 +216,5 @@ export function planOuRename(
     }
   }
 
-  return { changes, updated }
+  return { changes, updated, conflicts }
 }

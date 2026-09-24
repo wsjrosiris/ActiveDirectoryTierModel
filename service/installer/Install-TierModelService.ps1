@@ -152,13 +152,26 @@ function Get-Fqdn {
     try { return [Net.Dns]::GetHostEntry('').HostName } catch { return $env:COMPUTERNAME }
 }
 
+# NetBIOS name of the domain this computer belongs to (the installing admin may be local or from another domain).
+function Get-ComputerDomainNetBios([string]$DnsDomain) {
+    try {
+        $root = [adsi]'LDAP://RootDSE'
+        $partitions = [adsi]"LDAP://CN=Partitions,$($root.configurationNamingContext)"
+        $searcher = New-Object DirectoryServices.DirectorySearcher($partitions, "(&(objectClass=crossRef)(nCName=$($root.defaultNamingContext))(nETBIOSName=*))", @('nETBIOSName'))
+        $hit = $searcher.FindOne()
+        if ($hit) { return [string]$hit.Properties['netbiosname'][0] }
+    }
+    catch { }
+    return ($DnsDomain -split '\.')[0].ToUpperInvariant()
+}
+
 function Get-DomainInfo {
     try {
         $cs = Get-CimInstance Win32_ComputerSystem
         if (-not $cs.PartOfDomain) { return $null }
         $dc = $null
         try { $dc = [DirectoryServices.ActiveDirectory.Domain]::GetComputerDomain().FindDomainController().Name } catch { }
-        return [pscustomobject]@{ Name = $cs.Domain; NetBios = $env:USERDOMAIN; DomainController = $dc }
+        return [pscustomobject]@{ Name = $cs.Domain; NetBios = (Get-ComputerDomainNetBios $cs.Domain); DomainController = $dc }
     }
     catch { return $null }
 }
@@ -260,6 +273,7 @@ function Set-PathAcl {
     if ($Exclusive) {
         # Only SYSTEM, Administrators and the service account – used for files containing secrets.
         & icacls.exe $Path /inheritance:r /grant:r '*S-1-5-18:(F)' '*S-1-5-32-544:(F)' | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Berechtigungen auf $Path konnten nicht eingeschränkt werden." }
     }
     if ($Account -and $Account -ne 'LocalSystem') {
         $inherit = ''
@@ -272,19 +286,27 @@ function Set-PathAcl {
 
 function Grant-CertificateKeyAccess($Certificate, [string]$Account) {
     if (-not $Account -or $Account -eq 'LocalSystem') { return }
-    $keyPath = $null
+    # The key file name is the key's unique name; CNG keys live in Crypto\Keys, legacy CSP keys in RSA\MachineKeys.
+    $names = @()
     try {
         $rsa = [Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($Certificate)
-        if ($rsa -is [Security.Cryptography.RSACng]) {
-            $keyPath = Join-Path $env:ProgramData ('Microsoft\Crypto\Keys\' + $rsa.Key.UniqueName)
-        }
-        elseif ($Certificate.PrivateKey) {
-            $keyPath = Join-Path $env:ProgramData ('Microsoft\Crypto\RSA\MachineKeys\' + $Certificate.PrivateKey.CspKeyContainerInfo.UniqueName)
-        }
+        if ($rsa -is [Security.Cryptography.RSACng]) { $names += $rsa.Key.UniqueName }
     }
     catch { }
-    if ($keyPath -and (Test-Path $keyPath)) {
+    try {
+        if ($Certificate.PrivateKey -and $Certificate.PrivateKey.CspKeyContainerInfo) { $names += $Certificate.PrivateKey.CspKeyContainerInfo.UniqueKeyContainerName }
+    }
+    catch { }
+    $keyPath = $null
+    foreach ($n in ($names | Where-Object { $_ })) {
+        foreach ($dir in 'Microsoft\Crypto\Keys', 'Microsoft\Crypto\RSA\MachineKeys') {
+            $candidate = Join-Path $env:ProgramData (Join-Path $dir $n)
+            if (-not $keyPath -and (Test-Path $candidate)) { $keyPath = $candidate }
+        }
+    }
+    if ($keyPath) {
         & icacls.exe $keyPath /grant "${Account}:(R)" | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Leserecht auf den privaten Schlüssel ($keyPath) konnte nicht gesetzt werden." }
         Write-Ok "Dienstkonto darf den privaten Schlüssel des Zertifikats lesen."
     }
     else {
@@ -303,7 +325,10 @@ function Wait-ServiceHealthy([int]$Port, [int]$TimeoutSeconds = 90) {
             $svc = Get-Service $ServiceName -ErrorAction SilentlyContinue
             if ($svc -and $svc.Status -eq 'Stopped') { return $false }
             try {
-                $r = Invoke-WebRequest -Uri "https://localhost:$Port/healthz" -UseBasicParsing -TimeoutSec 5
+                $probe = @{ Uri = "https://localhost:$Port/healthz"; UseBasicParsing = $true; TimeoutSec = 5 }
+                # PowerShell 7 ignores ServerCertificateValidationCallback.
+                if ($PSVersionTable.PSEdition -eq 'Core') { $probe.SkipCertificateCheck = $true }
+                $r = Invoke-WebRequest @probe
                 if ($r.StatusCode -eq 200) { return $true }
             }
             catch { }
@@ -366,6 +391,25 @@ function Get-InstalledState {
     }
 }
 
+# Stops and deletes the service and waits until the SCM has really removed it.
+function Remove-TierModelService {
+    Stop-Service $ServiceName -ErrorAction SilentlyContinue
+    & sc.exe delete $ServiceName | Out-Null
+    for ($i = 0; $i -lt 30 -and (Get-Service $ServiceName -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Seconds 1 }
+    if (Get-Service $ServiceName -ErrorAction SilentlyContinue) {
+        throw 'Der Dienst ist noch zum Löschen markiert (z. B. weil die Diensteverwaltung geöffnet ist). Fenster schließen und erneut versuchen.'
+    }
+}
+
+function Get-InstalledPort($State) {
+    try {
+        $url = (Get-Content $State.Settings -Raw | ConvertFrom-Json).Kestrel.Endpoints.Https.Url
+        if ($url -match ':(\d+)/?$') { return [int]$Matches[1] }
+    }
+    catch { }
+    return 8443
+}
+
 #endregion
 
 #region ---------- Schritte ----------
@@ -425,17 +469,18 @@ function Test-Prerequisites {
     }
     else {
         Write-Warn "Fehlende Module: $($missing -join ', ')"
-        if ((Get-Command Install-WindowsFeature -ErrorAction SilentlyContinue) -and (Read-YesNo 'RSAT-Tools (RSAT-AD-PowerShell, GPMC) jetzt installieren?' $true)) {
-            $r = Install-WindowsFeature -Name RSAT-AD-PowerShell, GPMC
-            if (-not $r.Success) { throw 'Installation der RSAT-Features fehlgeschlagen.' }
-            Write-Ok 'RSAT-Tools installiert.'
-        }
-        elseif (Get-Command Add-WindowsCapability -ErrorAction SilentlyContinue) {
-            if (Read-YesNo 'RSAT-Tools als Windows-Features hinzufügen?' $true) {
+        $hasFeature = [bool](Get-Command Install-WindowsFeature -ErrorAction SilentlyContinue)
+        $hasCapability = [bool](Get-Command Add-WindowsCapability -ErrorAction SilentlyContinue)
+        if (($hasFeature -or $hasCapability) -and (Read-YesNo 'RSAT-Tools für Active Directory und Gruppenrichtlinien jetzt installieren?' $true)) {
+            if ($hasFeature) {
+                $r = Install-WindowsFeature -Name RSAT-AD-PowerShell, GPMC
+                if (-not $r.Success) { throw 'Installation der RSAT-Features fehlgeschlagen.' }
+            }
+            else {
                 Add-WindowsCapability -Online -Name 'Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0' | Out-Null
                 Add-WindowsCapability -Online -Name 'Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0' | Out-Null
-                Write-Ok 'RSAT-Tools hinzugefügt.'
             }
+            Write-Ok 'RSAT-Tools installiert.'
         }
         else {
             Write-Warn 'Bitte die RSAT-Tools für Active Directory und Gruppenrichtlinien manuell installieren.'
@@ -446,7 +491,13 @@ function Test-Prerequisites {
 
 function Read-Paths {
     Write-Step 'Installationsort'
-    $installDir = Read-Value 'Programmverzeichnis' (Join-Path $env:ProgramFiles 'TierModelService')
+    # Must be a dedicated folder: the service account gets rights on it and uninstall removes its content.
+    $installDir = Read-Value 'Programmverzeichnis (eigener, neuer Ordner)' (Join-Path $env:ProgramFiles 'TierModelService') {
+        param($v)
+        if (-not (Test-Path $v)) { return $true }
+        $items = @(Get-ChildItem $v -Force -ErrorAction SilentlyContinue)
+        ($items.Count -eq 0) -or (Test-Path (Join-Path $v 'app\TierModel.Service.exe'))
+    } 'Der Ordner existiert und ist nicht leer. Bitte einen neuen oder leeren Ordner angeben.'
     $dataDir = Read-Value 'Datenverzeichnis (Arbeitskopien, Berichte)' (Join-Path $env:ProgramData 'TierModelService')
     return [pscustomobject]@{ InstallDir = $installDir; DataDir = $dataDir }
 }
@@ -480,7 +531,7 @@ function Install-LocalPostgres {
     try {
         Write-Info "Installiere PostgreSQL $major (das dauert einige Minuten) …"
         $p = Start-Process -FilePath $exe -ArgumentList "--optionfile `"$optionFile`"" -Wait -PassThru
-        if ($p.ExitCode -ne 0) { throw "PostgreSQL-Installation fehlgeschlagen (Code $($p.ExitCode)). Protokoll: %TEMP%\install-postgresql.log" }
+        if ($p.ExitCode -ne 0) { throw "PostgreSQL-Installation fehlgeschlagen (Code $($p.ExitCode)). Protokoll: $env:TEMP\install-postgresql.log" }
     }
     finally { Remove-Item $optionFile -Force -ErrorAction SilentlyContinue }
 
@@ -489,7 +540,8 @@ function Install-LocalPostgres {
     if (Test-Path $conf) {
         $content = Get-Content $conf
         $content = $content -replace "^\s*#?\s*listen_addresses\s*=.*$", "listen_addresses = 'localhost'"
-        Set-Content -Path $conf -Value $content -Encoding UTF8
+        # PowerShell 5.1 would write a UTF-8 BOM, which PostgreSQL rejects as a syntax error.
+        [IO.File]::WriteAllLines($conf, [string[]]$content, (New-Object Text.UTF8Encoding $false))
         Restart-Service "postgresql-x64-$major"
     }
     Write-Ok "PostgreSQL $major installiert (nur lokal erreichbar, Port $Port)."
@@ -537,11 +589,21 @@ function Read-Database {
     }
     elseif ($mode -eq 2) {
         Write-Info 'Für den PostgreSQL-Superuser "postgres" wird ein Passwort benötigt. Bitte sicher aufbewahren (z. B. im Passwort-Tresor).'
-        $admin = [pscustomobject]@{ User = 'postgres'; Password = (Read-Secret 'Neues Passwort für "postgres"' -MinLength 12 -Repeat) }
+        while ($true) {
+            $pgPw = Read-Secret 'Neues Passwort für "postgres" (nur ASCII-Zeichen)' -MinLength 12 -Repeat
+            # The EDB installer reads its option file as ASCII.
+            if ($pgPw -match '^[\x21-\x7E]+$') { break }
+            Write-Warn 'Bitte nur ASCII-Zeichen ohne Leerzeichen verwenden (keine Umlaute).'
+        }
+        $admin = [pscustomobject]@{ User = 'postgres'; Password = $pgPw }
     }
 
-    $csb = "Host=$dbHost;Port=$port;Database=$database;Username=$appUser;Password=$appPassword;SSL Mode=$ssl"
-    if ($ssl -eq 'Require') { $csb += ';Trust Server Certificate=true' }
+    # DbConnectionStringBuilder quotes values containing ; ' or " correctly.
+    $b = New-Object Data.Common.DbConnectionStringBuilder
+    $b['Host'] = $dbHost; $b['Port'] = $port; $b['Database'] = $database; $b['Username'] = $appUser
+    $b['Password'] = $appPassword; $b['SSL Mode'] = $ssl
+    if ($ssl -eq 'Require') { $b['Trust Server Certificate'] = 'true' }
+    $csb = $b.ConnectionString
     return [pscustomobject]@{
         Mode = $mode; Host = $dbHost; Port = $port; Ssl = $ssl; Database = $database; AppUser = $appUser
         AppPassword = $appPassword; Admin = $admin; ConnectionString = $csb
@@ -583,16 +645,24 @@ function Read-ServiceAccount {
     if ($Domain) { $netbios = $Domain.NetBios }
     switch ($choice) {
         1 {
-            $name = Read-Value 'Name des gMSA (ohne $)' 'svc-tiermodel'
+            $name = Read-Value 'Name des gMSA (ohne Domäne und $)' 'svc-tiermodel' { param($v) $v -notmatch '[\\@]' } 'Nur den Kontonamen angeben, ohne Domäne.'
             $account = "$netbios\$($name.TrimEnd('$'))$"
             if (Get-Command Test-ADServiceAccount -ErrorAction SilentlyContinue) {
                 $sam = $name.TrimEnd('$')
-                if (-not (Test-ADServiceAccount -Identity $sam -ErrorAction SilentlyContinue)) {
-                    Write-Warn "Der gMSA '$sam' ist auf diesem Server nicht einsatzbereit."
-                    Write-Info "Voraussetzung: New-ADServiceAccount -Name $sam -DNSHostName $sam.$($Domain.Name) -PrincipalsAllowedToRetrieveManagedPassword '$env:COMPUTERNAME$'"
+                $ready = $false
+                try { $ready = [bool](Test-ADServiceAccount -Identity $sam -ErrorAction Stop) } catch { $ready = $false }
+                if (-not $ready) {
+                    $dnsDomain = 'contoso.com'
+                    if ($Domain) { $dnsDomain = $Domain.Name }
+                    Write-Warn "Der gMSA '$sam' ist auf diesem Server nicht einsatzbereit (existiert nicht oder dieser Server darf das Passwort nicht abrufen)."
+                    Write-Info "Anlegen: New-ADServiceAccount -Name $sam -DNSHostName $sam.$dnsDomain -PrincipalsAllowedToRetrieveManagedPassword '$env:COMPUTERNAME$'"
                     if (Read-YesNo 'Jetzt mit Install-ADServiceAccount auf diesem Server installieren?' $true) {
-                        Install-ADServiceAccount -Identity $sam
-                        if (-not (Test-ADServiceAccount -Identity $sam)) { throw "gMSA '$sam' ist weiterhin nicht nutzbar (Mitgliedschaft des Computerkontos prüfen, ggf. Neustart)." }
+                        try {
+                            Install-ADServiceAccount -Identity $sam -ErrorAction Stop
+                            $ready = [bool](Test-ADServiceAccount -Identity $sam -ErrorAction Stop)
+                        }
+                        catch { Write-Warn $_.Exception.Message }
+                        if (-not $ready) { throw "gMSA '$sam' ist nicht nutzbar (anlegen, Berechtigung des Computerkontos prüfen, ggf. Neustart)." }
                     }
                 }
                 Write-Ok "gMSA $account ist einsatzbereit."
@@ -624,11 +694,15 @@ function Read-ServiceAccount {
 }
 
 function Read-Web {
+    param([int]$InstalledPort = 0)
     Write-Step 'Web-Oberfläche (HTTPS)'
     $fqdn = Get-Fqdn
-    $port = [int](Read-Value 'HTTPS-Port' '8443' {
+    $defaultPort = '8443'
+    if ($InstalledPort) { $defaultPort = "$InstalledPort" }
+    $port = [int](Read-Value 'HTTPS-Port' $defaultPort {
             param($v)
             if ($v -notmatch '^\d{2,5}$' -or [int]$v -gt 65535) { return $false }
+            if ([int]$v -eq $InstalledPort) { return $true }   # the running service itself uses it
             -not (Get-NetTCPConnection -LocalPort ([int]$v) -State Listen -ErrorAction SilentlyContinue)
         } 'Ungültiger oder bereits belegter Port.')
 
@@ -702,7 +776,9 @@ function Install-New {
     $appDir = Join-Path $paths.InstallDir 'app'
     $db = Read-Database
     $svc = Read-ServiceAccount $pre.Domain
-    $web = Read-Web
+    $installedPort = 0
+    if ($Existing) { $installedPort = Get-InstalledPort $Existing }
+    $web = Read-Web -InstalledPort $installedPort
     $defaults = Read-Defaults $pre.Domain
     $admin = Read-AdminAccount
 
@@ -723,11 +799,7 @@ function Install-New {
     if (-not (Read-YesNo 'Installation jetzt durchführen?' $true)) { Write-Warn 'Abgebrochen – es wurde nichts verändert.'; return }
 
     Write-Step 'Installation'
-    if ($Existing) {
-        Stop-Service $ServiceName -ErrorAction SilentlyContinue
-        & sc.exe delete $ServiceName | Out-Null
-        Start-Sleep -Seconds 2
-    }
+    if ($Existing) { Remove-TierModelService }
 
     if ($db.Mode -eq 2) {
         Install-LocalPostgres -SuperPassword $db.Admin.Password -Port $db.Port
@@ -753,6 +825,9 @@ function Install-New {
     }
 
     $settingsPath = Join-Path $appDir 'appsettings.Production.json'
+    if (-not (Test-Path $settingsPath)) { New-Item -ItemType File -Path $settingsPath -Force | Out-Null }
+    # Restrict the file BEFORE the connection string is written into it.
+    Set-PathAcl -Path $settingsPath -Account $svc.Account -Rights Read -Exclusive
     Write-Settings -Path $settingsPath -Db $db -Web $web -Defaults $defaults -Pwsh $pre.Pwsh -FrameworkDir (Join-Path $paths.InstallDir 'framework') -DataDir $paths.DataDir
 
     Invoke-ServiceCli -AppDir $appDir -Arguments @('migrate') | Out-Null
@@ -776,10 +851,10 @@ function Install-New {
     Set-PathAcl -Path $paths.InstallDir -Account $svc.Account -Rights ReadAndExecute
     Set-PathAcl -Path $paths.DataDir -Account $svc.Account -Rights Modify
     Set-PathAcl -Path $settingsPath -Account $svc.Account -Rights Read -Exclusive
-    Grant-CertificateKeyAccess $web.Certificate $svc.Account
+    if ($svc.Kind -ne 'LocalSystem') { Grant-CertificateKeyAccess $web.Certificate $svc.Account }
     Write-Ok 'Dateiberechtigungen gesetzt (Konfiguration mit Zugangsdaten nur für SYSTEM, Administratoren und Dienstkonto lesbar).'
 
-    if (-not [Diagnostics.EventLog]::SourceExists($EventSource)) { New-EventLog -LogName Application -Source $EventSource }
+    if (-not [Diagnostics.EventLog]::SourceExists($EventSource)) { [Diagnostics.EventLog]::CreateEventSource($EventSource, 'Application') }
 
     $exe = Join-Path $appDir $ExeName
     New-Service -Name $ServiceName -BinaryPathName "`"$exe`"" -DisplayName $ServiceDisplayName -Description $ServiceDescription -StartupType Automatic | Out-Null
@@ -825,17 +900,23 @@ function Update-Existing($State) {
         throw 'Zum Aktualisieren bitte Setup.cmd aus dem entpackten NEUEN Paket starten, nicht aus dem Installationsverzeichnis.'
     }
     if (-not (Test-Path $State.Settings)) { throw "Konfiguration $($State.Settings) fehlt – bitte 'Neu konfigurieren' wählen." }
-    $settings = Get-Content $State.Settings -Raw | ConvertFrom-Json
-    $port = 8443
-    if ($settings.Kestrel.Endpoints.Https.Url -match ':(\d+)/?$') { $port = [int]$Matches[1] }
+    $port = Get-InstalledPort $State
+    $framework = Join-Path $State.InstallDir 'framework'
+    $backups = @{ $State.AppDir = "$($State.AppDir).bak"; $framework = "$framework.bak" }
 
-    $backup = "$($State.AppDir).bak"
     Write-Info 'Stoppe den Dienst …'
     Stop-Service $ServiceName -ErrorAction SilentlyContinue
     (Get-Service $ServiceName).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(60))
-    if (Test-Path $backup) { Remove-Item $backup -Recurse -Force }
-    Copy-Item $State.AppDir $backup -Recurse
-    Write-Ok "Sicherung der bisherigen Version: $backup"
+    foreach ($src in $backups.Keys) {
+        if (Test-Path $backups[$src]) { Remove-Item $backups[$src] -Recurse -Force }
+        if (Test-Path $src) { Copy-Item $src $backups[$src] -Recurse }
+    }
+    # Copy-Item does not copy ACLs: re-protect the copied secrets.
+    $backupSettings = Join-Path $backups[$State.AppDir] 'appsettings.Production.json'
+    $account = $State.Account
+    if ($account -eq 'LocalSystem') { $account = $null }
+    if (Test-Path $backupSettings) { Set-PathAcl -Path $backupSettings -Account $account -Rights Read -Exclusive }
+    Write-Ok 'Sicherung der bisherigen Version angelegt (app.bak, framework.bak).'
 
     try {
         Copy-Payload $State.InstallDir
@@ -843,6 +924,7 @@ function Update-Existing($State) {
         Write-Ok 'Programmdateien und Datenbankschema aktualisiert.'
         Start-Service $ServiceName
         if (-not (Wait-ServiceHealthy -Port $port)) { throw 'Der Dienst antwortet nach der Aktualisierung nicht.' }
+        foreach ($b in $backups.Values) { Remove-Item $b -Recurse -Force -ErrorAction SilentlyContinue }
         Write-Ok "Aktualisierung abgeschlossen: https://$(Get-Fqdn):$port/"
     }
     catch {
@@ -850,8 +932,11 @@ function Update-Existing($State) {
         Show-RecentServiceErrors
         if (Read-YesNo 'Vorherige Programmversion wiederherstellen?' $true) {
             Stop-Service $ServiceName -ErrorAction SilentlyContinue
-            Remove-Item $State.AppDir -Recurse -Force
-            Rename-Item $backup (Split-Path $State.AppDir -Leaf)
+            foreach ($src in $backups.Keys) {
+                if (-not (Test-Path $backups[$src])) { continue }
+                if (Test-Path $src) { Remove-Item $src -Recurse -Force }
+                Rename-Item $backups[$src] (Split-Path $src -Leaf)
+            }
             Start-Service $ServiceName
             Write-Warn 'Vorherige Version wiederhergestellt. Hinweis: Eine bereits durchgeführte Schemaänderung bleibt bestehen.'
         }
@@ -862,17 +947,32 @@ function Uninstall-Service($State) {
     Write-Step 'Deinstallation'
     if (-not $State) { Write-Warn 'Der TierModel Service ist nicht installiert.'; return }
     if (-not (Read-YesNo "TierModel Service aus $($State.InstallDir) entfernen?" $false)) { return }
-    Stop-Service $ServiceName -ErrorAction SilentlyContinue
-    & sc.exe delete $ServiceName | Out-Null
+    $dbName = 'tiermodel'; $dbUser = 'tiermodel'
+    try {
+        $cs = (Get-Content $State.Settings -Raw | ConvertFrom-Json).ConnectionStrings.TierModel
+        if ($cs -match '(?i)(^|;)\s*Database=([^;]+)') { $dbName = $Matches[2] }
+        if ($cs -match '(?i)(^|;)\s*Username=([^;]+)') { $dbUser = $Matches[2] }
+    }
+    catch { }
+    Remove-TierModelService
     Remove-NetFirewallRule -Name $FirewallRuleName -ErrorAction SilentlyContinue
     Write-Ok 'Dienst und Firewall-Regel entfernt.'
-    if (Read-YesNo "Programmverzeichnis $($State.InstallDir) löschen?" $true) {
-        Start-Sleep -Seconds 2
-        Remove-Item $State.InstallDir -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Ok 'Programmverzeichnis gelöscht.'
+    if (Read-YesNo "Programmdateien in $($State.InstallDir) löschen?" $true) {
+        Set-Location $env:SystemRoot   # the folder cannot be deleted while it is the current directory
+        # Only what the installer put there – never the whole folder, it may have been an existing one.
+        $owned = 'app', 'app.bak', 'framework', 'framework.bak', 'Install-TierModelService.ps1', 'Setup.cmd', 'VERSION'
+        foreach ($item in $owned) {
+            $path = Join-Path $State.InstallDir $item
+            if (Test-Path $path) { Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+        $left = @(Get-ChildItem $State.InstallDir -Force -ErrorAction SilentlyContinue)
+        if ($left.Count -eq 0) { Remove-Item $State.InstallDir -Force -ErrorAction SilentlyContinue }
+        if (Test-Path (Join-Path $State.InstallDir 'app')) { Write-Warn "Einige Dateien sind noch in Benutzung und bleiben in $($State.InstallDir) (nach einem Neustart löschen)." }
+        else { Write-Ok 'Programmdateien gelöscht.' }
     }
     Write-Info 'Die PostgreSQL-Datenbank (Konfiguration, Historie, Benutzer) und das Datenverzeichnis bleiben erhalten.'
-    Write-Info 'Bei Bedarf manuell entfernen: DROP DATABASE tiermodel; DROP ROLE tiermodel;'
+    Write-Info "Bei Bedarf manuell entfernen: DROP DATABASE $dbName; DROP ROLE $dbUser;"
+
 }
 
 #endregion
@@ -883,10 +983,12 @@ if (-not (Test-IsAdmin)) {
     Write-Host 'Administratorrechte werden angefordert …' -ForegroundColor Yellow
     $argList = @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', "`"$PSCommandPath`"")
     if ($Uninstall) { $argList += '-Uninstall' }
+    if ($PSBoundParameters.ContainsKey('PostgresInstaller')) { $argList += @('-PostgresInstaller', "`"$PostgresInstaller`"") }
     Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList $argList -Verb RunAs
     exit 0
 }
 
+$exitCode = 0
 $transcriptDir = Join-Path $env:ProgramData 'TierModelService\logs'
 New-Item -ItemType Directory -Path $transcriptDir -Force | Out-Null
 $transcript = Join-Path $transcriptDir ('setup-{0:yyyyMMdd-HHmmss}.log' -f (Get-Date))
@@ -925,8 +1027,9 @@ catch {
     Write-Host ''
     Write-Err "Fehler: $($_.Exception.Message)"
     Write-Info "Protokoll: $transcript"
-    $global:LASTEXITCODE = 1
+    $exitCode = 1
 }
 finally {
     Stop-Transcript | Out-Null
 }
+exit $exitCode

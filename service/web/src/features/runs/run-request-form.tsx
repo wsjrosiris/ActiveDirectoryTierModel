@@ -32,7 +32,13 @@ export function hasInclude(r: RunRequest) {
 export function runRequestError(r: RunRequest): string | null {
   if (!r.preferredDc.trim()) return 'Bitte einen Domain Controller angeben.'
   if (r.scope === null && !hasInclude(r)) return 'Ohne Bereich muss mindestens ein Add-on aktiviert sein.'
+  if (!includesAllowed(r.scope) && hasInclude(r)) return 'Add-ons sind nur mit „Vollständig“ oder „Kein Bereich“ möglich.'
   return null
+}
+
+/** The framework scripts accept -Include* switches only together with -FullDeployment or on their own. */
+export function includesAllowed(scope: RunRequest['scope']) {
+  return scope === null || scope === 'FullDeployment'
 }
 
 /** Fills preferredDc / admlLanguage from settings once they are loaded. */
@@ -101,7 +107,13 @@ export function RunRequestFields({
                 role="radio"
                 aria-checked={checked}
                 disabled={dis}
-                onClick={() => set('scope', s)}
+                onClick={() =>
+                  onChange(
+                    includesAllowed(s)
+                      ? { ...value, scope: s }
+                      : { ...value, scope: s, includeMsa: false, includeGmsa: false, includeDmsa: false, includeWinLaps: false },
+                  )
+                }
                 className={cn(
                   'flex items-start gap-2.5 rounded-lg border bg-card px-3 py-2.5 text-left transition-all outline-none hover:border-input hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45',
                   checked && 'border-primary/60 bg-primary/5 ring-1 ring-primary/30 hover:bg-primary/5',
@@ -122,6 +134,9 @@ export function RunRequestFields({
 
       <div className="grid gap-2">
         <p className="text-[13px] font-medium">Add-ons</p>
+        {!includesAllowed(value.scope) && (
+          <p className="text-xs text-muted-foreground">Add-ons sind nur mit „Vollständig“ oder „Kein Bereich“ möglich.</p>
+        )}
         <div className={cn('grid gap-2', compact ? 'sm:grid-cols-2' : 'sm:grid-cols-2 2xl:grid-cols-4')}>
           {includes.map((i) => (
             <label
@@ -136,6 +151,7 @@ export function RunRequestFields({
               <Switch
                 id={`${idPrefix}-${i.key}`}
                 checked={value[i.key]}
+                disabled={!includesAllowed(value.scope)}
                 onCheckedChange={(c) => {
                   const next = { ...value, [i.key]: c }
                   if (!hasInclude(next) && next.scope === null) next.scope = 'FullDeployment'

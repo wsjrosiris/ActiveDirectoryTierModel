@@ -10,6 +10,7 @@ import { Logo } from '@/components/layout/logo'
 import { formatDateTime } from '@/lib/utils'
 import { meQueryKey, useMe } from './auth'
 import { AuthShell } from './auth-shell'
+import { draftStore } from '@/features/config/draft-store'
 
 export function Component() {
   const { data } = useMe()
@@ -27,6 +28,8 @@ export function Component() {
     mutationFn: () => api.auth.login({ username: username.trim(), password }),
     meta: { silent: true },
     onSuccess: async (user) => {
+      // Never carry unsaved drafts of a previous session over to another account.
+      draftStore.discardAll()
       // Re-read /me so the XSRF cookie is refreshed for the new session.
       qc.setQueryData(meQueryKey, { user })
       await qc.invalidateQueries({ queryKey: meQueryKey })

@@ -58,10 +58,12 @@ public static class MiscEndpoints
         api.MapPut("/settings", async (UpdateSettingsRequest r, HttpContext ctx, SettingsService s, ChangeLogService log, AppDbContext db) =>
         {
             var errors = new Dictionary<string, string[]>();
+            r = r with { DefaultPreferredDc = r.DefaultPreferredDc?.Trim() ?? "", AdmlLanguage = r.AdmlLanguage?.Trim() ?? "" };
             if (!string.IsNullOrWhiteSpace(r.DefaultPreferredDc)
                 && RunValidation.Validate(new RunRequest(r.DefaultPreferredDc.Trim(), DeployScope.FullDeployment, false, false, false, false, null)).ContainsKey("preferredDc"))
                 errors["defaultPreferredDc"] = ["Ungültiger Hostname."];
-            if (RunValidation.Validate(new RunRequest("dc", DeployScope.FullDeployment, false, false, false, false, r.AdmlLanguage)).ContainsKey("admlLanguage"))
+            // An empty language would be passed as -AdmlLanguage "" and fail every run at parameter binding.
+            if (r.AdmlLanguage.Length == 0 || RunValidation.Validate(new RunRequest("dc", DeployScope.FullDeployment, false, false, false, false, r.AdmlLanguage)).ContainsKey("admlLanguage"))
                 errors["admlLanguage"] = ["Sprache im Format xx-XX angeben."];
             if (r.RunRetentionDays is < 0 or > 3650) errors["runRetentionDays"] = ["0 bis 3650 Tage (0 = unbegrenzt)."];
             if (errors.Count > 0) return Results.ValidationProblem(errors);

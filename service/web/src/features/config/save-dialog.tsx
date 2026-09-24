@@ -60,14 +60,20 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
   }, [open, keys])
 
   const save = async () => {
+    const invalid = draftStore.invalidJsonKeys()
+    if (invalid.length) {
+      toast.error('Ungültiges JSON', {
+        description: `„${invalid.map((k) => sectionFallbackTitles[k] ?? k).join('“, „')}“ enthält einen Syntaxfehler. Bitte zuerst korrigieren – sonst würde der letzte gültige Stand gespeichert.`,
+      })
+      return
+    }
     setSaving(true)
     const done: string[] = []
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i]
       const s = draftStore.getState()
-      const base = s.bases[key]
       try {
-        const saved = await api.config.save(key, { content: s.drafts[key], comment: comment.trim(), baseVersion: base.version })
+        const saved = await api.config.save(key, { content: s.drafts[key], comment: comment.trim(), baseVersion: draftStore.baseVersionOf(key)! })
         draftStore.saved(saved)
         after(saved)
         done.push(key)
@@ -75,6 +81,11 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
         setSaving(false)
         if (e instanceof ApiError && e.status === 409) {
           setConflict({ key, remaining: keys.slice(i) })
+        } else if (e instanceof ApiError && e.status === 401) {
+          toast.error('Sitzung abgelaufen', {
+            description: 'Ihre Änderungen sind noch da. Bitte in einem neuen Tab anmelden und dann hier erneut speichern.',
+            duration: 15000,
+          })
         } else {
           toast.error(`Speichern von „${sectionFallbackTitles[key] ?? key}“ fehlgeschlagen`, { description: errorMessage(e) })
         }
@@ -101,15 +112,17 @@ export function SaveDialog({ open, onOpenChange, keys }: { open: boolean; onOpen
 
   const keepEditing = async (key: string) => {
     try {
-      // Rebase the draft onto the latest server version; the next save diff shows it.
+      // Rebase the draft onto the latest server version on purpose; the next save diff
+      // shows the other user's changes that this save would revert.
       await qc.fetchQuery({ ...sectionQuery(key), staleTime: 0 })
+      draftStore.rebase(key)
     } catch (e) {
       toast.error('Neueste Version konnte nicht geladen werden', { description: errorMessage(e) })
     }
     setConflict(null)
     onOpenChange(false)
     toast('Entwurf auf neuesten Stand gesetzt', {
-      description: 'Ihre Änderungen bleiben erhalten. Prüfen Sie den Diff vor dem erneuten Speichern.',
+      description: 'Ihre Änderungen bleiben erhalten. Der Diff zeigt jetzt auch, welche Änderungen der anderen Person Ihr Speichern zurücknehmen würde.',
     })
   }
 

@@ -10,16 +10,30 @@ import type { Section } from '@/api/types'
 type Json = any
 type Drafts = Record<string, Json>
 
+/** Undo/redo snapshot: the drafts plus the server version each draft was started from. */
+interface Snapshot {
+  drafts: Drafts
+  draftBase: Record<string, number>
+}
+
 interface State {
   bases: Record<string, Section>
   drafts: Drafts
-  past: Drafts[]
-  future: Drafts[]
+  /** Server version a draft was started from. Sent as baseVersion so the server
+   *  detects concurrent saves even after a background refetch replaced the base. */
+  draftBase: Record<string, number>
+  past: Snapshot[]
+  future: Snapshot[]
   lastTag: string | null
   lastAt: number
 }
 
-let state: State = { bases: {}, drafts: {}, past: [], future: [], lastTag: null, lastAt: 0 }
+/** Sections whose JSON editor currently holds text that does not parse (not part of history). */
+const invalidJson = new Set<string>()
+
+let state: State = { bases: {}, drafts: {}, draftBase: {}, past: [], future: [], lastTag: null, lastAt: 0 }
+
+const snap = (s: State): Snapshot => ({ drafts: s.drafts, draftBase: s.draftBase })
 const listeners = new Set<() => void>()
 
 function emit(next: State) {
@@ -70,46 +84,76 @@ export const draftStore = {
   apply(changes: Drafts, opts: { tag?: string } = {}) {
     const now = Date.now()
     const coalesce = !!opts.tag && opts.tag === state.lastTag && now - state.lastAt < 1200
-    const past = coalesce ? state.past : [...state.past, state.drafts].slice(-HISTORY_LIMIT)
+    const past = coalesce ? state.past : [...state.past, snap(state)].slice(-HISTORY_LIMIT)
     const drafts = { ...state.drafts, ...changes }
-    // Drop drafts identical to their base so "dirty" is exact.
+    const draftBase = { ...state.draftBase }
     for (const k of Object.keys(changes)) {
       const b = state.bases[k]
-      if (b && ser(drafts[k]) === ser(b.content)) delete drafts[k]
+      if (!(k in draftBase) && b) draftBase[k] = b.version
+      // Drop drafts identical to their base so "dirty" is exact.
+      if (b && ser(drafts[k]) === ser(b.content)) {
+        delete drafts[k]
+        delete draftBase[k]
+      }
     }
-    emit({ ...state, drafts, past, future: [], lastTag: opts.tag ?? null, lastAt: now })
+    emit({ ...state, drafts, draftBase, past, future: [], lastTag: opts.tag ?? null, lastAt: now })
   },
 
   undo() {
     if (!state.past.length) return false
     const prev = state.past[state.past.length - 1]
-    emit({ ...state, drafts: prev, past: state.past.slice(0, -1), future: [state.drafts, ...state.future], lastTag: null })
+    emit({ ...state, ...prev, past: state.past.slice(0, -1), future: [snap(state), ...state.future], lastTag: null })
     return true
   },
 
   redo() {
     if (!state.future.length) return false
     const [next, ...rest] = state.future
-    emit({ ...state, drafts: next, past: [...state.past, state.drafts], future: rest, lastTag: null })
+    emit({ ...state, ...next, past: [...state.past, snap(state)], future: rest, lastTag: null })
     return true
   },
 
   discard(key: string) {
     if (!(key in state.drafts)) return
     const drafts = { ...state.drafts }
+    const draftBase = { ...state.draftBase }
     delete drafts[key]
-    emit({ ...state, drafts, past: [...state.past, state.drafts], future: [], lastTag: null })
+    delete draftBase[key]
+    emit({ ...state, drafts, draftBase, past: [...state.past, snap(state)], future: [], lastTag: null })
   },
 
   discardAll() {
-    emit({ ...state, drafts: {}, past: [], future: [], lastTag: null })
+    emit({ ...state, drafts: {}, draftBase: {}, past: [], future: [], lastTag: null })
+  },
+
+  /** Accept the current server version as the base of an existing draft (after a conflict, on purpose). */
+  rebase(key: string) {
+    const b = state.bases[key]
+    if (!b || !(key in state.drafts)) return
+    emit({ ...state, draftBase: { ...state.draftBase, [key]: b.version } })
+  },
+
+  /** Version to send as baseVersion when saving <key>. */
+  baseVersionOf(key: string): number | undefined {
+    return state.draftBase[key] ?? state.bases[key]?.version
   },
 
   /** After a successful save: new base, draft removed (history kept). */
   saved(section: Section) {
     const drafts = { ...state.drafts }
+    const draftBase = { ...state.draftBase }
     delete drafts[section.key]
-    emit({ ...state, bases: { ...state.bases, [section.key]: section }, drafts, lastTag: null })
+    delete draftBase[section.key]
+    emit({ ...state, bases: { ...state.bases, [section.key]: section }, drafts, draftBase, lastTag: null })
+  },
+
+  setJsonValid(key: string, valid: boolean) {
+    if (valid) invalidJson.delete(key)
+    else invalidJson.add(key)
+  },
+
+  invalidJsonKeys(): string[] {
+    return [...invalidJson]
   },
 
   dirtyKeys(): string[] {

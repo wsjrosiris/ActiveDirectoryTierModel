@@ -82,9 +82,12 @@ public static class RunEndpoints
         });
 
         runs.MapPost("/{id:long}/cancel", async (long id, HttpContext ctx, RunService service) =>
-            await service.CancelAsync(id, ctx.User.UserName())
-                ? Results.NoContent()
-                : Results.Problem(title: "Der Lauf ist bereits beendet", statusCode: 409))
+            await service.CancelAsync(id, ctx.User.UserName()) switch
+            {
+                null => Results.NotFound(),
+                true => Results.NoContent(),
+                false => Results.Problem(title: "Der Lauf ist bereits beendet", statusCode: 409),
+            })
             .RequireAuthorization(nameof(Role.Operator));
 
         var schedules = app.MapGroup("/api/schedules").RequireAuthorization(nameof(Role.Viewer));

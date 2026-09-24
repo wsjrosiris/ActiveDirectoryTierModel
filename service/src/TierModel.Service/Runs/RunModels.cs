@@ -43,8 +43,14 @@ public static partial class RunValidation
         var errors = new Dictionary<string, string[]>();
         if (string.IsNullOrWhiteSpace(r.PreferredDc) || r.PreferredDc.Length > 253 || !HostName().IsMatch(r.PreferredDc))
             errors["preferredDc"] = ["Bitte einen gültigen Domänencontroller-Namen angeben (z. B. dc01.contoso.com)."];
-        if (r.Scope is null && !(r.IncludeMsa || r.IncludeGmsa || r.IncludeDmsa || r.IncludeWinLaps))
+        var anyInclude = r.IncludeMsa || r.IncludeGmsa || r.IncludeDmsa || r.IncludeWinLaps;
+        if (r.Scope is { } scope && !Enum.IsDefined(scope))
+            errors["scope"] = ["Unbekannter Bereich."];
+        else if (r.Scope is null && !anyInclude)
             errors["scope"] = ["Bereich wählen oder mindestens eine Erweiterung aktivieren."];
+        // Deploy-/Audit-TierModel.ps1 reject -Include* together with any scope except -FullDeployment.
+        else if (anyInclude && r.Scope is not (null or DeployScope.FullDeployment))
+            errors["scope"] = ["Erweiterungen (MSA, gMSA, dMSA, Windows LAPS) sind nur mit „Vollständig“ oder ohne Bereich möglich."];
         if (r.AdmlLanguage is { Length: > 0 } lang && !Language().IsMatch(lang))
             errors["admlLanguage"] = ["Sprache im Format xx-XX angeben (z. B. en-US)."];
         return errors;

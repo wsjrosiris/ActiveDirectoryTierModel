@@ -37,9 +37,10 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
         return run;
     }
 
-    /// <summary>Cancels a queued or running run. Returns false if it has already finished.</summary>
-    public async Task<bool> CancelAsync(long id, string user, CancellationToken ct = default)
+    /// <summary>Cancels a queued or running run. Returns null if the run does not exist, false if it has already finished.</summary>
+    public async Task<bool?> CancelAsync(long id, string user, CancellationToken ct = default)
     {
+        if (!await db.Runs.AnyAsync(r => r.Id == id, ct)) return null;
         var cancelledQueued = await db.Runs
             .Where(r => r.Id == id && r.Status == RunStatus.Queued)
             .ExecuteUpdateAsync(u => u
@@ -49,7 +50,8 @@ public class RunService(AppDbContext db, RunQueue queue, ChangeLogService change
         if (cancelledQueued == 0)
         {
             var running = await db.Runs.AnyAsync(r => r.Id == id && r.Status == RunStatus.Running, ct);
-            if (!running || !queue.TryCancel(id)) return false;
+            if (!running) return false;
+            queue.Cancel(id);
         }
         changeLog.Add(user, "run.cancel", "run", id.ToString(), $"Lauf #{id} abgebrochen");
         await db.SaveChangesAsync(ct);

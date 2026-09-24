@@ -13,7 +13,7 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
     public static DateTimeOffset? NextOccurrence(string cron, string timeZone, DateTimeOffset after)
     {
         var expr = CronExpression.Parse(cron, CronFormat.Standard);
-        var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZone);
+        var tz = TimeZoneConverter.TZConvert.GetTimeZoneInfo(timeZone);
         return expr.GetNextOccurrence(after, tz)?.ToUniversalTime();
     }
 
@@ -30,7 +30,7 @@ public class ScheduleWorker(IServiceScopeFactory scopes, IOptions<TierModelOptio
         }
         try
         {
-            TimeZoneInfo.FindSystemTimeZoneById(timeZone);
+            TimeZoneConverter.TZConvert.GetTimeZoneInfo(timeZone);
         }
         catch (Exception)
         {

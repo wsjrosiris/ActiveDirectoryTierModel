@@ -7,6 +7,9 @@ public class RunQueue
 {
     private readonly SemaphoreSlim _signal = new(0);
     private readonly ConcurrentDictionary<long, CancellationTokenSource> _active = new();
+    // Cancellations requested after the worker claimed a run but before it registered it.
+    private readonly HashSet<long> _pendingCancel = [];
+    private readonly Lock _lock = new();
 
     public void Notify()
     {
@@ -18,7 +21,11 @@ public class RunQueue
     public CancellationTokenSource Register(long runId)
     {
         var cts = new CancellationTokenSource();
-        _active[runId] = cts;
+        lock (_lock)
+        {
+            _active[runId] = cts;
+            if (_pendingCancel.Remove(runId)) cts.Cancel();
+        }
         return cts;
     }
 
@@ -27,11 +34,13 @@ public class RunQueue
         if (_active.TryRemove(runId, out var cts)) cts.Dispose();
     }
 
-    /// <summary>Returns true when the run is executing in this process and was signalled.</summary>
-    public bool TryCancel(long runId)
+    /// <summary>Signals a running run; if the worker has not registered it yet, the cancellation is applied on registration.</summary>
+    public void Cancel(long runId)
     {
-        if (!_active.TryGetValue(runId, out var cts)) return false;
-        cts.Cancel();
-        return true;
+        lock (_lock)
+        {
+            if (_active.TryGetValue(runId, out var cts)) cts.Cancel();
+            else _pendingCancel.Add(runId);
+        }
     }
 }

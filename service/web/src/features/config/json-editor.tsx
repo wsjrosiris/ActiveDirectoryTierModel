@@ -44,10 +44,13 @@ export default function JsonEditor({
   onChange,
   readOnly,
   height = '60vh',
+  onValidityChange,
 }: {
   value: Json
   onChange: (v: Json) => void
   readOnly?: boolean
+  /** Reports whether the text currently parses; the draft keeps the last valid state meanwhile. */
+  onValidityChange?: (valid: boolean) => void
   height?: string
 }) {
   const { resolved } = useTheme()
@@ -56,27 +59,31 @@ export default function JsonEditor({
   const [text, setText] = React.useState(() => JSON.stringify(value ?? {}, null, 2))
   const [error, setError] = React.useState<string | null>(null)
 
-  // External change (undo/redo, restore, reload) → replace text.
+  // External change (undo/redo, restore, reload) → replace text. Compared by content: typing back
+  // to the saved state drops the draft and yields the base object, which must not reset the cursor.
   React.useEffect(() => {
-    if (value !== lastEmitted.current) {
+    if (value !== lastEmitted.current && JSON.stringify(value) !== JSON.stringify(lastEmitted.current)) {
       lastEmitted.current = value
       setText(JSON.stringify(value ?? {}, null, 2))
       setError(null)
+      onValidityChange?.(true)
     }
-  }, [value])
+  }, [value, onValidityChange])
+  React.useEffect(() => () => onValidityChange?.(true), [onValidityChange])
 
   const handleChange = React.useCallback(
     (t: string) => {
       setText(t)
       const err = describeError(t)
       setError(err)
+      onValidityChange?.(!err)
       if (!err) {
         const parsed = JSON.parse(t)
         lastEmitted.current = parsed
         onChange(parsed)
       }
     },
-    [onChange],
+    [onChange, onValidityChange],
   )
 
   const format = () => {

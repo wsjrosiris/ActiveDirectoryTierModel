@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace TierModel.Service.Config;
@@ -35,6 +36,19 @@ public static class ConfigValidator
                 : $"OU={name},{path},{DomainDn}";
 
     public static List<ValidationIssue> Validate(IReadOnlyDictionary<string, JsonNode?> sections)
+    {
+        try
+        {
+            return ValidateCore(sections);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or FormatException or JsonException)
+        {
+            // Unexpected JSON shapes must not break the dashboard or every run.
+            return [new("Error", "config", $"Die Konfiguration hat eine unerwartete Struktur: {ex.Message}")];
+        }
+    }
+
+    private static List<ValidationIssue> ValidateCore(IReadOnlyDictionary<string, JsonNode?> sections)
     {
         var issues = new List<ValidationIssue>();
 
@@ -90,8 +104,12 @@ public static class ConfigValidator
             if (!OuKnown(Str(u, "ouPath")))
                 issues.Add(new("Warning", "users", $"Ziel-OU '{Str(u, "ouPath")}' ist nicht in der OU-Konfiguration", sam));
             if (u["memberOf"] is JsonArray memberOf)
-                foreach (var m in memberOf.Select(x => x?.GetValue<string>()).Where(x => !PrincipalKnown(x)))
-                    issues.Add(new("Warning", "users", $"Gruppe '{m}' ist unbekannt", sam));
+                foreach (var m in memberOf)
+                {
+                    var group = m is JsonValue v && v.TryGetValue<string>(out var g) ? g : null;
+                    if (group is null) issues.Add(new("Error", "users", "memberOf enthält einen Eintrag, der kein Gruppenname ist", sam));
+                    else if (!PrincipalKnown(group)) issues.Add(new("Warning", "users", $"Gruppe '{group}' ist unbekannt", sam));
+                }
         }
 
         foreach (var key in new[] { "acls", "msa", "gmsa", "dmsa" })
