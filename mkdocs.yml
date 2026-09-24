@@ -21,6 +21,7 @@ nav:
       - Sicherheit: service/sicherheit.md
       - Entwicklung: service/entwicklung.md
       - REST-API: service/api.md
+      - Roadmap: service/roadmap.md
   - Contributing: contributing.md
   - Quick Deployment Guide: quick-deployment-guide.md
   - Detailed Deployment Guide: detailed-deployment-guide.md
