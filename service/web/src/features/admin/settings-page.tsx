@@ -52,7 +52,7 @@ function SettingsPage() {
         <Skeleton className="h-80" />
       ) : (
         <form
-          className="grid gap-4"
+          className="grid grid-cols-[minmax(0,1fr)] gap-4"
           onSubmit={(e) => {
             e.preventDefault()
             if (!invalid) save.mutate(form)
@@ -143,7 +143,7 @@ function SettingsPage() {
               <ReadOnlyRow icon={<Terminal />} label="PowerShell-Pfad" value={form.pwshPath} />
             </CardContent>
           </Card>
-          <div className="sticky bottom-4 z-10 flex items-center justify-end gap-2 rounded-xl border bg-card/95 px-4 py-3 shadow-lg shadow-black/5 backdrop-blur">
+          <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-end gap-2 rounded-xl border bg-card/95 px-4 py-3 shadow-lg shadow-black/5 backdrop-blur">
             <span className="mr-auto text-xs text-muted-foreground">{dirty ? 'Ungespeicherte Änderungen' : 'Alle Änderungen gespeichert'}</span>
             <Button type="button" variant="ghost" disabled={!dirty} onClick={() => q.data && setForm(q.data)}>Zurücksetzen</Button>
             <Button type="submit" disabled={!dirty || invalid} loading={save.isPending}>{!save.isPending && <Save />} Speichern</Button>
@@ -173,7 +173,7 @@ function formatDays(hours: number) {
 
 function ReadOnlyRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2.5">
+    <div className="flex min-w-0 items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2.5">
       <span className="text-muted-foreground [&_svg]:size-4">{icon}</span>
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">{label}</p>

@@ -190,6 +190,22 @@ function WindowsAuthPage() {
             </CardContent>
           </Card>
 
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle className="flex items-center gap-2"><UsersRound className="size-4 text-muted-foreground" /> Rollen aus AD-Gruppen</CardTitle>
+                <CardDescription>
+                  Je Rolle Gruppen als <span className="font-mono text-foreground">DOMÄNE\Gruppe</span> oder SID eintragen. Bei Mitgliedschaft in mehreren Gruppen gilt die höchste Rolle.
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-0 divide-y p-0">
+              {roles.map((r) => (
+                <RoleGroupsRow key={r} role={r} entries={form.groups[r]} onChange={(e) => setGroups(r, e)} errors={fieldErrors[r]} />
+              ))}
+            </CardContent>
+          </Card>
+
           <div className="flex gap-3 rounded-xl border bg-muted/30 px-4 py-3.5 text-[13px] text-muted-foreground">
             <Info className="mt-0.5 size-4 shrink-0 text-sky-600 dark:text-sky-400" />
             <div className="grid gap-1.5">
@@ -210,23 +226,7 @@ function WindowsAuthPage() {
             </div>
           </div>
 
-          <Card>
-            <CardHeader>
-              <div>
-                <CardTitle className="flex items-center gap-2"><UsersRound className="size-4 text-muted-foreground" /> Rollen aus AD-Gruppen</CardTitle>
-                <CardDescription>
-                  Je Rolle Gruppen als <span className="font-mono text-foreground">DOMÄNE\Gruppe</span> oder SID eintragen. Bei Mitgliedschaft in mehreren Gruppen gilt die höchste Rolle.
-                </CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent className="grid gap-0 divide-y p-0">
-              {roles.map((r) => (
-                <RoleGroupsRow key={r} role={r} entries={form.groups[r]} onChange={(e) => setGroups(r, e)} errors={fieldErrors[r]} />
-              ))}
-            </CardContent>
-          </Card>
-
-          <div className="sticky bottom-4 z-10 flex items-center justify-end gap-2 rounded-xl border bg-card/95 px-4 py-3 shadow-lg shadow-black/5 backdrop-blur">
+          <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-end gap-2 rounded-xl border bg-card/95 px-4 py-3 shadow-lg shadow-black/5 backdrop-blur">
             <span className="mr-auto text-xs text-muted-foreground">
               {dirty ? 'Ungespeicherte Änderungen – Namen werden beim Speichern in SIDs aufgelöst.' : 'Alle Änderungen gespeichert'}
             </span>

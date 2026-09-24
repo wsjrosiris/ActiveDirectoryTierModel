@@ -139,6 +139,8 @@ sofort ausgeführt, sondern **zur Freigabe eingereicht** (Status *Wartet auf Fre
    **Freigeben** (optional mit Kommentar) oder **Ablehnen** (mit Begründung).
 3. Nach der Freigabe läuft der Deploy wie gewohnt. Wer freigegeben hat, steht im Lauf und im Änderungsprotokoll.
 
+![Freigabe](img/approval-light.png)
+
 Die antragstellende Person kann den eigenen Antrag nicht freigeben, aber zurückziehen (**Abbrechen**). Anträge, die
 nicht innerhalb der eingestellten Frist (Standard 24 Stunden) entschieden werden, verfallen automatisch.
 
@@ -203,6 +205,8 @@ betroffenen Kontos sofort.
 **Windows-Anmeldung**: Anmeldung mit Windows-Konto ein-/ausschalten und je Rolle die AD-Gruppen festlegen
 (`DOMÄNE\Gruppe` oder SID). Voraussetzungen siehe [Betrieb › Windows-Anmeldung](betrieb.md#windows-anmeldung-einrichten).
 
+![Windows-Anmeldung](img/windows-auth-light.png)
+
 **Benachrichtigungen**: SMTP-Server und beliebig viele Kanäle (E-Mail, Microsoft Teams, Webhook). Je Kanal lässt sich
 wählen, bei welchen Ereignissen er benachrichtigt wird:
 
@@ -212,6 +216,8 @@ wählen, bei welchen Ereignissen er benachrichtigt wird:
 | Fehler | ein Lauf ist fehlgeschlagen |
 | Anwenden | ein Deploy hat Änderungen im AD angewendet |
 | Freigabe | ein Deploy wartet auf Freigabe |
+
+![Benachrichtigungen](img/notifications-light.png)
 
 **Testnachricht senden** prüft einen Kanal sofort; der letzte Fehler eines Kanals wird angezeigt. Einrichtung siehe
 [Betrieb › Benachrichtigungen](betrieb.md#benachrichtigungen-einrichten).

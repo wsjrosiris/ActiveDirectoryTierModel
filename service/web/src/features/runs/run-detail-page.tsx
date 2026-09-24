@@ -89,9 +89,9 @@ export function Component() {
       ) : (
         <>
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <RunKindIcon kind={r.kind} className="size-11 rounded-xl [&_svg]:size-5" />
-              <div>
+            <div className="flex min-w-0 items-center gap-3">
+              <RunKindIcon kind={r.kind} className="size-11 shrink-0 rounded-xl [&_svg]:size-5" />
+              <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-xl font-semibold tracking-tight">
                     {r.kind === 'Deploy' ? (r.mode === 'Apply' ? 'Deploy' : 'Deploy (Planung)') : 'Audit'}{' '}
