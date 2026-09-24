@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Dialog as D } from 'radix-ui'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { t } from '@/i18n'
 
 export const Dialog = D.Root
 export const DialogTrigger = D.Trigger
@@ -39,7 +40,7 @@ export function DialogContent({
         {!hideClose && (
           <D.Close
             className="absolute top-4 right-4 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring outline-none"
-            aria-label="Schließen"
+            aria-label={t('common.close')}
           >
             <X className="size-4" />
           </D.Close>

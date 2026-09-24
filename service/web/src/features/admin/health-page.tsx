@@ -26,6 +26,7 @@ import { Page, PageHeader } from '@/components/shared/page-header'
 import { RequireAuth } from '@/features/auth/auth'
 import { errorMessage } from '@/lib/query'
 import { cn, formatDateTime, formatRelative } from '@/lib/utils'
+import { t } from '@/i18n'
 
 export function Component() {
   return (
@@ -51,21 +52,21 @@ const itemIcons: Record<string, React.ReactNode> = {
 
 const statusMeta: Record<HealthStatus, { label: string; dot: string; ring: string; chip: string; icon: React.ReactNode }> = {
   ok: {
-    label: 'In Ordnung',
+    label: t('admin.health.ok'),
     dot: 'bg-emerald-500',
     ring: 'border-border',
     chip: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
     icon: <CheckCircle2 />,
   },
   warn: {
-    label: 'Hinweis',
+    label: t('admin.health.warning'),
     dot: 'bg-amber-500',
     ring: 'border-amber-500/40',
     chip: 'bg-amber-500/10 text-amber-800 dark:text-amber-300',
     icon: <AlertTriangle />,
   },
   error: {
-    label: 'Fehler',
+    label: t('admin.health.error'),
     dot: 'bg-rose-500',
     ring: 'border-rose-500/50',
     chip: 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
@@ -86,16 +87,16 @@ function HealthPage() {
     <Page>
       <PageHeader
         icon={<Activity />}
-        title="Systemzustand"
-        description="Zustand des Dienstes, seiner Abhängigkeiten und der Hintergrunddienste."
+        title={t('admin.health.systemHealth')}
+        description={t('admin.health.stateOfTheServiceIts')}
         actions={
           <Button variant="outline" onClick={() => q.refetch()} loading={q.isFetching}>
-            {!q.isFetching && <RefreshCw />} Neu prüfen
+            {!q.isFetching && <RefreshCw />} {t('admin.health.checkAgain')}
           </Button>
         }
       />
       {q.error && !d ? (
-        <Card className="border-rose-500/40 px-5 py-4 text-sm text-rose-800 dark:text-rose-200">Der Systemzustand konnte nicht abgerufen werden: {errorMessage(q.error)}</Card>
+        <Card className="border-rose-500/40 px-5 py-4 text-sm text-rose-800 dark:text-rose-200">{t('admin.health.theSystemHealthCouldNot')} {errorMessage(q.error)}</Card>
       ) : !d || !counts ? (
         <div className="grid gap-4">
           <Skeleton className="h-24" />
@@ -118,13 +119,13 @@ function HealthPage() {
               <div className="min-w-0 flex-1 basis-60">
                 <h2 className="text-base font-semibold tracking-tight">
                   {d.status === 'ok'
-                    ? 'Alles in Ordnung'
-                    : [counts.error && `${counts.error} Fehler`, counts.warn && `${counts.warn} ${counts.warn === 1 ? 'Hinweis' : 'Hinweise'}`]
+                    ? t('admin.health.allOk')
+                    : [counts.error && t('admin.health.errors', { count: counts.error }), counts.warn && t('admin.health.warnings', { count: counts.warn })]
                         .filter(Boolean)
-                        .join(' und ')}
+                        .join(t('admin.health.and'))}
                 </h2>
                 <p className="mt-0.5 text-[13px] text-muted-foreground">
-                  {d.items.length} Prüfpunkte · Version {d.version} · geprüft {formatRelative(d.checkedAt)}{' '}
+                  {t('admin.health.checkSummary', { count: d.items.length, version: d.version, checked: formatRelative(d.checkedAt) })}{' '}
                   <span className="hidden sm:inline">({formatDateTime(d.checkedAt)})</span>
                 </p>
               </div>
@@ -153,7 +154,7 @@ function TrafficLight({ status, small }: { status: HealthStatus; small?: boolean
   return (
     <span
       role="img"
-      aria-label={`Status: ${statusMeta[status].label}`}
+      aria-label={t('admin.health.statusLabel', { label: statusMeta[status].label })}
       className={cn('flex shrink-0 flex-col items-center rounded-full border bg-muted/60 dark:bg-muted/30', small ? 'gap-1 p-1' : 'gap-1.5 p-1.5')}
     >
       {lamps.map((l) => (

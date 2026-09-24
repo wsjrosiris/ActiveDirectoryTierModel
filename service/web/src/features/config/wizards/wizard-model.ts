@@ -229,7 +229,7 @@ export const CUSTOM_PRESET = 'custom'
 
 /** The preset whose (single) entry equals the given values, else 'custom'. */
 export function matchPreset(v: AclTemplate): string {
-  const key = (t: AclTemplate) => [lower(t.objecttype), [...t.activedirectoryrights].map(lower).sort().join('+'), lower(t.activeDirectorysecurityinheritance), lower(t.inheritedObjectType)].join('|')
+  const key = (tx: AclTemplate) => [lower(tx.objecttype), [...tx.activedirectoryrights].map(lower).sort().join('+'), lower(tx.activeDirectorysecurityinheritance), lower(tx.inheritedObjectType)].join('|')
   const k = key(v)
   return DELEGATION_PRESETS.find((p) => p.entries.length === 1 && key(p.entries[0]) === k)?.id ?? CUSTOM_PRESET
 }
@@ -252,7 +252,7 @@ export const OBJECT_TYPE_LABELS: Record<string, string> = {
   PasswordReset: 'Kennwort zurücksetzen',
 }
 
-export const objectTypeText = (t: string | undefined) => (t ? (OBJECT_TYPE_LABELS[t] ?? t) : 'alle Objekte')
+export const objectTypeText = (tx: string | undefined) => (tx ? (OBJECT_TYPE_LABELS[tx] ?? tx) : 'alle Objekte')
 
 /** One ACL delegation in the key order of tiermodel-acls.json. */
 export function buildAcl(opts: {
@@ -262,16 +262,16 @@ export function buildAcl(opts: {
   allow?: boolean
   comment?: string
 }): Obj {
-  const t = opts.template
+  const tx = opts.template
   const acl: Obj = {
     targetOUPath: opts.target,
     identityreference: opts.principal.trim(),
-    activedirectoryrights: [...t.activedirectoryrights],
+    activedirectoryrights: [...tx.activedirectoryrights],
     accesscontroltype: opts.allow === false ? 'Deny' : 'Allow',
-    objecttype: t.objecttype,
-    activeDirectorysecurityinheritance: t.activeDirectorysecurityinheritance,
+    objecttype: tx.objecttype,
+    activeDirectorysecurityinheritance: tx.activeDirectorysecurityinheritance,
   }
-  if (t.inheritedObjectType) acl.inheritedObjectType = t.inheritedObjectType
+  if (tx.inheritedObjectType) acl.inheritedObjectType = tx.inheritedObjectType
   acl.resolveguid = false
   acl.comment = opts.comment ?? ''
   return acl
@@ -329,14 +329,14 @@ export function gpoSources(gpos: Obj | undefined, tier: TierNum, parentRel: stri
   const map = (gpos?.gpos ?? {}) as Obj
   const parentFull = lower(toFullDn(parentRel || DOMAIN))
   const out: GpoSource[] = []
-  for (const [key, t] of Object.entries(map)) {
+  for (const [key, tx] of Object.entries(map)) {
     if (!isLinked(key) || numericTier(key) !== tier) continue
-    const links = targetLinks(t)
+    const links = targetLinks(tx)
     if (!links.length) continue
     const k = lower(key)
     const parentOfKey = k.slice(k.indexOf(',') + 1)
     const near = k === parentFull || parentOfKey === parentFull
-    out.push({ key, title: targetTitle(key, t), links, near, staging: /staging/i.test(key.split(',')[0]) })
+    out.push({ key, title: targetTitle(key, tx), links, near, staging: /staging/i.test(key.split(',')[0]) })
   }
   const rank = (s: GpoSource) => (s.staging ? 2 : 0) + (s.near ? 0 : 1) + (inAdminArea(s.key) ? 2 : 0)
   return out.sort((a, b) => rank(a) - rank(b))
@@ -408,7 +408,7 @@ export function buildServerAreaPlan(contents: Contents, input: ServerAreaInput):
   const sentences: ChangeSentence[] = []
   const issues: TierIssue[] = []
   const updated: Plan['updated'] = {}
-  const t = input.tier
+  const tx = input.tier
   const name = input.name.trim()
   const { dn, rel } = serverAreaDns(input)
 
@@ -420,12 +420,12 @@ export function buildServerAreaPlan(contents: Contents, input: ServerAreaInput):
     issues.push({ severity: 'Error', message: `Die übergeordnete OU „${shortDn(toFullDn(input.parentPath))}“ existiert nicht in der Konfiguration.` })
   if (ous.some((o) => lower(ouFullDn(o)) === lower(dn))) issues.push({ severity: 'Error', message: `Die OU „${shortDn(dn)}“ existiert bereits.` })
   const ouTier = numericTier(dn)
-  if (name && ouTier !== t)
+  if (name && ouTier !== tx)
     issues.push({
       severity: 'Error',
-      message: `Die neue OU „${shortDn(dn)}“ gehört ${ouTier === null ? 'zu keinem Tier' : `zu Tier ${ouTier}`}, gewählt ist aber Tier ${t}. Wählen Sie eine übergeordnete OU aus Tier ${t}.`,
+      message: `Die neue OU „${shortDn(dn)}“ gehört ${ouTier === null ? 'zu keinem Tier' : `zu Tier ${ouTier}`}, gewählt ist aber Tier ${tx}. Wählen Sie eine übergeordnete OU aus Tier ${tx}.`,
     })
-  if (t === 0)
+  if (tx === 0)
     issues.push({
       severity: 'Warning',
       message: 'Tier 0 ist die höchste Schutzstufe: Server hier können die gesamte Domäne kontrollieren. Nur Systeme wie PKI, ADFS oder Identitätssynchronisation gehören in Tier 0.',
@@ -436,16 +436,16 @@ export function buildServerAreaPlan(contents: Contents, input: ServerAreaInput):
   if (!input.groupOu.trim()) issues.push({ severity: 'Error', message: 'Admin-Gruppe: Ziel-OU ist erforderlich.' })
   else {
     const gt = numericTier(input.groupOu)
-    if (gt !== t) issues.push({ severity: 'Warning', message: `Die Admin-Gruppe wird in „${shortDn(input.groupOu)}“ angelegt – ${gt === null ? 'keinem Tier zugeordnet' : `Tier ${gt}`}, nicht Tier ${t}.` })
+    if (gt !== tx) issues.push({ severity: 'Warning', message: `Die Admin-Gruppe wird in „${shortDn(input.groupOu)}“ angelegt – ${gt === null ? 'keinem Tier zugeordnet' : `Tier ${gt}`}, nicht Tier ${tx}.` })
   }
 
   // ---- ous
   const newOus: OuItem[] = [
-    { name, path: input.parentPath || DOMAIN, protectFromAccidentalDeletion: true, disableInheritance: false, blockGpoInheritance: input.gpoNames.length > 0, comment: `Tier ${t}: ${name} server objects` },
+    { name, path: input.parentPath || DOMAIN, protectFromAccidentalDeletion: true, disableInheritance: false, blockGpoInheritance: input.gpoNames.length > 0, comment: `Tier ${tx}: ${name} server objects` },
   ]
-  sentences.push({ section: 'ous', text: `OU „${name}“ wird unter „${shortDn(toFullDn(input.parentPath || DOMAIN))}“ angelegt (Tier ${t}${input.gpoNames.length ? ', GPO-Vererbung blockiert' : ''}).` })
+  sentences.push({ section: 'ous', text: `OU „${name}“ wird unter „${shortDn(toFullDn(input.parentPath || DOMAIN))}“ angelegt (Tier ${tx}${input.gpoNames.length ? ', GPO-Vererbung blockiert' : ''}).` })
   if (input.staging) {
-    newOus.push({ name: stagingName(name), path: rel, protectFromAccidentalDeletion: true, disableInheritance: false, blockGpoInheritance: true, comment: `Tier ${t}: ${name} staging server objects` })
+    newOus.push({ name: stagingName(name), path: rel, protectFromAccidentalDeletion: true, disableInheritance: false, blockGpoInheritance: true, comment: `Tier ${tx}: ${name} staging server objects` })
     sentences.push({ section: 'ous', text: `Staging-OU „${stagingName(name)}“ wird unter „${name}“ angelegt (GPO-Vererbung blockiert).` })
   }
   updated.ous = { ...(contents.ous ?? {}), organizationUnits: [...ous, ...newOus] }
@@ -454,7 +454,7 @@ export function buildServerAreaPlan(contents: Contents, input: ServerAreaInput):
   const group: Obj = {
     name: input.groupName.trim(),
     samaccountname: input.groupSam.trim(),
-    description: input.groupDescription.trim() || `Members of this group administer the Tier ${t} ${name} servers`,
+    description: input.groupDescription.trim() || `Members of this group administer the Tier ${tx} ${name} servers`,
     groupscope: 'Global',
     groupcategory: 'Security',
     path: input.groupOu,
@@ -473,7 +473,7 @@ export function buildServerAreaPlan(contents: Contents, input: ServerAreaInput):
 
   // ---- gpos
   if (input.gpoNames.length) {
-    const sources = gpoSources(contents.gpos, t, input.parentPath)
+    const sources = gpoSources(contents.gpos, tx, input.parentPath)
     const { target, links } = buildGpoTarget(input.gpoNames, sources, input.gpoSourceKey)
     const map = (contents.gpos?.gpos ?? {}) as Obj
     if (Object.keys(map).some((k) => lower(k) === lower(dn))) issues.push({ severity: 'Error', message: `Für „${shortDn(dn)}“ gibt es bereits GPO-Verknüpfungen.` })
@@ -607,12 +607,12 @@ export function buildDelegationPlan(contents: Contents, input: DelegationInput):
 /** Plain-language explanation of the delegation tier rule for a principal/target pair. */
 export function delegationTierExplanation(contents: Contents, principal: string, target: string): string | null {
   const p = principalTier(principal, buildGroupTierMap(groupsOf(contents)))
-  const t = target === DOMAIN || /^OU=Domain Controllers,/i.test(target) ? 0 : numericTier(target)
+  const tx = target === DOMAIN || /^OU=Domain Controllers,/i.test(target) ? 0 : numericTier(target)
   if (!principal.trim() || !target.trim()) return null
   const pt = p === null ? 'keinem Tier zugeordnet' : p === BROAD ? 'eine breite Gruppe (unterhalb aller Tiers)' : `Tier ${p}`
-  const tt = t === null ? 'keinem Tier zugeordnet' : `Tier ${t}`
-  if (p === null || t === null) return `Prinzipal: ${pt}, Ziel-OU: ${tt}. Ohne eindeutiges Tier ist keine automatische Prüfung möglich – prüfen Sie die Zuordnung selbst.`
-  if (p <= t) return `Prinzipal: ${pt}, Ziel-OU: ${tt}. Zulässig – Kontrolle fließt nur vom gleichen oder einem höheren Tier nach unten.`
+  const tt = tx === null ? 'keinem Tier zugeordnet' : `Tier ${tx}`
+  if (p === null || tx === null) return `Prinzipal: ${pt}, Ziel-OU: ${tt}. Ohne eindeutiges Tier ist keine automatische Prüfung möglich – prüfen Sie die Zuordnung selbst.`
+  if (p <= tx) return `Prinzipal: ${pt}, Ziel-OU: ${tt}. Zulässig – Kontrolle fließt nur vom gleichen oder einem höheren Tier nach unten.`
   return `Prinzipal: ${pt}, Ziel-OU: ${tt}. Schreibrechte würden einem weniger geschützten Tier die Kontrolle über ein höheres geben. Nur Leserechte oder Verweigern sind hier zulässig.`
 }
 

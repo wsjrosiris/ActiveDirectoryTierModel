@@ -11,77 +11,78 @@ import { formatDateTime } from '@/lib/utils'
 import { meQueryKey, useMe } from './auth'
 import { AuthShell } from './auth-shell'
 import { draftStore } from '@/features/config/draft-store'
+import { t } from '@/i18n'
 
 const windowsErrors: Record<string, { title: string; text: string; tone: 'danger' | 'warning'; icon: React.ReactNode }> = {
   'windows-disabled': {
-    title: 'Windows-Anmeldung nicht aktiviert',
-    text: 'Die Anmeldung mit dem Windows-Konto ist derzeit ausgeschaltet. Bitte mit Benutzername und Passwort anmelden.',
+    title: t('auth.login.windowsSignInNotEnabled'),
+    text: t('auth.login.signingInWithTheWindows'),
     tone: 'warning',
     icon: <ShieldOff className="mt-0.5 size-4 shrink-0" />,
   },
   'windows-failed': {
-    title: 'Windows-Anmeldung fehlgeschlagen',
-    text: 'Ihr Windows-Konto konnte nicht überprüft werden. Ist der Computer Mitglied der Domäne und die Seite in der Zone „Lokales Intranet“? Alternativ mit Benutzername und Passwort anmelden.',
+    title: t('auth.login.windowsSignInFailed'),
+    text: t('auth.login.yourWindowsAccountCouldNot'),
     tone: 'danger',
     icon: <AlertCircle className="mt-0.5 size-4 shrink-0" />,
   },
   'windows-norole': {
-    title: 'Keine Berechtigung',
-    text: 'Ihr Windows-Konto ist keiner Rolle zugeordnet – bitte an einen Administrator wenden.',
+    title: t('auth.login.accessDenied'),
+    text: t('auth.login.yourWindowsAccountIsNot'),
     tone: 'warning',
     icon: <UserX className="mt-0.5 size-4 shrink-0" />,
   },
   'windows-inactive': {
-    title: 'Konto deaktiviert',
-    text: 'Ihr Windows-Konto wurde in Tier Model deaktiviert – bitte an einen Administrator wenden.',
+    title: t('auth.login.accountDisabled'),
+    text: t('auth.login.yourWindowsAccountHasBeen'),
     tone: 'danger',
     icon: <Lock className="mt-0.5 size-4 shrink-0" />,
   },
   'entra-disabled': {
-    title: 'Anmeldung mit Microsoft nicht aktiviert',
-    text: 'Die Anmeldung mit Microsoft Entra ID ist derzeit ausgeschaltet. Bitte mit Benutzername und Passwort anmelden.',
+    title: t('auth.login.signInWithMicrosoftNot'),
+    text: t('auth.login.signingInWithMicrosoftEntra'),
     tone: 'warning',
     icon: <ShieldOff className="mt-0.5 size-4 shrink-0" />,
   },
   'entra-failed': {
-    title: 'Anmeldung mit Microsoft fehlgeschlagen',
-    text: 'Die Antwort von Microsoft Entra ID konnte nicht bestätigt werden (z. B. abgelaufene Anmeldung). Bitte erneut versuchen.',
+    title: t('auth.login.signInWithMicrosoftFailed'),
+    text: t('auth.login.theResponseFromMicrosoftEntra'),
     tone: 'danger',
     icon: <AlertCircle className="mt-0.5 size-4 shrink-0" />,
   },
   'entra-cancelled': {
-    title: 'Anmeldung abgebrochen',
-    text: 'Die Anmeldung bei Microsoft wurde abgebrochen oder die Zustimmung verweigert.',
+    title: t('auth.login.signInCancelled'),
+    text: t('auth.login.theSignInAtMicrosoft'),
     tone: 'warning',
     icon: <AlertCircle className="mt-0.5 size-4 shrink-0" />,
   },
   'entra-unreachable': {
-    title: 'Microsoft Entra ID nicht erreichbar',
-    text: 'Der Dienst konnte die Anmeldeseite von Microsoft nicht abrufen. Bitte später erneut versuchen oder mit Benutzername und Passwort anmelden.',
+    title: t('auth.login.microsoftEntraIdUnreachable'),
+    text: t('auth.login.theServiceCouldNotRetrieve'),
     tone: 'danger',
     icon: <AlertCircle className="mt-0.5 size-4 shrink-0" />,
   },
   'entra-norole': {
-    title: 'Keine Berechtigung',
-    text: 'Ihr Microsoft-Konto ist keiner Rolle zugeordnet – bitte an einen Administrator wenden.',
+    title: t('auth.login.accessDenied'),
+    text: t('auth.login.yourMicrosoftAccountIsNot'),
     tone: 'warning',
     icon: <UserX className="mt-0.5 size-4 shrink-0" />,
   },
   'entra-overage': {
-    title: 'Keine Berechtigung',
-    text: 'Ihr Konto ist Mitglied in so vielen Gruppen, dass Entra ID sie nicht mitschickt. Bitte einen Administrator bitten, die Rolle über eine App-Rolle zuzuweisen.',
+    title: t('auth.login.accessDenied'),
+    text: t('auth.login.yourAccountIsAMember'),
     tone: 'warning',
     icon: <UserX className="mt-0.5 size-4 shrink-0" />,
   },
   'entra-tenant': {
-    title: 'Falscher Mandant',
-    text: 'Das Microsoft-Konto gehört nicht zum eingerichteten Mandanten.',
+    title: t('auth.login.wrongTenant'),
+    text: t('auth.login.theMicrosoftAccountDoesNot'),
     tone: 'danger',
     icon: <ShieldOff className="mt-0.5 size-4 shrink-0" />,
   },
   'entra-inactive': {
-    title: 'Konto deaktiviert',
-    text: 'Ihr Microsoft-Konto wurde in Tier Model deaktiviert – bitte an einen Administrator wenden.',
+    title: t('auth.login.accountDisabled'),
+    text: t('auth.login.yourMicrosoftAccountHasBeen'),
     tone: 'danger',
     icon: <Lock className="mt-0.5 size-4 shrink-0" />,
   },
@@ -148,15 +149,15 @@ export function Component() {
   const locked = err?.status === 423
   // A local login attempt replaces the message of an earlier Windows sign-in.
   const winErr = !err && errorCode
-    ? windowsErrors[errorCode] ?? { title: 'Anmeldung fehlgeschlagen', text: 'Bitte erneut versuchen.', tone: 'danger' as const, icon: <AlertCircle className="mt-0.5 size-4 shrink-0" /> }
+    ? windowsErrors[errorCode] ?? { title: t('auth.login.signInFailed'), text: t('auth.login.pleaseTryAgain'), tone: 'danger' as const, icon: <AlertCircle className="mt-0.5 size-4 shrink-0" /> }
     : null
 
   return (
     <AuthShell>
       <div className="mb-8 flex flex-col items-center text-center">
         <Logo className="mb-5 size-11 rounded-xl" />
-        <h1 className="text-xl font-semibold tracking-tight">Bei Tier Model anmelden</h1>
-        <p className="mt-1.5 text-sm text-muted-foreground">Active Directory Tier-Modell verwalten, bereitstellen und prüfen</p>
+        <h1 className="text-xl font-semibold tracking-tight">{t('auth.login.signInToTierModel')}</h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">{t('auth.login.manageDeployAndAuditThe')}</p>
       </div>
 
       {winErr && (
@@ -193,7 +194,7 @@ export function Component() {
                   window.location.assign(api.auth.windowsLoginUrl(target))
                 }}
               >
-                {redirecting !== 'windows' && <KeyRound className="text-primary" />} Mit Windows-Konto anmelden
+                {redirecting !== 'windows' && <KeyRound className="text-primary" />} {t('auth.login.signInWithWindowsAccount')}
               </Button>
             )}
             {entraAuth && (
@@ -209,16 +210,16 @@ export function Component() {
                   window.location.assign(api.auth.entraLoginUrl(target))
                 }}
               >
-                {redirecting !== 'entra' && <MicrosoftLogo />} Mit Microsoft anmelden
+                {redirecting !== 'entra' && <MicrosoftLogo />} {t('auth.login.signInWithMicrosoft')}
               </Button>
             )}
           </div>
           <p className="mt-2 text-center text-xs text-muted-foreground">
-            {windowsAuth && entraAuth ? 'Einmalige Anmeldung mit Ihrem Domänen- oder Microsoft-Konto' : windowsAuth ? 'Einmalige Anmeldung mit Ihrem Domänenkonto' : 'Anmeldung mit Ihrem Microsoft-Geschäftskonto (Entra ID)'}
+            {windowsAuth && entraAuth ? t('auth.login.singleSignOnWithYour') : windowsAuth ? t('auth.login.singleSignOnWithYour2') : t('auth.login.signInWithYourMicrosoft')}
           </p>
-          <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground" role="separator" aria-label="oder">
+          <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground" role="separator" aria-label={t('auth.login.or')}>
             <span className="h-px flex-1 bg-border" />
-            oder
+            {t('auth.login.or')}
             <span className="h-px flex-1 bg-border" />
           </div>
         </>
@@ -244,20 +245,20 @@ export function Component() {
             {locked ? <Lock className="mt-0.5 size-4 shrink-0" /> : <AlertCircle className="mt-0.5 size-4 shrink-0" />}
             <div>
               <p className="font-medium">
-                {locked ? 'Konto vorübergehend gesperrt' : err.status === 401 ? 'Anmeldung fehlgeschlagen' : err.title}
+                {locked ? t('auth.login.accountTemporarilyLocked') : err.status === 401 ? t('auth.login.signInFailed') : err.title}
               </p>
               <p className="mt-0.5 opacity-90">
                 {locked
-                  ? err.detail || 'Zu viele fehlgeschlagene Anmeldeversuche. Bitte später erneut versuchen oder einen Administrator kontaktieren.'
+                  ? err.detail || t('auth.login.tooManyFailedSignIn')
                   : err.status === 401
-                    ? 'Benutzername oder Passwort ist falsch.'
-                    : err.detail || 'Bitte später erneut versuchen.'}
+                    ? t('auth.login.userNameOrPasswordIs')
+                    : err.detail || t('auth.login.pleaseTryAgainLater')}
               </p>
             </div>
           </div>
         )}
         <div className="grid gap-1.5">
-          <Label htmlFor="username">Benutzername</Label>
+          <Label htmlFor="username">{t('auth.login.userName')}</Label>
           <Input
             id="username"
             autoComplete="username"
@@ -269,7 +270,7 @@ export function Component() {
           />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="password">Passwort</Label>
+          <Label htmlFor="password">{t('auth.login.password')}</Label>
           <div className="relative">
             <Input
               id="password"
@@ -285,17 +286,17 @@ export function Component() {
               type="button"
               onClick={() => setShow((s) => !s)}
               className="absolute top-1/2 right-1.5 grid size-7 -translate-y-1/2 place-content-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label={show ? 'Passwort verbergen' : 'Passwort anzeigen'}
+              aria-label={show ? t('auth.login.hidePassword') : t('auth.login.showPassword')}
             >
               {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
           </div>
         </div>
         <Button type="submit" size="lg" className="mt-2 h-10 w-full" loading={login.isPending} disabled={!username || !password}>
-          {!login.isPending && <LogIn />} Anmelden
+          {!login.isPending && <LogIn />} {t('auth.login.signIn')}
         </Button>
       </form>
-      {data?.user?.lockedUntil && <p className="mt-4 text-center text-xs text-muted-foreground">Gesperrt bis {formatDateTime(data.user.lockedUntil)}</p>}
+      {data?.user?.lockedUntil && <p className="mt-4 text-center text-xs text-muted-foreground">{t('auth.login.lockedUntil')} {formatDateTime(data.user.lockedUntil)}</p>}
     </AuthShell>
   )
 }

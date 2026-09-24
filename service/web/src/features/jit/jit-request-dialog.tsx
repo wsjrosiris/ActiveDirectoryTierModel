@@ -14,15 +14,16 @@ import { TierBadge } from '@/components/shared/badges'
 import { errorMessage } from '@/lib/query'
 import type { Tier } from '@/lib/tier'
 import { accountProblem, defaultDuration, durationsFor, formatMinutes } from './jit-model'
+import { currentLocale, t } from '@/i18n'
 
-const shortDuration = (m: number) => (m % 60 === 0 ? `${m / 60} Std.` : `${m} Min.`)
+const shortDuration = (m: number) => (m % 60 === 0 ? t('jit.jitRequestDialog.valueH', { value: m / 60 }) : t('jit.jitRequestDialog.mMin', { m }))
 
 /** Live account search for administrators (application users, configuration, AD on the server). Debounced. */
 function useAccountOptions(search: string, enabled: boolean): { options: ComboOption[]; loading: boolean } {
   const [q, setQ] = React.useState('')
   React.useEffect(() => {
-    const t = setTimeout(() => setQ(search.trim()), 250)
-    return () => clearTimeout(t)
+    const tt = setTimeout(() => setQ(search.trim()), 250)
+    return () => clearTimeout(tt)
   }, [search])
   const query = useQuery({
     queryKey: ['jit', 'lookup', 'accounts', q],
@@ -69,14 +70,14 @@ export function RequestDialog({ open, onOpenChange, overview, onCreated }: {
   const groupOptions: ComboOption[] = overview.groups.map((g) => ({
     value: String(g.id),
     label: g.displayName,
-    hint: `${g.group} · max. ${formatMinutes(g.maxMinutes)}${g.requiresApproval ? ' · mit Freigabe' : ' · ohne Freigabe'}`,
+    hint: `${g.group} · ${t('jit.jitRequestDialog.max', { duration: formatMinutes(g.maxMinutes) })}${g.requiresApproval ? t('jit.jitRequestDialog.withApproval') : t('jit.jitRequestDialog.withoutApproval')}`,
     icon: <TierBadge tier={(g.tier ?? null) as Tier} short />,
   }))
 
   const errors = {
-    group: !group ? 'Bitte eine JIT-Gruppe wählen.' : null,
+    group: !group ? t('jit.jitRequestDialog.pleaseSelectAJitGroup') : null,
     member: overview.canChooseMember ? accountProblem(member) : null,
-    justification: justification.trim().length < 5 ? 'Bitte begründen Sie den Antrag (mindestens 5 Zeichen).' : null,
+    justification: justification.trim().length < 5 ? t('jit.jitRequestDialog.pleaseJustifyTheRequestAt') : null,
   }
   const valid = !errors.group && !errors.member && !errors.justification
 
@@ -89,14 +90,14 @@ export function RequestDialog({ open, onOpenChange, overview, onCreated }: {
     }),
     meta: { silent: true },
     onSuccess: (r) => {
-      toast.success(`Antrag #${r.id} gestellt`, {
-        description: r.status === 'Pending' ? 'Eine zweite Person mit der Rolle Operator muss freigeben.' : 'Die Mitgliedschaft wird jetzt eingetragen.',
+      toast.success(t('jit.jitRequestDialog.requestIdSubmitted', { id: r.id }), {
+        description: r.status === 'Pending' ? t('jit.jitRequestDialog.aSecondPersonWithThe') : t('jit.jitRequestDialog.theMembershipIsBeingAdded'),
       })
       qc.invalidateQueries({ queryKey: ['jit'] })
       onOpenChange(false)
       onCreated?.()
     },
-    onError: (e) => toast.error('Antrag nicht möglich', { description: e instanceof ApiError ? e.userMessage : errorMessage(e) }),
+    onError: (e) => toast.error(t('jit.jitRequestDialog.requestNotPossible'), { description: e instanceof ApiError ? e.userMessage : errorMessage(e) }),
   })
 
   return (
@@ -111,13 +112,13 @@ export function RequestDialog({ open, onOpenChange, overview, onCreated }: {
           }}
         >
           <DialogHeader>
-            <DialogTitle>Zugriff beantragen</DialogTitle>
+            <DialogTitle>{t('jit.jitRequestDialog.requestAccess')}</DialogTitle>
             <DialogDescription>
-              Die Mitgliedschaft wird mit einer Ablaufzeit eingetragen; Active Directory entfernt sie danach selbstständig.
+              {t('jit.jitRequestDialog.theMembershipIsAddedWith')}
             </DialogDescription>
           </DialogHeader>
 
-          <Field label="JIT-Gruppe" htmlFor="jit-group" required error={touched ? errors.group : undefined}>
+          <Field label={t('jit.jitRequestDialog.jitGroup')} htmlFor="jit-group" required error={touched ? errors.group : undefined}>
             <Combobox
               id="jit-group"
               value={groupId}
@@ -129,8 +130,8 @@ export function RequestDialog({ open, onOpenChange, overview, onCreated }: {
               options={groupOptions}
               allowCustom={false}
               hideValue
-              placeholder="Gruppe wählen …"
-              searchPlaceholder="Gruppe suchen …"
+              placeholder={t('jit.jitRequestDialog.selectGroup')}
+              searchPlaceholder={t('jit.jitRequestDialog.searchGroup')}
               invalid={touched && !!errors.group}
             />
           </Field>
@@ -139,17 +140,17 @@ export function RequestDialog({ open, onOpenChange, overview, onCreated }: {
             <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
               <TierBadge tier={(group.tier ?? null) as Tier} />
               <span className="font-mono">{group.group}</span>
-              <span>· höchstens {formatMinutes(group.maxMinutes)}</span>
+              <span>{t('jit.jitRequestDialog.atMost')} {formatMinutes(group.maxMinutes)}</span>
               <span className="flex items-center gap-1">
-                · {group.requiresApproval ? <><Hourglass className="size-3" /> Freigabe durch eine zweite Person</> : <><ShieldCheck className="size-3" /> ohne Freigabe</>}
+                · {group.requiresApproval ? <><Hourglass className="size-3" /> {t('jit.jitRequestDialog.approvalByASecondPerson')}</> : <><ShieldCheck className="size-3" /> {t('jit.jitRequestDialog.withoutApproval2')}</>}
               </span>
             </div>
           )}
 
-          <Field label="Dauer" required hint={group ? `Ablauf ca. ${new Date(Date.now() + minutes * 60_000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr nach Erteilung` : 'Zuerst eine Gruppe wählen.'}>
+          <Field label={t('jit.jitRequestDialog.duration')} required hint={group ? t('jit.jitRequestDialog.expiryHint', { time: new Date(Date.now() + minutes * 60_000).toLocaleTimeString(currentLocale(), { hour: '2-digit', minute: '2-digit' }) }) : t('jit.jitRequestDialog.selectAGroupFirst')}>
             {group ? (
               <Segmented<string>
-                aria-label="Dauer"
+                aria-label={t('jit.jitRequestDialog.duration')}
                 value={String(minutes)}
                 onValueChange={(v) => setMinutes(Number(v))}
                 options={durations.map((d) => ({ value: String(d), label: shortDuration(d) }))}
@@ -160,11 +161,11 @@ export function RequestDialog({ open, onOpenChange, overview, onCreated }: {
           </Field>
 
           <Field
-            label="AD-Konto"
+            label={t('jit.jitRequestDialog.adAccount')}
             htmlFor="jit-member"
             required
             error={touched ? errors.member : undefined}
-            hint={overview.canChooseMember ? 'Als Administrator können Sie ein anderes Konto wählen.' : 'Ihr eigenes AD-Konto – andere Konten können nur Administratoren beantragen.'}
+            hint={overview.canChooseMember ? t('jit.jitRequestDialog.asAnAdministratorYouCan') : t('jit.jitRequestDialog.yourOwnAdAccountOnly')}
           >
             {overview.canChooseMember ? (
               <Combobox
@@ -174,8 +175,8 @@ export function RequestDialog({ open, onOpenChange, overview, onCreated }: {
                 options={accounts.options}
                 onSearchChange={setSearch}
                 loading={accounts.loading}
-                placeholder="Konto wählen …"
-                searchPlaceholder="Konto suchen oder samAccountName eingeben …"
+                placeholder={t('jit.jitRequestDialog.selectAccount')}
+                searchPlaceholder={t('jit.jitRequestDialog.searchAccountOrEnterSamaccountname')}
                 validateCustom={accountProblem}
                 invalid={touched && !!errors.member}
                 mono
@@ -185,21 +186,21 @@ export function RequestDialog({ open, onOpenChange, overview, onCreated }: {
             )}
           </Field>
 
-          <Field label="Begründung" htmlFor="jit-justification" required error={touched ? errors.justification : undefined}>
+          <Field label={t('jit.jitRequestDialog.justification')} htmlFor="jit-justification" required error={touched ? errors.justification : undefined}>
             <Textarea
               id="jit-justification"
               rows={3}
               maxLength={1000}
               value={justification}
               onChange={(e) => setJustification(e.target.value)}
-              placeholder="z. B. Change CHG-1234: Zertifikatsvorlage auf der CA anpassen"
+              placeholder={t('jit.jitRequestDialog.eGChangeChg1234')}
               aria-invalid={(touched && !!errors.justification) || undefined}
             />
           </Field>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Abbrechen</Button>
-            <Button type="submit" loading={create.isPending}>{!create.isPending && <Send />} Beantragen</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" loading={create.isPending}>{!create.isPending && <Send />} {t('jit.jitRequestDialog.request')}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -29,6 +29,7 @@ import { GroupsTab } from './groups-tab'
 import { ChangesTab } from './changes-tab'
 import { HygieneTab } from './hygiene-tab'
 import { AttackPathsTab } from './attack-paths-tab'
+import { t } from '@/i18n'
 
 const tabs = ['gruppen', 'aenderungen', 'hygiene', 'angriffspfade'] as const
 type Tab = (typeof tabs)[number]
@@ -74,19 +75,19 @@ export function Component() {
     <Page wide>
       <PageHeader
         icon={<ShieldUser />}
-        title="Privilegierte Zugriffe"
-        description="Mitglieder der geschützten und der Tier-0-Gruppen, Änderungen, Konten-Hygiene und Angriffspfade zu Tier 0."
+        title={t('privileged.privileged.privilegedAccess')}
+        description={t('privileged.privileged.membersOfTheProtectedAnd')}
         actions={
           <>
             {snapshot && (
               <span className="text-xs text-muted-foreground" title={formatDateTime(snapshot.takenAt)}>
-                Stand {formatRelative(snapshot.takenAt)}
+                {t('privileged.privileged.asOf')} {formatRelative(snapshot.takenAt)}
                 {snapshot.preferredDc && <> · <span className="font-mono">{snapshot.preferredDc}</span></>}
               </span>
             )}
             {canOperate && (
               <Button onClick={() => setStartOpen(true)} disabled={!!running}>
-                {running ? <Loader2 className="animate-spin" /> : <Play />} {running ? 'Prüfung läuft …' : 'Jetzt prüfen'}
+                {running ? <Loader2 className="animate-spin" /> : <Play />} {running ? t('privileged.privileged.checkRunning') : t('privileged.privileged.checkNow')}
               </Button>
             )}
           </>
@@ -95,19 +96,19 @@ export function Component() {
 
       {running && data?.lastRun && (
         <Banner tone="info" icon={<Loader2 className="animate-spin" />}>
-          Überwachung #{data.lastRun.id} {data.lastRun.status === 'Queued' ? 'wartet auf den Start' : 'läuft'} – die Seite aktualisiert sich automatisch.{' '}
-          <Link to={`/laeufe/${data.lastRun.id}`} className="font-medium underline-offset-2 hover:underline">Protokoll ansehen</Link>
+          {t(data.lastRun.status === 'Queued' ? 'privileged.privileged.monitorQueued' : 'privileged.privileged.monitorRunning', { id: data.lastRun.id })}{' '}
+          <Link to={`/laeufe/${data.lastRun.id}`} className="font-medium underline-offset-2 hover:underline">{t('privileged.privileged.viewLog')}</Link>
         </Banner>
       )}
       {lastFailed && (
         <Banner tone="danger" icon={<AlertTriangle />}>
-          Die letzte Überwachung #{lastFailed.id} ist fehlgeschlagen{lastFailed.message ? `: ${lastFailed.message}` : '.'}{' '}
-          <Link to={`/laeufe/${lastFailed.id}`} className="font-medium underline-offset-2 hover:underline">Details</Link>
+          {lastFailed.message ? t('privileged.privileged.lastFailedMessage', { id: lastFailed.id, message: lastFailed.message }) : t('privileged.privileged.lastFailed', { id: lastFailed.id })}{' '}
+          <Link to={`/laeufe/${lastFailed.id}`} className="font-medium underline-offset-2 hover:underline">{t('privileged.privileged.details')}</Link>
         </Banner>
       )}
       {snapshot && snapshot.errors.length > 0 && (
         <Banner tone="warning" icon={<AlertTriangle />}>
-          <p className="font-medium">Die Momentaufnahme ist unvollständig:</p>
+          <p className="font-medium">{t('privileged.privileged.theSnapshotIsIncomplete')}</p>
           <ul className="mt-1 list-disc pl-5">{snapshot.errors.slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}</ul>
         </Banner>
       )}
@@ -123,35 +124,35 @@ export function Component() {
         <>
           <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Tile
-              label="Gruppen"
+              label={t('privileged.privileged.groups')}
               value={snapshot.groupCount}
-              sub={`${formatNumber(snapshot.memberCount)} Mitgliedschaften`}
+              sub={t('privileged.privileged.memberships', { count: formatNumber(snapshot.memberCount) })}
               icon={<Users />}
               tone="text-sky-600 bg-sky-500/10 dark:text-sky-300"
               onClick={() => navigate('/privilegiert/gruppen')}
             />
             <Tile
-              label="Nicht erwartet"
+              label={t('privileged.privileged.unexpected')}
               value={data.unexpected.length}
-              sub={data.unexpected.length ? 'Mitglieder ohne Soll-Eintrag' : 'Alle Mitglieder erwartet'}
+              sub={data.unexpected.length ? t('privileged.privileged.membersWithoutADesiredEntry') : t('privileged.privileged.allMembersExpected')}
               icon={<UserX />}
               tone="text-rose-600 bg-rose-500/10 dark:text-rose-300"
               alert={data.unexpected.length > 0}
               onClick={() => navigate('/privilegiert/gruppen?nur=unerwartet')}
             />
             <Tile
-              label="Hygiene"
+              label={t('privileged.privileged.hygiene')}
               value={data.hygiene.length}
-              sub={highHygiene ? `${highHygiene} mit hohem Schweregrad` : 'Keine hohen Befunde'}
+              sub={highHygiene ? t('privileged.privileged.highSeverity', { count: highHygiene }) : t('privileged.privileged.noHighFindings')}
               icon={<HeartPulse />}
               tone="text-amber-700 bg-amber-500/10 dark:text-amber-300"
               alert={highHygiene > 0}
               onClick={() => navigate('/privilegiert/hygiene')}
             />
             <Tile
-              label="Angriffspfade"
+              label={t('privileged.privileged.attackPaths')}
               value={data.attackPaths.length}
-              sub={data.attackPaths.length ? 'Rechte auf Tier-0-Objekte' : 'Keine gefunden'}
+              sub={data.attackPaths.length ? t('privileged.privileged.rightsOnTier0Objects') : t('privileged.privileged.noneFound')}
               icon={<Route />}
               tone="text-violet-600 bg-violet-500/10 dark:text-violet-300"
               alert={data.attackPaths.length > 0}
@@ -162,17 +163,17 @@ export function Component() {
           {data.monitorSchedules === 0 && canOperate && (
             <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-[13px] text-muted-foreground">
               <CalendarClock className="size-4 shrink-0" />
-              <span className="min-w-0 flex-1">Die Überwachung läuft nur auf Knopfdruck. Mit einem Zeitplan (empfohlen: alle 15 Minuten) werden Änderungen sofort gemeldet.</span>
-              <Button variant="outline" size="xs" asChild><Link to="/audits/zeitplaene?neu=ueberwachung"><CalendarPlus /> Zeitplan einrichten</Link></Button>
+              <span className="min-w-0 flex-1">{t('privileged.privileged.monitoringOnlyRunsOnDemand')}</span>
+              <Button variant="outline" size="xs" asChild><Link to="/audits/zeitplaene?neu=ueberwachung"><CalendarPlus /> {t('privileged.privileged.setUpSchedule')}</Link></Button>
             </div>
           )}
 
           <Tabs value={tab} onValueChange={(v) => navigate(v === 'gruppen' ? '/privilegiert' : `/privilegiert/${v}`)}>
             <TabsList className="max-w-full overflow-x-auto [scrollbar-width:none]">
-              <TabsTrigger value="gruppen"><Users /> Gruppen<Count n={data.groups.length} /></TabsTrigger>
-              <TabsTrigger value="aenderungen"><GitCompareArrows /> Änderungen</TabsTrigger>
-              <TabsTrigger value="hygiene"><HeartPulse /> Hygiene<Count n={data.hygiene.length} /></TabsTrigger>
-              <TabsTrigger value="angriffspfade"><Route /> Angriffspfade<Count n={data.attackPaths.length} alert /></TabsTrigger>
+              <TabsTrigger value="gruppen"><Users /> {t('privileged.privileged.groups')}<Count n={data.groups.length} /></TabsTrigger>
+              <TabsTrigger value="aenderungen"><GitCompareArrows /> {t('privileged.privileged.changes')}</TabsTrigger>
+              <TabsTrigger value="hygiene"><HeartPulse /> {t('privileged.privileged.hygiene')}<Count n={data.hygiene.length} /></TabsTrigger>
+              <TabsTrigger value="angriffspfade"><Route /> {t('privileged.privileged.attackPaths')}<Count n={data.attackPaths.length} alert /></TabsTrigger>
             </TabsList>
             <TabsContent value="gruppen"><GroupsTab data={data} /></TabsContent>
             <TabsContent value="aenderungen"><ChangesTab baseline={snapshot.baseline} /></TabsContent>
@@ -227,25 +228,25 @@ export function Banner({ tone, icon, children }: { tone: 'info' | 'warning' | 'd
 
 function FirstRun({ data, canOperate, onStart }: { data?: PrivilegedOverview; canOperate: boolean; onStart: () => void }) {
   const steps = [
-    { icon: <Users />, title: 'Mitglieder', text: 'Direkte und verschachtelte Mitglieder der geschützten Gruppen (Domänen-Admins, Administratoren, …) und aller Tier-0-Gruppen aus der Konfiguration.' },
-    { icon: <HeartPulse />, title: 'Hygiene', text: 'Admin-Konten ohne „Protected Users“, mit SPN, altem Passwort, delegierbar oder lange nicht angemeldet.' },
-    { icon: <Route />, title: 'Angriffspfade', text: 'Wer außerhalb von Tier 0 Rechte wie WriteDacl oder GenericAll auf Tier-0-Objekte hat.' },
+    { icon: <Users />, title: t('privileged.privileged.members'), text: t('privileged.privileged.directAndNestedMembersOf') },
+    { icon: <HeartPulse />, title: t('privileged.privileged.hygiene'), text: t('privileged.privileged.adminAccountsWithoutProtectedUsers') },
+    { icon: <Route />, title: t('privileged.privileged.attackPaths'), text: t('privileged.privileged.whoOutsideTier0Has') },
   ]
   return (
     <Card>
       <EmptyState
         icon={<ShieldUser />}
-        title={data?.lastRun ? 'Noch keine erfolgreiche Überwachung' : 'Noch keine Überwachung'}
+        title={data?.lastRun ? t('privileged.privileged.noSuccessfulMonitoringRunYet') : t('privileged.privileged.noMonitoringYet')}
         description={
           canOperate
-            ? 'Starten Sie die erste Prüfung – danach vergleicht jede weitere Prüfung mit der vorherigen und meldet neue oder entfernte Mitglieder. Für eine laufende Überwachung einen Zeitplan einrichten (empfohlen: alle 15 Minuten).'
-            : 'Ein Operator kann die erste Prüfung starten oder einen Zeitplan für die Überwachung einrichten.'
+            ? t('privileged.privileged.startTheFirstCheckAfter')
+            : t('privileged.privileged.anOperatorCanStartThe')
         }
         action={
           canOperate && (
             <div className="flex flex-wrap justify-center gap-2">
-              <Button onClick={onStart}><Play /> Jetzt prüfen</Button>
-              <Button variant="outline" asChild><Link to="/audits/zeitplaene?neu=ueberwachung"><CalendarPlus /> Zeitplan einrichten</Link></Button>
+              <Button onClick={onStart}><Play /> {t('privileged.privileged.checkNow')}</Button>
+              <Button variant="outline" asChild><Link to="/audits/zeitplaene?neu=ueberwachung"><CalendarPlus /> {t('privileged.privileged.setUpSchedule')}</Link></Button>
             </div>
           )
         }

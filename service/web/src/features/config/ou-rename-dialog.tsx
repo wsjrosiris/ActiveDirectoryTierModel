@@ -68,8 +68,8 @@ export function OuRenameDialog({
   }, [open, index, qc])
 
   React.useEffect(() => {
-    const t = setTimeout(() => setDeferred(name), 150)
-    return () => clearTimeout(t)
+    const tt = setTimeout(() => setDeferred(name), 150)
+    return () => clearTimeout(tt)
   }, [name])
 
   const ous = ((contents?.ous as { organizationUnits?: OuItem[] } | undefined)?.organizationUnits ?? []) as OuItem[]

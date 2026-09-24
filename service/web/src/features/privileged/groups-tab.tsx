@@ -10,7 +10,8 @@ import { Switch } from '@/components/ui/switch'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { TierBadge } from '@/components/shared/badges'
 import { objectClassLabels } from '@/lib/labels'
-import { cn, pluralize } from '@/lib/utils'
+import { cn, formatNumber } from '@/lib/utils'
+import { t } from '@/i18n'
 
 export function GroupsTab({ data }: { data: PrivilegedOverview }) {
   const [params, setParams] = useSearchParams()
@@ -34,7 +35,7 @@ export function GroupsTab({ data }: { data: PrivilegedOverview }) {
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative w-full sm:max-w-xs">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Mitglied oder Gruppe suchen …" className="h-8 pl-8 text-[13px]" aria-label="Mitglieder durchsuchen" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('privileged.groupsTab.searchMemberOrGroup')} className="h-8 pl-8 text-[13px]" aria-label={t('privileged.groupsTab.searchMembers')} />
         </div>
         <label className="flex items-center gap-2 text-[13px]">
           <Switch
@@ -45,9 +46,9 @@ export function GroupsTab({ data }: { data: PrivilegedOverview }) {
               else p.delete('nur')
               setParams(p, { replace: true })
             }}
-            aria-label="Nur nicht erwartete Mitglieder"
+            aria-label={t('privileged.groupsTab.onlyUnexpectedMembers')}
           />
-          Nur nicht erwartete Mitglieder
+          {t('privileged.groupsTab.onlyUnexpectedMembers')}
         </label>
       </div>
       {groups.length === 0 ? (
@@ -55,8 +56,8 @@ export function GroupsTab({ data }: { data: PrivilegedOverview }) {
           <EmptyState
             compact
             icon={onlyUnexpected ? <CheckCircle2 /> : <Search />}
-            title={onlyUnexpected && !needle ? 'Alle Mitglieder sind erwartet' : 'Keine Treffer'}
-            description={onlyUnexpected && !needle ? 'Jedes Mitglied ist in der Soll-Konfiguration als Tier 0 hinterlegt oder gehört zur Standardausstattung.' : undefined}
+            title={onlyUnexpected && !needle ? t('privileged.groupsTab.allMembersAreExpected') : t('common.noMatches')}
+            description={onlyUnexpected && !needle ? t('privileged.groupsTab.everyMemberIsStoredAs') : undefined}
           />
         </Card>
       ) : (
@@ -78,29 +79,29 @@ function GroupCard({ group: g, total }: { group: PrivilegedGroup; total: number 
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-semibold tracking-tight">{g.name}</h3>
             {g.tier === 0 && <TierBadge tier={0} short />}
-            <Badge variant={g.source === 'config' ? 'info' : 'muted'}>{g.source === 'config' ? 'Aus der Konfiguration' : 'Geschützte Gruppe'}</Badge>
+            <Badge variant={g.source === 'config' ? 'info' : 'muted'}>{g.source === 'config' ? t('privileged.groupsTab.fromTheConfiguration') : t('privileged.groupsTab.protectedGroup')}</Badge>
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {showWellKnown && <>{g.wellKnownName} · </>}
-            {pluralize(total, 'Mitglied', 'Mitglieder')} · {pluralize(g.directCount, 'direkt', 'direkt')}
+            {t('privileged.groupsTab.members', { count: total, formatted: formatNumber(total) })} · {t('privileged.groupsTab.directCount', { count: g.directCount, formatted: formatNumber(g.directCount) })}
           </p>
         </div>
         {unexpected > 0 ? (
-          <Badge variant="danger"><UserX /> {unexpected} nicht erwartet</Badge>
+          <Badge variant="danger"><UserX /> {t('privileged.groupsTab.unexpectedCount', { count: unexpected })}</Badge>
         ) : (
-          g.members.length > 0 && <Badge variant="success"><CheckCircle2 /> Wie erwartet</Badge>
+          g.members.length > 0 && <Badge variant="success"><CheckCircle2 /> {t('privileged.groupsTab.asExpected')}</Badge>
         )}
       </div>
       {g.members.length === 0 ? (
-        <p className="flex items-center gap-2 px-5 py-4 text-[13px] text-muted-foreground"><Users className="size-4" /> Keine Mitglieder</p>
+        <p className="flex items-center gap-2 px-5 py-4 text-[13px] text-muted-foreground"><Users className="size-4" /> {t('privileged.groupsTab.noMembers')}</p>
       ) : (
         <Table>
           <THead>
             <TR>
-              <TH>Mitglied</TH>
-              <TH className="hidden sm:table-cell">Mitgliedschaft</TH>
-              <TH className="hidden md:table-cell">Konto</TH>
-              <TH>Bewertung</TH>
+              <TH>{t('privileged.groupsTab.member')}</TH>
+              <TH className="hidden sm:table-cell">{t('privileged.groupsTab.membership')}</TH>
+              <TH className="hidden md:table-cell">{t('privileged.groupsTab.account')}</TH>
+              <TH>{t('privileged.groupsTab.assessment')}</TH>
             </TR>
           </THead>
           <TBody>
@@ -112,28 +113,28 @@ function GroupCard({ group: g, total }: { group: PrivilegedGroup; total: number 
                     {objectClassLabels[m.objectClass] ?? m.objectClass}
                     {m.samAccountName && m.samAccountName !== m.name && <> · <span className="font-mono">{m.samAccountName}</span></>}
                   </p>
-                  <p className="text-xs text-muted-foreground sm:hidden">{m.direct ? 'Direkt' : `über ${m.via.join(' › ')}`}</p>
+                  <p className="text-xs text-muted-foreground sm:hidden">{m.direct ? t('privileged.groupsTab.direct') : t('privileged.groupsTab.via', { path: m.via.join(' › ') })}</p>
                 </TD>
                 <TD className="hidden text-[13px] sm:table-cell">
                   {m.direct ? (
-                    <span>Direkt</span>
+                    <span>{t('privileged.groupsTab.direct')}</span>
                   ) : (
-                    <span className="inline-flex items-start gap-1 text-muted-foreground"><CornerDownRight className="mt-0.5 size-3.5 shrink-0" /> über {m.via.join(' › ')}</span>
+                    <span className="inline-flex items-start gap-1 text-muted-foreground"><CornerDownRight className="mt-0.5 size-3.5 shrink-0" /> {t('privileged.groupsTab.via', { path: m.via.join(' › ') })}</span>
                   )}
                 </TD>
                 <TD className="hidden md:table-cell">
                   {m.objectClass === 'group' ? <span className="text-xs text-muted-foreground">–</span>
-                    : m.enabled === false ? <Badge variant="muted">Deaktiviert</Badge>
-                    : m.enabled === true ? <Badge variant="outline">Aktiv</Badge>
+                    : m.enabled === false ? <Badge variant="muted">{t('privileged.groupsTab.disabled')}</Badge>
+                    : m.enabled === true ? <Badge variant="outline">{t('common.active')}</Badge>
                     : <span className="text-xs text-muted-foreground">–</span>}
                 </TD>
                 <TD className="w-[1%] whitespace-nowrap sm:w-auto sm:whitespace-normal">
                   {m.unexpected ? (
-                    <Badge variant="danger">Nicht erwartet</Badge>
+                    <Badge variant="danger">{t('privileged.groupsTab.unexpected')}</Badge>
                   ) : (
                     <>
-                      <CheckCircle2 className="size-4 text-emerald-600 sm:hidden dark:text-emerald-400" aria-label={m.note ?? 'Erwartet'} />
-                      <span className="hidden text-xs text-muted-foreground sm:inline">{m.note ?? 'Erwartet'}</span>
+                      <CheckCircle2 className="size-4 text-emerald-600 sm:hidden dark:text-emerald-400" aria-label={m.note ?? t('privileged.groupsTab.expected')} />
+                      <span className="hidden text-xs text-muted-foreground sm:inline">{m.note ?? t('privileged.groupsTab.expected')}</span>
                     </>
                   )}
                 </TD>

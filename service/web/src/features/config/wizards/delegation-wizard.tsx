@@ -54,11 +54,11 @@ export function DelegationWizard({ open, onClose }: { open: boolean; onClose: ()
   const preset = matchPreset(template)
   const choosePreset = (id: string) => {
     if (id === CUSTOM_PRESET) return setAdvanced(true)
-    const t = DELEGATION_PRESETS.find((p) => p.id === id)!.entries[0]
-    setRights(t.activedirectoryrights)
-    setObjecttype(t.objecttype)
-    setInheritance(t.activeDirectorysecurityinheritance)
-    setInheritedObjectType(t.inheritedObjectType ?? '')
+    const tt = DELEGATION_PRESETS.find((p) => p.id === id)!.entries[0]
+    setRights(tt.activedirectoryrights)
+    setObjecttype(tt.objecttype)
+    setInheritance(tt.activeDirectorysecurityinheritance)
+    setInheritedObjectType(tt.inheritedObjectType ?? '')
   }
 
   const dirty = !!principal || !!target || !!comment || !allow || preset !== DELEGATION_PRESETS[0].id

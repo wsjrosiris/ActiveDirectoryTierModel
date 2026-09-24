@@ -48,8 +48,8 @@ export function useDomainControllerOptions(): ComboOption[] {
 export function useAdGroupSearch(search: string) {
   const [q, setQ] = React.useState('')
   React.useEffect(() => {
-    const t = setTimeout(() => setQ(search.trim()), 250)
-    return () => clearTimeout(t)
+    const tt = setTimeout(() => setQ(search.trim()), 250)
+    return () => clearTimeout(tt)
   }, [search])
   const query = useQuery({
     queryKey: ['lookup', 'ad-groups', q],

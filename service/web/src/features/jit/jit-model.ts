@@ -1,5 +1,6 @@
 // Pure helpers for the Just-in-Time page (unit-tested in tests/jit-model.test.ts).
 import type { JitRequest, JitStatus } from '../../api/jit.ts'
+import { t } from '../../i18n/index.ts'
 
 /** Durations offered in the request dialog (minutes). */
 export const DURATIONS = [15, 30, 60, 120, 240, 480]
@@ -9,8 +10,8 @@ export const MAX_DURATIONS = [15, 30, 60, 120, 240, 480, 720, 1440]
 
 /** "15 Minuten", "1 Stunde", "8 Stunden". */
 export function formatMinutes(minutes: number): string {
-  if (minutes % 60 === 0) return minutes === 60 ? '1 Stunde' : `${minutes / 60} Stunden`
-  return `${minutes} Minuten`
+  if (minutes % 60 === 0) return minutes === 60 ? t('jit.jitModel.n1Hour') : t('jit.jitModel.valueHours', { value: minutes / 60 })
+  return t('jit.jitModel.minutesMinutes', { minutes })
 }
 
 /** Durations up to the group's maximum; the maximum itself is always offered. */
@@ -49,14 +50,14 @@ export function remainingShare(r: Pick<JitRequest, 'grantedAt' | 'expiresAt'>, n
 }
 
 export const statusLabels: Record<JitStatus, string> = {
-  Pending: 'Wartet auf Freigabe',
-  Approved: 'Wird erteilt',
-  Rejected: 'Abgelehnt',
-  Active: 'Aktiv',
-  Expired: 'Abgelaufen',
-  Revoked: 'Entzogen',
-  Failed: 'Fehlgeschlagen',
-  Cancelled: 'Zurückgezogen',
+  Pending: t('jit.jitModel.awaitingApproval'),
+  Approved: t('jit.jitModel.beingGranted'),
+  Rejected: t('jit.jitModel.rejected'),
+  Active: t('jit.jitModel.active'),
+  Expired: t('jit.jitModel.expired'),
+  Revoked: t('jit.jitModel.revoked'),
+  Failed: t('jit.jitModel.failed'),
+  Cancelled: t('jit.jitModel.withdrawn'),
 }
 
 export type StatusTone = 'warning' | 'info' | 'success' | 'danger' | 'muted'
@@ -84,9 +85,9 @@ export function splitRequests(items: JitRequest[]) {
 /** Same rule as the service: samAccountName (optionally DOMAIN\sam) or SID, no characters that are invalid in a samAccountName. */
 export function accountProblem(value: string): string | null {
   const v = value.trim()
-  if (!v) return 'Bitte ein AD-Konto angeben.'
+  if (!v) return t('jit.jitModel.pleaseEnterAnAdAccount')
   const bare = v.includes('\\') ? v.slice(v.lastIndexOf('\\') + 1) : v
   if (/^S-1-[0-9]+(-[0-9]+){1,14}$/i.test(bare)) return null
-  if (bare.length > 256 || /["/\\[\]:;|=,+*?<>@']/.test(bare) || bare.length === 0) return 'Ungültiger samAccountName (z. B. t0-alice).'
+  if (bare.length > 256 || /["/\\[\]:;|=,+*?<>@']/.test(bare) || bare.length === 0) return t('jit.jitModel.invalidSamaccountnameEGT0')
   return null
 }

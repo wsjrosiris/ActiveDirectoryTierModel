@@ -17,6 +17,7 @@ import { usePrincipalOptions } from '@/features/config/lookups'
 import { errorMessage } from '@/lib/query'
 import { roleDescriptions, roleLabels, roles } from '@/lib/roles'
 import { cn } from '@/lib/utils'
+import { t } from '@/i18n'
 
 export function Component() {
   return (
@@ -67,7 +68,7 @@ function entryFormatError(v: string): string | null {
   if (SID_RE.test(v)) return null
   const i = v.indexOf('\\')
   if (i > 0 && i < v.length - 1 && !v.slice(i + 1).includes('\\')) return null
-  return 'Format: DOMÄNE\\Gruppe oder SID (S-1-5-…)'
+  return t('admin.windowsAuth.formatDomainGroupOrSid')
 }
 
 const roleTone: Record<Role, string> = {
@@ -97,7 +98,7 @@ function WindowsAuthPage() {
       setFieldErrors({})
       qc.setQueryData(queryKey, s)
       qc.invalidateQueries({ queryKey: ['auth', 'options'] })
-      toast.success('Windows-Anmeldung gespeichert', { description: s.enabled ? 'Die Gruppenzuordnung gilt ab der nächsten Anmeldung.' : 'Die Windows-Anmeldung ist ausgeschaltet.' })
+      toast.success(t('admin.windowsAuth.windowsSignInSaved'), { description: s.enabled ? t('admin.windowsAuth.theGroupMappingAppliesFrom') : t('admin.windowsAuth.windowsSignInIsTurned') })
     },
     onError: (e) => {
       if (e instanceof ApiError && e.status === 400 && e.errors) {
@@ -111,10 +112,10 @@ function WindowsAuthPage() {
         setFieldErrors(next)
         const first = roles.find((r) => next[r])
         if (first) requestAnimationFrame(() => document.getElementById(`wa-${first}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
-        toast.error('Nicht gespeichert', { description: rest[0] ?? 'Einige Einträge konnten nicht aufgelöst werden. Bitte die markierten Rollen prüfen.' })
+        toast.error(t('admin.windowsAuth.notSaved'), { description: rest[0] ?? t('admin.windowsAuth.someEntriesCouldNotBe') })
         return
       }
-      toast.error(e instanceof ApiError ? e.title : 'Fehler', { description: e instanceof ApiError ? e.detail : errorMessage(e) })
+      toast.error(e instanceof ApiError ? e.title : t('admin.windowsAuth.error'), { description: e instanceof ApiError ? e.detail : errorMessage(e) })
     },
   })
 
@@ -133,8 +134,8 @@ function WindowsAuthPage() {
     <Page className="max-w-4xl">
       <PageHeader
         icon={<KeyRound />}
-        title="Windows-Anmeldung"
-        description="Einmalige Anmeldung mit Domänenkonten (Kerberos/NTLM) – die Rolle ergibt sich aus AD-Gruppen."
+        title={t('admin.windowsAuth.windowsSignIn')}
+        description={t('admin.windowsAuth.singleSignOnWithDomain')}
       />
       {!form || !data ? (
         <div className="grid gap-4">
@@ -153,10 +154,9 @@ function WindowsAuthPage() {
             <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[13px] text-amber-900 dark:text-amber-200">
               <ShieldAlert className="mt-0.5 size-4 shrink-0" />
               <div>
-                <p className="font-medium">Auf diesem Server nicht verfügbar</p>
+                <p className="font-medium">{t('admin.windowsAuth.notAvailableOnThisServer')}</p>
                 <p className="mt-0.5 opacity-90">
-                  Der Dienst kann Windows-Anmeldungen (Negotiate) hier nicht annehmen – etwa weil er nicht auf einem Windows-Server in der Domäne läuft.
-                  Die Gruppenzuordnung lässt sich trotzdem vorbereiten.
+                  {t('admin.windowsAuth.theServiceCannotAcceptWindows')}
                 </p>
               </div>
             </div>
@@ -171,15 +171,15 @@ function WindowsAuthPage() {
                   </span>
                   <span className="grid">
                     <span className="flex items-center gap-2 text-sm font-medium">
-                      Windows-Anmeldung aktivieren
-                      {data.enabled && available ? <Badge variant="success">Aktiv</Badge> : <Badge variant="muted">Aus</Badge>}
+                      {t('admin.windowsAuth.enableWindowsSignIn')}
+                      {data.enabled && available ? <Badge variant="success">{t('common.active')}</Badge> : <Badge variant="muted">{t('common.off')}</Badge>}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      Zeigt auf der Anmeldeseite „Mit Windows-Konto anmelden“. Lokale Konten funktionieren weiterhin.
+                      {t('admin.windowsAuth.showsSignInWithWindows')}
                     </span>
                   </span>
                 </span>
-                <Tooltip content={available ? undefined : 'Auf diesem Server nicht verfügbar'} disabled={available}>
+                <Tooltip content={available ? undefined : t('admin.windowsAuth.notAvailableOnThisServer')} disabled={available}>
                   <span>
                     <Switch id="wa-enabled" checked={form.enabled} disabled={!available} onCheckedChange={(v) => setForm({ ...form, enabled: v })} />
                   </span>
@@ -187,7 +187,7 @@ function WindowsAuthPage() {
               </label>
               {form.enabled && total === 0 && (
                 <p className="mt-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
-                  <AlertTriangle className="size-3.5 shrink-0" /> Ohne zugeordnete Gruppen kann sich niemand per Windows anmelden.
+                  <AlertTriangle className="size-3.5 shrink-0" /> {t('admin.windowsAuth.withoutMappedGroupsNobodyCan')}
                 </p>
               )}
             </CardContent>
@@ -196,9 +196,9 @@ function WindowsAuthPage() {
           <Card>
             <CardHeader>
               <div>
-                <CardTitle className="flex items-center gap-2"><UsersRound className="size-4 text-muted-foreground" /> Rollen aus AD-Gruppen</CardTitle>
+                <CardTitle className="flex items-center gap-2"><UsersRound className="size-4 text-muted-foreground" /> {t('admin.windowsAuth.rolesFromAdGroups')}</CardTitle>
                 <CardDescription>
-                  Je Rolle Gruppen als <span className="font-mono text-foreground">DOMÄNE\Gruppe</span> oder SID eintragen. Bei Mitgliedschaft in mehreren Gruppen gilt die höchste Rolle.
+                  {t('admin.windowsAuth.enterGroupsPerRoleAs')} <span className="font-mono text-foreground">{t('admin.windowsAuth.domainGroup')}</span> {t('admin.windowsAuth.orSidWithMembershipIn')}
                 </CardDescription>
               </div>
             </CardHeader>
@@ -212,29 +212,27 @@ function WindowsAuthPage() {
           <div className="flex gap-3 rounded-xl border bg-muted/30 px-4 py-3.5 text-[13px] text-muted-foreground">
             <Info className="mt-0.5 size-4 shrink-0 text-sky-600 dark:text-sky-400" />
             <div className="grid gap-1.5">
-              <p className="font-medium text-foreground">Voraussetzungen für die einmalige Anmeldung (SSO)</p>
+              <p className="font-medium text-foreground">{t('admin.windowsAuth.prerequisitesForSingleSignOn')}</p>
               <ul className="grid list-disc gap-1 pl-4">
                 <li>
-                  Für das Dienstkonto muss der SPN <span className="font-mono text-foreground">HTTP/&lt;FQDN des Servers&gt;</span> registriert sein, z. B.{' '}
-                  <span className="rounded bg-card px-1 py-0.5 font-mono text-[12px] text-foreground ring-1 ring-border">setspn -S HTTP/tiermodel01.contoso.com CONTOSO\svc-tiermodel</span>.
-                  Ohne passenden SPN fällt die Anmeldung auf NTLM zurück oder schlägt fehl.
+                  {t('admin.windowsAuth.theSpn')} <span className="font-mono text-foreground">{t('admin.windowsAuth.httpServerFqdn')}</span> {t('admin.windowsAuth.mustBeRegisteredForThe')}{' '}
+                  <span className="rounded bg-card px-1 py-0.5 font-mono text-[12px] text-foreground ring-1 ring-border">setspn -S HTTP/tiermodel01.contoso.com CONTOSO\svc-tiermodel</span>{t('admin.windowsAuth.withoutAMatchingSpnSign')}
                 </li>
                 <li>
-                  Die Adresse der Oberfläche muss im Browser zur Zone „Lokales Intranet“ gehören (z. B. per Gruppenrichtlinie
-                  „Liste der Site-zu-Zonen-Zuweisungen“), sonst fragt der Browser nach Anmeldedaten.
+                  {t('admin.windowsAuth.theAddressOfTheUi')}
                 </li>
-                <li>Windows-Konten werden bei der ersten Anmeldung automatisch angelegt und können unter „Benutzer“ deaktiviert werden.</li>
-                <li>Details stehen in der Betriebsdokumentation des Dienstes (Abschnitt „Windows-Anmeldung“).</li>
+                <li>{t('admin.windowsAuth.windowsAccountsAreCreatedAutomatically')}</li>
+                <li>{t('admin.windowsAuth.detailsAreInTheService')}</li>
               </ul>
             </div>
           </div>
 
           <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-end gap-2 rounded-xl border bg-card/95 px-4 py-3 shadow-lg shadow-black/5 backdrop-blur">
             <span className="mr-auto text-xs text-muted-foreground">
-              {dirty ? 'Ungespeicherte Änderungen – Namen werden beim Speichern in SIDs aufgelöst.' : 'Alle Änderungen gespeichert'}
+              {dirty ? t('admin.windowsAuth.unsavedChangesNamesAreResolved') : t('common.allChangesSaved')}
             </span>
-            <Button type="button" variant="ghost" disabled={!dirty} onClick={() => { setForm(toForm(data)); setFieldErrors({}) }}>Zurücksetzen</Button>
-            <Button type="submit" disabled={!dirty} loading={save.isPending}>{!save.isPending && <Save />} Speichern</Button>
+            <Button type="button" variant="ghost" disabled={!dirty} onClick={() => { setForm(toForm(data)); setFieldErrors({}) }}>{t('common.reset')}</Button>
+            <Button type="submit" disabled={!dirty} loading={save.isPending}>{!save.isPending && <Save />} {t('common.save')}</Button>
           </div>
         </form>
       )}
@@ -253,12 +251,12 @@ function RoleGroupsRow({ role, entries, onChange, errors }: { role: Role; entrie
     if (!v) return
     const bad = entryFormatError(v)
     if (bad) {
-      setHint(`„${v}“ – ${bad}`)
+      setHint(t('admin.windowsAuth.entryHint', { value: v, problem: bad }))
       return
     }
     const known = new Set(entries.flatMap((e) => [e.value.toLowerCase(), e.ref?.name.toLowerCase(), e.ref?.sid.toLowerCase()].filter(Boolean) as string[]))
     if (known.has(v.toLowerCase())) {
-      setHint('Diese Gruppe ist bereits zugeordnet.')
+      setHint(t('admin.windowsAuth.thisGroupIsAlreadyMapped'))
       return
     }
     const picked = options.find((o) => o.value.toLowerCase() === v.toLowerCase())
@@ -277,7 +275,7 @@ function RoleGroupsRow({ role, entries, onChange, errors }: { role: Role; entrie
       </div>
       <div className="grid min-w-0 gap-2">
         {entries.length > 0 && (
-          <ul className="flex flex-wrap gap-1.5" aria-label={`Gruppen für ${roleLabels[role]}`}>
+          <ul className="flex flex-wrap gap-1.5" aria-label={t('admin.windowsAuth.groupsForValue', { value: roleLabels[role] })}>
             {entries.map((e, i) => (
               <li
                 key={`${e.value}-${i}`}
@@ -294,19 +292,19 @@ function RoleGroupsRow({ role, entries, onChange, errors }: { role: Role; entrie
                   )}
                   {e.ref ? (
                     sidOnly(e.ref) ? (
-                      <span className="text-[10.5px] text-muted-foreground">SID · Name nicht aufgelöst</span>
+                      <span className="text-[10.5px] text-muted-foreground">{t('admin.windowsAuth.sidNameNotResolved')}</span>
                     ) : (
                       <span className="truncate font-mono text-[10.5px] text-muted-foreground" title={e.ref.sid}>{e.ref.sid}</span>
                     )
                   ) : (
-                    <span className="text-[10.5px] text-primary">{e.label ? `${e.value} · neu` : 'neu – wird beim Speichern aufgelöst'}</span>
+                    <span className="text-[10.5px] text-primary">{e.label ? t('admin.windowsAuth.valueNew', { value: e.value }) : t('admin.windowsAuth.newResolvedOnSave')}</span>
                   )}
                 </span>
                 <button
                   type="button"
                   onClick={() => onChange(entries.filter((_, j) => j !== i))}
                   className="grid size-6 shrink-0 place-content-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label={`${e.ref?.name || e.value} entfernen`}
+                  aria-label={t('common.removeName', { name: e.ref?.name || e.value })}
                 >
                   <X className="size-3.5" />
                 </button>
@@ -324,8 +322,8 @@ function RoleGroupsRow({ role, entries, onChange, errors }: { role: Role; entrie
           mono
           invalid={!!errors?.length}
           validateCustom={entryFormatError}
-          placeholder={entries.length ? 'Weitere Gruppe suchen oder DOMÄNE\\Gruppe / SID eingeben …' : 'Gruppe im AD suchen oder CONTOSO\\Tier0-Admins / S-1-5-21-… eingeben'}
-          emptyText={'Keine Gruppe gefunden – DOMÄNE\\Gruppe oder SID eingeben'}
+          placeholder={entries.length ? t('admin.windowsAuth.searchAnotherGroupOrEnter') : t('admin.windowsAuth.searchAGroupInAd')}
+          emptyText={t('admin.windowsAuth.noGroupFoundEnterDomain')}
         />
         {errors?.length ? (
           <div role="alert" className="grid gap-0.5 text-xs text-destructive">
@@ -334,7 +332,7 @@ function RoleGroupsRow({ role, entries, onChange, errors }: { role: Role; entrie
         ) : hint ? (
           <p className="text-xs text-muted-foreground">{hint}</p>
         ) : entries.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Keine Gruppe zugeordnet.</p>
+          <p className="text-xs text-muted-foreground">{t('admin.windowsAuth.noGroupMapped')}</p>
         ) : null}
       </div>
     </div>

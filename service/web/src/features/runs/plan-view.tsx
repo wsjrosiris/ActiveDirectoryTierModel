@@ -119,30 +119,30 @@ export function PlanView({ plan, header }: { plan: DeployPlan; header?: React.Re
     <div className="grid gap-4">
       {header}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {tiles.map((t) => {
-          const selectable = t.key !== 'existing' && t.key !== 'all' && t.value > 0
-          const active = t.key === kind
+        {tiles.map((tt) => {
+          const selectable = tt.key !== 'existing' && tt.key !== 'all' && tt.value > 0
+          const active = tt.key === kind
           return (
             <button
-              key={t.key}
+              key={tt.key}
               type="button"
-              disabled={!selectable && t.key !== 'all'}
-              onClick={() => (t.key === 'all' ? setKind('all') : selectable && setKind(active ? 'all' : (t.key as ActionKind)))}
-              aria-pressed={t.key !== 'existing' ? active : undefined}
+              disabled={!selectable && tt.key !== 'all'}
+              onClick={() => (tt.key === 'all' ? setKind('all') : selectable && setKind(active ? 'all' : (tt.key as ActionKind)))}
+              aria-pressed={tt.key !== 'existing' ? active : undefined}
               className={cn(
                 'rounded-xl border bg-card p-3.5 text-left transition-all outline-none enabled:hover:border-input focus-visible:ring-2 focus-visible:ring-ring',
-                active && t.key !== 'all' && 'border-primary/50 ring-1 ring-primary/30',
+                active && tt.key !== 'all' && 'border-primary/50 ring-1 ring-primary/30',
               )}
             >
-              <p className="text-xs text-muted-foreground">{t.label}</p>
+              <p className="text-xs text-muted-foreground">{tt.label}</p>
               <p
                 className={cn(
                   'mt-1 text-2xl font-semibold tabular',
-                  t.value > 0 && t.key !== 'all' && t.key !== 'existing' && kindStyle[t.key as ActionKind].text,
-                  t.key === 'existing' && 'text-muted-foreground',
+                  tt.value > 0 && tt.key !== 'all' && tt.key !== 'existing' && kindStyle[tt.key as ActionKind].text,
+                  tt.key === 'existing' && 'text-muted-foreground',
                 )}
               >
-                {formatNumber(t.value)}
+                {formatNumber(tt.value)}
               </p>
             </button>
           )

@@ -1,4 +1,5 @@
 import { Area, AreaChart, ResponsiveContainer, Tooltip, YAxis } from 'recharts'
+import { t } from '@/i18n'
 
 interface Point {
   date: string
@@ -27,7 +28,7 @@ export default function ComplianceSparkline({ data, id }: { data: Point[]; id: s
             return (
               <div className="rounded-lg border bg-popover px-2.5 py-1.5 text-xs shadow-lg">
                 <p className="text-muted-foreground">{df.format(new Date(p.date))}</p>
-                <p className="font-medium text-foreground">{p.score === null ? 'Keine Daten' : `${p.score} von 100`}</p>
+                <p className="font-medium text-foreground">{p.score === null ? t('dashboard.complianceSparkline.noData') : t('dashboard.complianceSparkline.scoreOf100', { score: p.score })}</p>
               </div>
             )
           }}

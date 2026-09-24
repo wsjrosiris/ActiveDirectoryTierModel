@@ -18,6 +18,8 @@ import { errorMessage } from '@/lib/query'
 import type { Tier } from '@/lib/tier'
 import { cn, formatDateTime, formatRelative } from '@/lib/utils'
 import { formatCountdown, formatMinutes, remainingShare, statusLabels, statusTone } from './jit-model'
+import { t } from '@/i18n'
+import { rich } from '@/i18n/rich'
 
 function useRefresh() {
   const qc = useQueryClient()
@@ -27,8 +29,8 @@ function useRefresh() {
 function useNow(intervalMs: number) {
   const [now, setNow] = React.useState(Date.now())
   React.useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), intervalMs)
-    return () => clearInterval(t)
+    const tt = setInterval(() => setNow(Date.now()), intervalMs)
+    return () => clearInterval(tt)
   }, [intervalMs])
   return now
 }
@@ -53,7 +55,7 @@ function Facts({ r, now }: { r: JitRequest; now: number }) {
       <span className="flex items-center gap-1"><KeyRound className="size-3.5" /><span className="font-mono text-foreground">{r.memberAccount}</span></span>
       <span className="flex items-center gap-1"><Timer className="size-3.5" />{formatMinutes(r.minutes)}</span>
       <span className="flex items-center gap-1" title={formatDateTime(r.requestedAt)}>
-        <UserRound className="size-3.5" />{r.requestedBy}{r.mine && <span className="text-xs">(Sie)</span>} · {formatRelative(r.requestedAt, now)}
+        <UserRound className="size-3.5" />{r.requestedBy}{r.mine && <span className="text-xs">{t('jit.jitRequests.you')}</span>} · {formatRelative(r.requestedAt, now)}
       </span>
     </p>
   )
@@ -72,9 +74,9 @@ export function OpenList({ items, onRequest }: { items: JitRequest[]; onRequest?
       <Card>
         <EmptyState
           icon={<ListChecks />}
-          title="Keine offenen Anfragen"
-          description="Anträge, die auf eine Freigabe warten oder gerade eingetragen werden, erscheinen hier."
-          action={onRequest && <Button variant="outline" onClick={onRequest}><Plus /> Zugriff beantragen</Button>}
+          title={t('jit.jitRequests.noOpenRequests')}
+          description={t('jit.jitRequests.requestsThatAreWaitingFor')}
+          action={onRequest && <Button variant="outline" onClick={onRequest}><Plus /> {t('jit.jitRequests.requestAccess')}</Button>}
         />
       </Card>
     )
@@ -88,7 +90,7 @@ function OpenCard({ r, now }: { r: JitRequest; now: number }) {
   const refresh = useRefresh()
   const withdraw = useMutation({
     mutationFn: () => jitApi.withdraw(r.id),
-    onSuccess: () => { toast.success(`Antrag #${r.id} zurückgezogen`); refresh() },
+    onSuccess: () => { toast.success(t('jit.jitRequests.requestIdWithdrawn', { id: r.id })); refresh() },
   })
   const expiresMs = r.approvalExpiresAt ? new Date(r.approvalExpiresAt).getTime() - now : null
 
@@ -105,42 +107,42 @@ function OpenCard({ r, now }: { r: JitRequest; now: number }) {
           <Justification text={r.justification} />
           {r.status === 'Pending' && r.approvalExpiresAt && (
             <p className={cn('flex items-center gap-1.5 text-xs text-muted-foreground', expiresMs !== null && expiresMs < 3_600_000 && 'text-rose-700 dark:text-rose-300')} title={formatDateTime(r.approvalExpiresAt)}>
-              <Hourglass className="size-3.5" /> Freigabe möglich bis {formatDateTime(r.approvalExpiresAt)}
+              <Hourglass className="size-3.5" /> {t('jit.jitRequests.approvalPossibleUntil')} {formatDateTime(r.approvalExpiresAt)}
             </p>
           )}
           {r.status === 'Approved' && (
             <p className="flex flex-wrap items-center gap-1.5 text-xs text-sky-700 dark:text-sky-300">
               <Loader2 className="size-3.5 animate-spin" />
-              {r.decidedBy ? `Freigegeben von ${r.decidedBy} – ` : ''}Mitgliedschaft wird im Active Directory eingetragen
-              {r.runId && <Link to={`/laeufe/${r.runId}`} className="underline-offset-2 hover:underline">(Lauf #{r.runId})</Link>}
+              {r.decidedBy ? t('jit.jitRequests.approvedByAdding', { by: r.decidedBy }) : t('jit.jitRequests.adding')}
+              {r.runId && <Link to={`/laeufe/${r.runId}`} className="underline-offset-2 hover:underline">{t('jit.jitRequests.runParen', { id: r.runId })}</Link>}
             </p>
           )}
         </div>
         <div className="flex flex-col gap-2 lg:w-56 lg:border-l lg:pl-6">
           {r.canDecide ? (
             <>
-              <Button className="w-full bg-emerald-600 text-white hover:bg-emerald-600/90" onClick={() => setDialog('approve')}><ShieldCheck /> Freigeben …</Button>
-              <Button variant="outline" className="w-full text-destructive hover:text-destructive" onClick={() => setDialog('reject')}><ShieldX /> Ablehnen …</Button>
+              <Button className="w-full bg-emerald-600 text-white hover:bg-emerald-600/90" onClick={() => setDialog('approve')}><ShieldCheck /> {t('jit.jitRequests.approve')}</Button>
+              <Button variant="outline" className="w-full text-destructive hover:text-destructive" onClick={() => setDialog('reject')}><ShieldX /> {t('jit.jitRequests.reject')}</Button>
             </>
           ) : r.canWithdraw ? (
             <>
               <p className="text-xs text-muted-foreground">
-                {r.approvalRequired ? 'Wartet auf eine zweite Person (Vier-Augen-Prinzip). Eigene Anträge können Sie nicht freigeben.' : 'Wird ohne Freigabe erteilt.'}
+                {r.approvalRequired ? t('jit.jitRequests.waitingForASecondPerson') : t('jit.jitRequests.grantedWithoutApproval')}
               </p>
               <Button
                 variant="outline"
                 className="w-full"
                 loading={withdraw.isPending}
                 onClick={async () => {
-                  if (await confirm({ title: `Antrag #${r.id} zurückziehen?`, description: 'Der Zugriff wird nicht erteilt.', confirmText: 'Zurückziehen', cancelText: 'Behalten', destructive: true }))
+                  if (await confirm({ title: t('jit.jitRequests.withdrawRequestId', { id: r.id }), description: t('jit.jitRequests.accessWillNotBeGranted'), confirmText: t('jit.jitRequests.withdraw'), cancelText: t('jit.jitRequests.keep'), destructive: true }))
                     withdraw.mutate()
                 }}
               >
-                {!withdraw.isPending && <Undo2 />} Zurückziehen
+                {!withdraw.isPending && <Undo2 />} {t('jit.jitRequests.withdraw')}
               </Button>
             </>
           ) : r.status === 'Pending' ? (
-            <p className="text-xs text-muted-foreground">Freigeben können Operatoren, die den Antrag nicht selbst gestellt haben.</p>
+            <p className="text-xs text-muted-foreground">{t('jit.jitRequests.operatorsWhoDidNotSubmit')}</p>
           ) : null}
         </div>
       </div>
@@ -158,16 +160,16 @@ function DecisionDialog({ r, mode, onClose, onDone }: { r: JitRequest; mode: 'ap
     mutationFn: () => (approve ? jitApi.approve(r.id, comment.trim() || undefined) : jitApi.reject(r.id, comment.trim())),
     meta: { silent: true },
     onSuccess: () => {
-      toast.success(approve ? `Antrag #${r.id} freigegeben` : `Antrag #${r.id} abgelehnt`, {
-        description: approve ? 'Die Mitgliedschaft wird jetzt im Active Directory eingetragen.' : undefined,
+      toast.success(approve ? t('jit.jitRequests.requestIdApproved', { id: r.id }) : t('jit.jitRequests.requestIdRejected', { id: r.id }), {
+        description: approve ? t('jit.jitRequests.theMembershipIsNowBeing') : undefined,
       })
       onDone()
       onClose()
     },
     onError: (e) => {
       const status = e instanceof ApiError ? e.status : 0
-      toast.error(approve ? 'Freigabe nicht möglich' : 'Ablehnung nicht möglich', {
-        description: status === 409 ? 'Der Antrag wartet nicht mehr auf eine Freigabe.' : status === 403 ? 'Den eigenen Antrag kann nur eine zweite Person freigeben.' : errorMessage(e),
+      toast.error(approve ? t('jit.jitRequests.approvalNotPossible') : t('jit.jitRequests.rejectionNotPossible'), {
+        description: status === 409 ? t('jit.jitRequests.theRequestIsNoLonger') : status === 403 ? t('jit.jitRequests.onlyASecondPersonCan') : errorMessage(e),
       })
       if (status === 409 || status === 403) { onDone(); onClose() }
     },
@@ -183,22 +185,24 @@ function DecisionDialog({ r, mode, onClose, onDone }: { r: JitRequest; mode: 'ap
                 {approve ? <ShieldCheck className="size-4" /> : <ShieldX className="size-4" />}
               </span>
               <div className="grid gap-1.5">
-                <DialogTitle>{approve ? `Antrag #${r.id} freigeben?` : `Antrag #${r.id} ablehnen?`}</DialogTitle>
+                <DialogTitle>{approve ? t('jit.jitRequests.approveRequestId', { id: r.id }) : t('jit.jitRequests.rejectRequestId', { id: r.id })}</DialogTitle>
                 <DialogDescription>
-                  <span className="font-mono text-foreground">{r.memberAccount}</span> wird {approve ? '' : 'nicht '}für {formatMinutes(r.minutes)} Mitglied von{' '}
-                  <span className="font-medium text-foreground">{r.groupDisplayName}</span>. Beantragt von {r.requestedBy}.
+                  {rich(t(approve ? 'jit.jitRequests.decisionApprove' : 'jit.jitRequests.decisionReject', { duration: formatMinutes(r.minutes), by: r.requestedBy }), {
+                    account: <span className="font-mono text-foreground">{r.memberAccount}</span>,
+                    group: <span className="font-medium text-foreground">{r.groupDisplayName}</span>,
+                  })}
                 </DialogDescription>
               </div>
             </div>
           </DialogHeader>
-          <Field label={approve ? 'Kommentar (optional)' : 'Begründung'} htmlFor="jit-decision" required={!approve} error={touched && missing ? 'Eine Begründung ist erforderlich.' : undefined} className="sm:pl-12">
+          <Field label={approve ? t('jit.jitRequests.commentOptional') : t('jit.jitRequests.justification')} htmlFor="jit-decision" required={!approve} error={touched && missing ? t('jit.jitRequests.aJustificationIsRequired') : undefined} className="sm:pl-12">
             <Textarea id="jit-decision" autoFocus rows={3} maxLength={1000} value={comment} onChange={(e) => setComment(e.target.value)}
-              placeholder={approve ? 'z. B. Change CHG-1234 geprüft' : 'z. B. Kein freigegebener Change vorhanden'} aria-invalid={(touched && missing) || undefined} />
+              placeholder={approve ? t('jit.jitRequests.eGChangeChg1234') : t('jit.jitRequests.eGNoApprovedChange')} aria-invalid={(touched && missing) || undefined} />
           </Field>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
+            <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
             <Button type="submit" variant={approve ? 'default' : 'destructive'} className={approve ? 'bg-emerald-600 text-white hover:bg-emerald-600/90' : undefined} loading={decide.isPending}>
-              {!decide.isPending && (approve ? <ShieldCheck /> : <ShieldX />)}{approve ? 'Freigeben' : 'Ablehnen'}
+              {!decide.isPending && (approve ? <ShieldCheck /> : <ShieldX />)}{approve ? t('jit.jitRequests.approve2') : t('jit.jitRequests.reject2')}
             </Button>
           </DialogFooter>
         </form>
@@ -214,7 +218,7 @@ export function ActiveList({ items }: { items: JitRequest[] }) {
   if (items.length === 0)
     return (
       <Card>
-        <EmptyState icon={<KeyRound />} title="Keine aktiven Zugriffe" description="Erteilte befristete Mitgliedschaften erscheinen hier mit der verbleibenden Zeit." />
+        <EmptyState icon={<KeyRound />} title={t('jit.jitRequests.noActiveAccess')} description={t('jit.jitRequests.grantedTimeLimitedMembershipsAppear')} />
       </Card>
     )
   return <div className="grid gap-3 md:grid-cols-2">{items.map((r) => <ActiveCard key={r.id} r={r} now={now} />)}</div>
@@ -226,8 +230,8 @@ function ActiveCard({ r, now }: { r: JitRequest; now: number }) {
   const revoke = useMutation({
     mutationFn: () => jitApi.revoke(r.id),
     meta: { silent: true },
-    onSuccess: () => { toast.success(`Zugriff #${r.id} wird entzogen`); refresh() },
-    onError: (e) => toast.error('Entziehen nicht möglich', { description: errorMessage(e) }),
+    onSuccess: () => { toast.success(t('jit.jitRequests.revokingAccessId', { id: r.id })); refresh() },
+    onError: (e) => toast.error(t('jit.jitRequests.revokingNotPossible'), { description: errorMessage(e) }),
   })
   const share = remainingShare(r, now)
   const countdown = formatCountdown(r.expiresAt, now)
@@ -237,17 +241,17 @@ function ActiveCard({ r, now }: { r: JitRequest; now: number }) {
       <div className="grid gap-3 p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <Heading r={r} />
-          {r.revokeRunId ? <Badge variant="info"><Loader2 className="animate-spin" /> Wird entzogen</Badge> : <JitStatusBadge status={r.status} />}
+          {r.revokeRunId ? <Badge variant="info"><Loader2 className="animate-spin" /> {t('jit.jitRequests.beingRevoked')}</Badge> : <JitStatusBadge status={r.status} />}
         </div>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-xs text-muted-foreground">Verbleibend</p>
-            <p className={cn('font-mono text-3xl font-semibold tracking-tight tabular', low ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')} aria-label="Verbleibende Zeit" data-testid="jit-countdown">
+            <p className="text-xs text-muted-foreground">{t('jit.jitRequests.remaining')}</p>
+            <p className={cn('font-mono text-3xl font-semibold tracking-tight tabular', low ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')} aria-label={t('jit.jitRequests.remainingTime')} data-testid="jit-countdown">
               {countdown}
             </p>
           </div>
           <div className="text-right text-xs text-muted-foreground">
-            <p className="flex items-center justify-end gap-1"><Clock className="size-3.5" /> bis {formatDateTime(r.expiresAt)}</p>
+            <p className="flex items-center justify-end gap-1"><Clock className="size-3.5" /> {t('jit.jitRequests.until')} {formatDateTime(r.expiresAt)}</p>
             {r.dc && <p className="font-mono">{r.dc}</p>}
           </div>
         </div>
@@ -256,8 +260,8 @@ function ActiveCard({ r, now }: { r: JitRequest; now: number }) {
         </div>
         <Facts r={r} now={now} />
         <p className="text-xs text-muted-foreground">
-          {r.decidedBy ? <>Freigegeben von <span className="text-foreground">{r.decidedBy}</span></> : 'Ohne Freigabe erteilt'}
-          {r.runId && <> · <Link to={`/laeufe/${r.runId}`} className="hover:underline">Lauf #{r.runId}</Link></>}
+          {r.decidedBy ? <>{t('jit.jitRequests.approvedBy')} <span className="text-foreground">{r.decidedBy}</span></> : t('jit.jitRequests.grantedWithoutApproval2')}
+          {r.runId && <> · <Link to={`/laeufe/${r.runId}`} className="hover:underline">{t('jit.jitRequests.run')}{r.runId}</Link></>}
         </p>
         {r.message && <p className="rounded-md border border-rose-500/30 bg-rose-500/5 px-3 py-1.5 text-xs text-rose-800 dark:text-rose-200">{r.message}</p>}
         {r.canRevoke && (
@@ -267,16 +271,16 @@ function ActiveCard({ r, now }: { r: JitRequest; now: number }) {
             loading={revoke.isPending}
             onClick={async () => {
               if (await confirm({
-                title: `Zugriff #${r.id} vorzeitig entziehen?`,
-                description: `${r.memberAccount} wird sofort aus ${r.groupDisplayName} entfernt. Bereits ausgestellte Kerberos-Tickets bleiben bis zu ihrem Ablauf gültig.`,
-                confirmText: 'Entziehen',
-                cancelText: 'Behalten',
+                title: t('jit.jitRequests.revokeAccessIdEarly', { id: r.id }),
+                description: t('jit.jitRequests.memberaccountIsRemovedFromGroupdisplayname', { memberAccount: r.memberAccount, groupDisplayName: r.groupDisplayName }),
+                confirmText: t('jit.jitRequests.revoke'),
+                cancelText: t('jit.jitRequests.keep'),
                 destructive: true,
               }))
                 revoke.mutate()
             }}
           >
-            {!revoke.isPending && <UserX />} Entziehen
+            {!revoke.isPending && <UserX />} {t('jit.jitRequests.revoke')}
           </Button>
         )}
       </div>
@@ -291,7 +295,7 @@ export function HistoryList({ items }: { items: JitRequest[] }) {
   if (items.length === 0)
     return (
       <Card>
-        <EmptyState icon={<History />} title="Noch kein Verlauf" description="Abgelaufene, entzogene, abgelehnte und fehlgeschlagene Anträge erscheinen hier." />
+        <EmptyState icon={<History />} title={t('jit.jitRequests.noHistoryYet')} description={t('jit.jitRequests.expiredRevokedRejectedAndFailed')} />
       </Card>
     )
   return (
@@ -312,10 +316,10 @@ export function HistoryList({ items }: { items: JitRequest[] }) {
 
 function outcome(r: JitRequest): string {
   const parts: string[] = []
-  if (r.decidedBy) parts.push(`${r.status === 'Rejected' ? 'Abgelehnt' : 'Freigegeben'} von ${r.decidedBy}${r.decisionComment ? `: „${r.decisionComment}“` : ''}`)
-  if (r.grantedAt) parts.push(`erteilt ${formatDateTime(r.grantedAt)}`)
-  if (r.status === 'Expired' && r.expiresAt) parts.push(`abgelaufen ${formatDateTime(r.expiresAt)}`)
-  if (r.status === 'Revoked' && r.revokedAt) parts.push(`entzogen ${formatDateTime(r.revokedAt)}${r.revokedBy ? ` von ${r.revokedBy}` : ''}`)
+  if (r.decidedBy) parts.push(`${r.status === 'Rejected' ? t('jit.jitRequests.rejected') : t('jit.jitRequests.approved')} von ${r.decidedBy}${r.decisionComment ? `: „${r.decisionComment}“` : ''}`)
+  if (r.grantedAt) parts.push(t('jit.jitRequests.grantedAt', { at: formatDateTime(r.grantedAt) }))
+  if (r.status === 'Expired' && r.expiresAt) parts.push(t('jit.jitRequests.expiredAt', { at: formatDateTime(r.expiresAt) }))
+  if (r.status === 'Revoked' && r.revokedAt) parts.push(r.revokedBy ? t('jit.jitRequests.revokedAtBy', { at: formatDateTime(r.revokedAt), by: r.revokedBy }) : t('jit.jitRequests.revokedAt', { at: formatDateTime(r.revokedAt) }))
   if (r.message) parts.push(r.message)
-  return parts.join(' · ') || `Beantragt ${formatDateTime(r.requestedAt)}`
+  return parts.join(' · ') || t('jit.jitRequests.requestedRequestedat', { requestedAt: formatDateTime(r.requestedAt) })
 }

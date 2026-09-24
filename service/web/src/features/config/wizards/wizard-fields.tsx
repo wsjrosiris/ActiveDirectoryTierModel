@@ -24,14 +24,14 @@ export const RIGHT_LABELS: Record<string, string> = {
   Self: 'Validierte Schreibvorgänge',
 }
 
-export function TierPicker({ id, value, onChange, allowed = [0, 1, 2] }: { id?: string; value: TierNum; onChange: (t: TierNum) => void; allowed?: TierNum[] }) {
+export function TierPicker({ id, value, onChange, allowed = [0, 1, 2] }: { id?: string; value: TierNum; onChange: (tt: TierNum) => void; allowed?: TierNum[] }) {
   return (
     <div id={id}>
       <Segmented
         aria-label="Tier"
         value={String(value) as '0' | '1' | '2'}
         onValueChange={(v) => onChange(Number(v) as TierNum)}
-        options={allowed.map((t) => ({ value: String(t) as '0' | '1' | '2', label: `Tier ${t}`, icon: <TierDot tier={t} /> }))}
+        options={allowed.map((tt) => ({ value: String(tt) as '0' | '1' | '2', label: `Tier ${tt}`, icon: <TierDot tier={tt} /> }))}
       />
     </div>
   )
@@ -51,15 +51,15 @@ export function RightsChips({ rights, className }: { rights: string[]; className
 }
 
 /** One ACL entry as a compact, readable line: object type · inheritance, then rights chips. */
-export function AclTemplateLine({ t, allow = true }: { t: AclTemplate; allow?: boolean }) {
+export function AclTemplateLine({ t: tt, allow = true }: { t: AclTemplate; allow?: boolean }) {
   return (
     <div className="grid gap-1.5">
       <p className="text-[12px] text-muted-foreground">
         <span className={cn('font-medium', allow ? 'text-foreground' : 'text-destructive')}>{allow ? 'Zulassen' : 'Verweigern'}</span> auf{' '}
-        <span className="font-medium text-foreground">{objectTypeText(t.objecttype)}</span>
-        {t.inheritedObjectType && <> (nur {objectTypeText(t.inheritedObjectType)})</>} · {INHERITANCE_LABELS[t.activeDirectorysecurityinheritance] ?? t.activeDirectorysecurityinheritance}
+        <span className="font-medium text-foreground">{objectTypeText(tt.objecttype)}</span>
+        {tt.inheritedObjectType && <> (nur {objectTypeText(tt.inheritedObjectType)})</>} · {INHERITANCE_LABELS[tt.activeDirectorysecurityinheritance] ?? tt.activeDirectorysecurityinheritance}
       </p>
-      <RightsChips rights={t.activedirectoryrights} />
+      <RightsChips rights={tt.activedirectoryrights} />
     </div>
   )
 }

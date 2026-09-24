@@ -36,6 +36,7 @@ import { Page, PageHeader } from '@/components/shared/page-header'
 import { RequireAuth } from '@/features/auth/auth'
 import { cn, formatDateShort } from '@/lib/utils'
 import { domainsQueryKey, useDomains } from './domain-context'
+import { t } from '@/i18n'
 
 export function Component() {
   return (
@@ -65,16 +66,14 @@ function DomainsPage() {
     <Page>
       <PageHeader
         icon={<Network />}
-        title="Domänen"
-        description="Active-Directory-Domänen, die dieser Dienst verwaltet – jede mit eigener Soll-Konfiguration, eigenen Läufen und eigener Überwachung."
-        actions={<Button onClick={() => setEdit('new')}><Plus /> Domäne anlegen</Button>}
+        title={t('domains.domains.domains')}
+        description={t('domains.domains.activeDirectoryDomainsManagedBy')}
+        actions={<Button onClick={() => setEdit('new')}><Plus /> {t('domains.domains.createDomain')}</Button>}
       />
       <div className="mb-4 flex items-start gap-2.5 rounded-lg border bg-muted/40 px-3.5 py-3 text-[13px] text-muted-foreground">
         <Info className="mt-0.5 size-4 shrink-0" />
         <p>
-          Benutzer, Rollen, Benachrichtigungen, API-Tokens, Wartungsfenster und Einstellungen gelten für alle Domänen. Das Dienstkonto braucht in jeder
-          Domäne die nötigen Rechte – liegt eine Domäne in einer anderen Gesamtstruktur, ist dafür eine Vertrauensstellung nötig. Ein eigenes Dienstkonto
-          je Gesamtstruktur wird nicht unterstützt.
+          {t('domains.domains.usersRolesNotificationsApiTokens')}
         </p>
       </div>
       {q.isLoading && !list.length ? (
@@ -84,23 +83,23 @@ function DomainsPage() {
           <CardHeader>
             <div className="flex items-center gap-2">
               <Globe className="size-4 text-muted-foreground" />
-              <CardTitle>Verwaltete Domänen</CardTitle>
+              <CardTitle>{t('domains.domains.managedDomains')}</CardTitle>
             </div>
             <CardDescription>
-              Die Standard-Domäne gilt für Skripte und Integrationen, die keine Domäne angeben (Header <span className="font-mono text-xs">X-TierModel-Domain</span>).
+              {t('domains.domains.theDefaultDomainAppliesTo')} <span className="font-mono text-xs">X-TierModel-Domain</span>).
             </CardDescription>
           </CardHeader>
           {list.length === 0 ? (
-            <EmptyState compact icon={<Network />} title="Keine Domänen" />
+            <EmptyState compact icon={<Network />} title={t('domains.domains.noDomains')} />
           ) : (
             <Table>
               <THead>
                 <TR>
-                  <TH>Domäne</TH>
-                  <TH className="hidden md:table-cell">Domänencontroller</TH>
-                  <TH className="hidden lg:table-cell">ADML</TH>
-                  <TH className="w-28">Status</TH>
-                  <TH className="w-10"><span className="sr-only">Aktionen</span></TH>
+                  <TH>{t('domains.domains.domain')}</TH>
+                  <TH className="hidden md:table-cell">{t('domains.domains.domainController')}</TH>
+                  <TH className="hidden lg:table-cell">{t('domains.domains.adml')}</TH>
+                  <TH className="w-28">{t('common.status')}</TH>
+                  <TH className="w-10"><span className="sr-only">{t('common.actions')}</span></TH>
                 </TR>
               </THead>
               <TBody>
@@ -124,14 +123,14 @@ function DomainRow({ domain: d, isCurrent, onEdit }: { domain: Domain; isCurrent
   const remove = useMutation({
     mutationFn: () => domainsApi.remove(d.id),
     onSuccess: () => {
-      toast.success(`Domäne „${d.displayName}“ gelöscht`)
+      toast.success(t('domains.domains.domainDisplaynameDeleted', { displayName: d.displayName }))
       qc.invalidateQueries({ queryKey: domainsQueryKey })
     },
   })
   const disable = useMutation({
     mutationFn: () => domainsApi.update(d.id, { ...toInput(d), enabled: !d.enabled }),
     onSuccess: (u) => {
-      toast.success(u.enabled ? `„${u.displayName}“ aktiviert` : `„${u.displayName}“ deaktiviert`)
+      toast.success(u.enabled ? t('domains.domains.displaynameEnabled', { displayName: u.displayName }) : t('domains.domains.displaynameDisabled', { displayName: u.displayName }))
       qc.invalidateQueries({ queryKey: domainsQueryKey })
     },
   })
@@ -139,15 +138,15 @@ function DomainRow({ domain: d, isCurrent, onEdit }: { domain: Domain; isCurrent
   const askDelete = async () => {
     const check = await domainsApi.deletion(d.id)
     if (check.canDelete) {
-      if (await confirm({ title: `Domäne „${d.displayName}“ löschen?`, description: 'Die (unveränderte) Beispielkonfiguration der Domäne wird entfernt.', confirmText: 'Löschen', destructive: true }))
+      if (await confirm({ title: t('domains.domains.deleteDomainDisplayname', { displayName: d.displayName }), description: t('domains.domains.theUnchangedSampleConfigurationOf'), confirmText: t('common.delete'), destructive: true }))
         remove.mutate()
       return
     }
     if (!d.enabled || d.isDefault) {
-      await confirm({ title: 'Löschen nicht möglich', description: check.reason, confirmText: 'Verstanden' })
+      await confirm({ title: t('domains.domains.deletionNotPossible'), description: check.reason, confirmText: t('domains.domains.gotIt') })
       return
     }
-    if (await confirm({ title: 'Löschen nicht möglich', description: `${check.reason} Stattdessen deaktivieren? Läufe und Protokoll bleiben lesbar.`, confirmText: 'Deaktivieren' }))
+    if (await confirm({ title: t('domains.domains.deletionNotPossible'), description: t('domains.domains.reasonDisableInsteadRunsAnd', { reason: check.reason }), confirmText: t('domains.domains.disable') }))
       disable.mutate()
   }
 
@@ -161,12 +160,12 @@ function DomainRow({ domain: d, isCurrent, onEdit }: { domain: Domain; isCurrent
           <div className="grid min-w-0">
             <span className="flex min-w-0 flex-wrap items-center gap-1.5">
               <span className="truncate font-medium text-foreground">{d.displayName}</span>
-              {isCurrent && <Badge variant="info">Aktuell</Badge>}
+              {isCurrent && <Badge variant="info">{t('domains.domains.current')}</Badge>}
             </span>
             <span className="truncate text-xs text-muted-foreground">
-              {d.dnsName || 'DNS-Name nicht hinterlegt'} · <span className="font-mono">{d.key}</span>
+              {d.dnsName || t('domains.domains.dnsNameNotSet')} · <span className="font-mono">{d.key}</span>
             </span>
-            <span className="truncate text-xs text-muted-foreground md:hidden">{d.preferredDc || 'kein Standard-DC'}</span>
+            <span className="truncate text-xs text-muted-foreground md:hidden">{d.preferredDc || t('domains.domains.noDefaultDc')}</span>
           </div>
         </div>
       </TD>
@@ -176,27 +175,27 @@ function DomainRow({ domain: d, isCurrent, onEdit }: { domain: Domain; isCurrent
       <TD className="hidden text-[13px] lg:table-cell">{d.admlLanguage}</TD>
       <TD>
         <div className="flex flex-wrap gap-1">
-          {d.isDefault && <Badge variant="default"><Star /> Standard</Badge>}
-          {d.enabled ? !d.isDefault && <Badge variant="success">Aktiv</Badge> : <Badge variant="muted">Deaktiviert</Badge>}
+          {d.isDefault && <Badge variant="default"><Star /> {t('domains.domains.default')}</Badge>}
+          {d.enabled ? !d.isDefault && <Badge variant="success">{t('common.active')}</Badge> : <Badge variant="muted">{t('domains.domains.disabled')}</Badge>}
         </div>
       </TD>
       <TD>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-xs" aria-label={`Aktionen für ${d.displayName}`}><MoreHorizontal /></Button>
+            <Button variant="ghost" size="icon-xs" aria-label={t('domains.domains.actionsForDisplayname', { displayName: d.displayName })}><MoreHorizontal /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={onEdit}><Pencil /> Bearbeiten</DropdownMenuItem>
+            <DropdownMenuItem onSelect={onEdit}><Pencil /> {t('common.edit')}</DropdownMenuItem>
             {d.enabled && !isCurrent && (
-              <DropdownMenuItem onSelect={() => void switchTo(d.key)}><ArrowRightLeft /> Zu dieser Domäne wechseln</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void switchTo(d.key)}><ArrowRightLeft /> {t('domains.domains.switchToThisDomain')}</DropdownMenuItem>
             )}
             {!d.isDefault && (
-              <DropdownMenuItem onSelect={() => disable.mutate()}><Power /> {d.enabled ? 'Deaktivieren' : 'Aktivieren'}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => disable.mutate()}><Power /> {d.enabled ? t('domains.domains.disable') : t('domains.domains.enable')}</DropdownMenuItem>
             )}
             {!d.isDefault && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem destructive onSelect={() => void askDelete()}><Trash2 /> Löschen …</DropdownMenuItem>
+                <DropdownMenuItem destructive onSelect={() => void askDelete()}><Trash2 /> {t('domains.domains.delete')}</DropdownMenuItem>
               </>
             )}
           </DropdownMenuContent>
@@ -254,9 +253,9 @@ function DomainSheet({ value, onClose }: { value: Domain | 'new' | null; onClose
 
   const dcOptions = React.useMemo(() => {
     const map = new Map<string, { value: string; hint?: string }>()
-    for (const dc of check?.domain?.domainControllers ?? []) map.set(dc.name.toLowerCase(), { value: dc.name, hint: dc.site ? `Standort ${dc.site}` : undefined })
-    for (const dc of dcs.data?.items ?? []) map.set(dc.name.toLowerCase(), { value: dc.name, hint: dc.site ? `Standort ${dc.site}` : undefined })
-    for (const dc of dcs.data?.recent ?? []) if (!map.has(dc.toLowerCase())) map.set(dc.toLowerCase(), { value: dc, hint: 'zuletzt verwendet' })
+    for (const dc of check?.domain?.domainControllers ?? []) map.set(dc.name.toLowerCase(), { value: dc.name, hint: dc.site ? t('domains.domains.siteSite', { site: dc.site }) : undefined })
+    for (const dc of dcs.data?.items ?? []) map.set(dc.name.toLowerCase(), { value: dc.name, hint: dc.site ? t('domains.domains.siteSite', { site: dc.site }) : undefined })
+    for (const dc of dcs.data?.recent ?? []) if (!map.has(dc.toLowerCase())) map.set(dc.toLowerCase(), { value: dc, hint: t('domains.domains.lastUsed') })
     return [...map.values()]
   }, [check, dcs.data])
 
@@ -265,10 +264,10 @@ function DomainSheet({ value, onClose }: { value: Domain | 'new' | null; onClose
     return [...langs].sort().map((l) => ({ value: l }))
   }, [templates.data])
 
-  const keyError = !form.key ? 'Kurzname angeben.' : !KEY_PATTERN.test(form.key) ? 'Nur Kleinbuchstaben, Ziffern und Bindestriche.' : RESERVED.includes(form.key) ? `„${form.key}“ ist reserviert.` : null
-  const dnsError = form.dnsName && (!HOST_PATTERN.test(form.dnsName) || !form.dnsName.includes('.')) ? 'Vollständigen DNS-Namen angeben, z. B. fabrikam.com.' : null
-  const dcError = form.preferredDc && !HOST_PATTERN.test(form.preferredDc) ? 'Ungültiger Hostname.' : null
-  const error = !form.displayName.trim() ? 'Anzeigename ist erforderlich.' : keyError ?? dnsError ?? dcError ?? (!LANGUAGE_PATTERN.test(form.admlLanguage) ? 'ADML-Sprache im Format xx-XX.' : null)
+  const keyError = !form.key ? t('domains.domains.enterAShortName') : !KEY_PATTERN.test(form.key) ? t('domains.domains.onlyLowercaseLettersDigitsAnd') : RESERVED.includes(form.key) ? t('domains.domains.keyIsReserved', { key: form.key }) : null
+  const dnsError = form.dnsName && (!HOST_PATTERN.test(form.dnsName) || !form.dnsName.includes('.')) ? t('domains.domains.enterTheFullDnsName') : null
+  const dcError = form.preferredDc && !HOST_PATTERN.test(form.preferredDc) ? t('domains.domains.invalidHostName') : null
+  const error = !form.displayName.trim() ? t('domains.domains.displayNameIsRequired') : keyError ?? dnsError ?? dcError ?? (!LANGUAGE_PATTERN.test(form.admlLanguage) ? t('domains.domains.admlLanguageInTheFormat') : null)
   const fieldError = (k: string) => serverErrors[k]?.[0]
 
   const save = useMutation({
@@ -280,17 +279,17 @@ function DomainSheet({ value, onClose }: { value: Domain | 'new' | null; onClose
     onSuccess: async (d) => {
       await qc.invalidateQueries({ queryKey: domainsQueryKey })
       if (isNew) {
-        toast.success(`Domäne „${d.displayName}“ angelegt`, {
-          description: 'Sie startet mit der Beispielkonfiguration – der Einrichtungsassistent passt sie an.',
-          action: { label: 'Wechseln', onClick: () => void switchTo(d.key) },
+        toast.success(t('domains.domains.domainDisplaynameCreated', { displayName: d.displayName }), {
+          description: t('domains.domains.itStartsWithTheSample'),
+          action: { label: t('domains.domains.switch'), onClick: () => void switchTo(d.key) },
           duration: 8000,
         })
-      } else toast.success('Domäne gespeichert')
+      } else toast.success(t('domains.domains.domainSaved'))
       onClose()
     },
     onError: (e) => {
       if (e instanceof ApiError && e.errors) setServerErrors(e.errors)
-      else toast.error('Speichern fehlgeschlagen', { description: e instanceof ApiError ? e.userMessage : String(e) })
+      else toast.error(t('domains.domains.savingFailed'), { description: e instanceof ApiError ? e.userMessage : String(e) })
     },
   })
 
@@ -314,24 +313,24 @@ function DomainSheet({ value, onClose }: { value: Domain | 'new' | null; onClose
       <SheetContent className="sm:max-w-xl">
         <form className="flex h-full flex-col" onSubmit={(e) => { e.preventDefault(); if (!error) save.mutate() }}>
           <SheetHeader>
-            <SheetTitle>{isNew ? 'Neue Domäne' : `Domäne „${existing?.displayName}“ bearbeiten`}</SheetTitle>
+            <SheetTitle>{isNew ? t('domains.domains.newDomain') : t('domains.domains.editDomainDisplayname', { displayName: existing?.displayName })}</SheetTitle>
             <SheetDescription>
               {isNew
-                ? 'Die Domäne erhält eine eigene Soll-Konfiguration (zunächst die mitgelieferte Beispielkonfiguration), eigene Läufe und eigene Überwachung.'
-                : 'Änderungen am Domänencontroller gelten für neue Läufe; laufende und geplante Läufe behalten ihren DC.'}
+                ? t('domains.domains.theDomainGetsItsOwn')
+                : t('domains.domains.changesToTheDomainController')}
             </SheetDescription>
           </SheetHeader>
           <SheetBody className="grid content-start gap-5">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Anzeigename" htmlFor="dm-name" required error={fieldError('displayName')}>
-                <Input id="dm-name" value={form.displayName} onChange={(e) => set({ displayName: e.target.value })} placeholder="z. B. Fabrikam Produktion" maxLength={100} autoFocus={isNew} />
+              <Field label={t('domains.domains.displayName')} htmlFor="dm-name" required error={fieldError('displayName')}>
+                <Input id="dm-name" value={form.displayName} onChange={(e) => set({ displayName: e.target.value })} placeholder={t('domains.domains.eGFabrikamProduction')} maxLength={100} autoFocus={isNew} />
               </Field>
               <Field
-                label="Kurzname"
+                label={t('domains.domains.shortName')}
                 htmlFor="dm-key"
                 required
                 error={fieldError('key') ?? (form.key && keyError ? keyError : undefined)}
-                hint={!isNew && existing?.key !== form.key ? 'Skripte mit -Domain und die Git-Ablage verwenden den Kurznamen.' : 'Für Skripte (-Domain) und die Git-Ablage.'}
+                hint={!isNew && existing?.key !== form.key ? t('domains.domains.scriptsWithDomainAndThe') : t('domains.domains.forScriptsDomainAndThe')}
               >
                 <Input
                   id="dm-key"
@@ -344,60 +343,60 @@ function DomainSheet({ value, onClose }: { value: Domain | 'new' | null; onClose
                 />
               </Field>
             </div>
-            <Field label="DNS-Name der Domäne" htmlFor="dm-dns" error={fieldError('dnsName') ?? dnsError ?? undefined} hint="Wird aus dem Domänencontroller abgeleitet, wenn leer.">
+            <Field label={t('domains.domains.dnsNameOfTheDomain')} htmlFor="dm-dns" error={fieldError('dnsName') ?? dnsError ?? undefined} hint={t('domains.domains.derivedFromTheDomainController')}>
               <Input id="dm-dns" value={form.dnsName} onChange={(e) => set({ dnsName: e.target.value.trim() })} placeholder="fabrikam.com" className="font-mono" />
             </Field>
             <Field
-              label="Bevorzugter Domänencontroller"
+              label={t('domains.domains.preferredDomainController')}
               htmlFor="dm-dc"
               error={fieldError('preferredDc') ?? dcError ?? undefined}
-              hint="Vorschlag für Läufe dieser Domäne und Server der Ist-Ansicht. Die Skripte ermitteln die Domäne über diesen DC."
+              hint={t('domains.domains.suggestedForRunsOfThis')}
             >
               <Combobox
                 id="dm-dc"
                 value={form.preferredDc}
                 onChange={(v) => set({ preferredDc: v })}
                 options={dcOptions}
-                placeholder="DC wählen oder eingeben …"
-                searchPlaceholder="DC suchen oder vollständigen Namen eingeben …"
-                emptyText={isNew ? 'Mit „Verbindung prüfen“ werden die DCs der Domäne gesucht.' : 'Keine DCs gefunden'}
+                placeholder={t('domains.domains.selectOrEnterDc')}
+                searchPlaceholder={t('domains.domains.searchDcOrEnterFull')}
+                emptyText={isNew ? t('domains.domains.testConnectionSearchesTheDomain') : t('domains.domains.noDcsFound')}
                 loading={dcs.isFetching}
                 mono
-                validateCustom={(v) => (HOST_PATTERN.test(v) ? null : 'Ungültiger Hostname')}
+                validateCustom={(v) => (HOST_PATTERN.test(v) ? null : t('domains.domains.invalidHostName2'))}
               />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="ADML-Sprache" htmlFor="dm-lang" required error={fieldError('admlLanguage')} hint="Standard für Läufe dieser Domäne.">
+              <Field label={t('domains.domains.admlLanguage')} htmlFor="dm-lang" required error={fieldError('admlLanguage')} hint={t('domains.domains.defaultForRunsOfThis')}>
                 <Combobox
                   id="dm-lang"
                   value={form.admlLanguage}
                   onChange={(v) => set({ admlLanguage: v })}
                   options={languageOptions}
-                  searchPlaceholder="Sprache suchen, z. B. de-DE …"
-                  validateCustom={(v) => (LANGUAGE_PATTERN.test(v) ? null : 'Format xx-XX')}
+                  searchPlaceholder={t('domains.domains.searchLanguageEGDe')}
+                  validateCustom={(v) => (LANGUAGE_PATTERN.test(v) ? null : t('domains.domains.formatXxXx'))}
                 />
               </Field>
               <div className="grid content-start gap-3 pt-0.5">
                 <label htmlFor="dm-enabled" className="flex items-center gap-3 text-[13px]">
                   <Switch id="dm-enabled" checked={form.enabled} disabled={existing?.isDefault} onCheckedChange={(v) => set({ enabled: v, isDefault: v ? form.isDefault : false })} />
-                  <span>{form.enabled ? 'Aktiv' : 'Deaktiviert (nur lesbar)'}</span>
+                  <span>{form.enabled ? t('common.active') : t('domains.domains.disabledReadOnly')}</span>
                 </label>
                 <label htmlFor="dm-default" className="flex items-center gap-3 text-[13px]">
                   <Switch id="dm-default" checked={form.isDefault} disabled={existing?.isDefault || !form.enabled} onCheckedChange={(v) => set({ isDefault: v })} />
-                  <span>Standard-Domäne</span>
+                  <span>{t('domains.domains.defaultDomain')}</span>
                 </label>
                 {fieldError('enabled') && <p className="text-xs text-destructive">{fieldError('enabled')}</p>}
                 {fieldError('isDefault') && <p className="text-xs text-destructive">{fieldError('isDefault')}</p>}
               </div>
             </div>
-            <Field label="Notizen" htmlFor="dm-notes" error={fieldError('notes')}>
-              <Textarea id="dm-notes" value={form.notes ?? ''} onChange={(e) => set({ notes: e.target.value })} placeholder="z. B. Ansprechpartner, Vertrauensstellung, Besonderheiten" maxLength={1000} rows={3} />
+            <Field label={t('domains.domains.notes')} htmlFor="dm-notes" error={fieldError('notes')}>
+              <Textarea id="dm-notes" value={form.notes ?? ''} onChange={(e) => set({ notes: e.target.value })} placeholder={t('domains.domains.eGContactPersonTrust')} maxLength={1000} rows={3} />
             </Field>
 
             <div className="grid gap-3 rounded-lg border p-3.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-[13px] font-medium">
-                  <PlugZap className="size-4 text-muted-foreground" /> Verbindung
+                  <PlugZap className="size-4 text-muted-foreground" /> {t('domains.domains.connection')}
                 </div>
                 <Button
                   type="button"
@@ -407,11 +406,11 @@ function DomainSheet({ value, onClose }: { value: Domain | 'new' | null; onClose
                   loading={probe.isPending}
                   disabled={!form.dnsName.trim() && !form.preferredDc.trim()}
                 >
-                  <PlugZap /> Verbindung prüfen
+                  <PlugZap /> {t('domains.domains.testConnection')}
                 </Button>
               </div>
               {!check ? (
-                <p className="text-xs text-muted-foreground">Liest Domäne, Gesamtstruktur und Domänencontroller über den angegebenen DC bzw. DNS-Namen – mit dem Dienstkonto, nur lesend.</p>
+                <p className="text-xs text-muted-foreground">{t('domains.domains.readsDomainForestAndDomain')}</p>
               ) : (
                 <div className={cn('grid gap-2 rounded-md px-3 py-2.5 text-[13px]', check.ok ? 'bg-emerald-500/10' : 'bg-rose-500/10')}>
                   <p className={cn('flex items-start gap-2', check.ok ? 'text-emerald-800 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300')}>
@@ -421,10 +420,10 @@ function DomainSheet({ value, onClose }: { value: Domain | 'new' | null; onClose
                   {check.domain && (
                     <>
                       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
-                        <dt className="text-muted-foreground">NetBIOS</dt><dd className="min-w-0 truncate font-mono">{check.domain.netBiosName}</dd>
-                        <dt className="text-muted-foreground">Gesamtstruktur</dt><dd className="min-w-0 truncate font-mono">{check.domain.forestName}</dd>
-                        <dt className="text-muted-foreground">Funktionsebene</dt><dd className="min-w-0 truncate">{check.domain.domainFunctionalLevel}</dd>
-                        <dt className="text-muted-foreground">DCs</dt>
+                        <dt className="text-muted-foreground">{t('domains.domains.netbios')}</dt><dd className="min-w-0 truncate font-mono">{check.domain.netBiosName}</dd>
+                        <dt className="text-muted-foreground">{t('domains.domains.forest')}</dt><dd className="min-w-0 truncate font-mono">{check.domain.forestName}</dd>
+                        <dt className="text-muted-foreground">{t('domains.domains.functionalLevel')}</dt><dd className="min-w-0 truncate">{check.domain.domainFunctionalLevel}</dd>
+                        <dt className="text-muted-foreground">{t('domains.domains.dcs')}</dt>
                         <dd className="flex min-w-0 flex-wrap gap-1">
                           {check.domain.domainControllers.map((dc) => (
                             <span key={dc.name} className="inline-flex items-center gap-1 rounded bg-background/70 px-1.5 py-0.5 font-mono text-[11px]">
@@ -434,22 +433,22 @@ function DomainSheet({ value, onClose }: { value: Domain | 'new' | null; onClose
                         </dd>
                       </dl>
                       {(!form.dnsName || !form.preferredDc || !form.displayName) && (
-                        <Button type="button" size="xs" variant="outline" className="justify-self-start" onClick={adopt}>Angaben übernehmen</Button>
+                        <Button type="button" size="xs" variant="outline" className="justify-self-start" onClick={adopt}>{t('domains.domains.applyValues')}</Button>
                       )}
                     </>
                   )}
-                  <p className="text-[11px] text-muted-foreground">Quelle: {check.source}</p>
+                  <p className="text-[11px] text-muted-foreground">{t('domains.domains.source')} {check.source}</p>
                 </div>
               )}
             </div>
             {existing && (
-              <p className="text-xs text-muted-foreground">Angelegt am {formatDateShort(existing.createdAt)} · Nummer {existing.id}</p>
+              <p className="text-xs text-muted-foreground">{t('domains.domains.createdOn')} {formatDateShort(existing.createdAt)} {t('domains.domains.number')} {existing.id}</p>
             )}
           </SheetBody>
           <SheetFooter>
             {error && <span className="mr-auto text-xs text-muted-foreground">{error}</span>}
-            <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
-            <Button type="submit" disabled={!!error} loading={save.isPending}>{isNew ? 'Anlegen' : 'Speichern'}</Button>
+            <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button type="submit" disabled={!!error} loading={save.isPending}>{isNew ? t('domains.domains.create') : t('common.save')}</Button>
           </SheetFooter>
         </form>
       </SheetContent>

@@ -5,6 +5,7 @@ import { api } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useCan } from '@/features/auth/auth'
+import { t } from '@/i18n'
 
 export const setupStateKey = ['setup', 'state'] as const
 
@@ -21,13 +22,13 @@ export function SetupCard() {
           <Sparkles className="size-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-semibold">Einrichtung abschließen</p>
+          <p className="text-[15px] font-semibold">{t('setup.setupCard.completeSetup')}</p>
           <p className="text-[13px] text-muted-foreground">
-            Die Konfiguration ist noch die mitgelieferte Vorlage. Der Assistent prüft die Domäne, passt das GPO-Namenspräfix an, übernimmt vorhandene OUs und startet die erste Planung.
+            {t('setup.setupCard.theConfigurationIsStillThe')}
           </p>
         </div>
         <Button asChild>
-          <Link to="/einrichtung">Assistent öffnen <ArrowRight /></Link>
+          <Link to="/einrichtung">{t('setup.setupCard.openAssistant')} <ArrowRight /></Link>
         </Button>
       </div>
     </Card>

@@ -102,8 +102,8 @@ function text(v: PlanDetailValue | undefined): string | null {
 
 function list(v: PlanDetailValue | undefined): string[] {
   if (Array.isArray(v)) return v
-  const t = text(v)
-  return t ? [t] : []
+  const tt = text(v)
+  return tt ? [tt] : []
 }
 
 function detail(a: PlanAction, ...keys: string[]): PlanDetailValue | undefined {

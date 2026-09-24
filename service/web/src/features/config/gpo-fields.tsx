@@ -47,8 +47,8 @@ export const GpoSuggestionsContext = React.createContext<GpoSuggestions>({ princ
 /** Collects principals already used anywhere in the section, offered as suggestions. */
 export function collectSuggestions(content: Obj | undefined): GpoSuggestions {
   const p = new Set<string>(), l = new Set<string>(), f = new Set<string>(), c = new Set<string>()
-  for (const t of Object.values((content?.gpos ?? {}) as Obj)) {
-    for (const g of [...(Array.isArray(t?.PostConfigureGpo) ? t.PostConfigureGpo : []), ...(Array.isArray(t?.ImportOnlyGpo) ? t.ImportOnlyGpo : [])]) {
+  for (const tt of Object.values((content?.gpos ?? {}) as Obj)) {
+    for (const g of [...(Array.isArray(tt?.PostConfigureGpo) ? tt.PostConfigureGpo : []), ...(Array.isArray(tt?.ImportOnlyGpo) ? tt.ImportOnlyGpo : [])]) {
       strings(g?.denyApplyGroupPolicy).forEach((x) => p.add(x))
       for (const r of Array.isArray(g?.userRightsAssignments) ? g.userRightsAssignments : []) {
         strings(r?.principals?.resolvableGroups).forEach((x) => p.add(x))

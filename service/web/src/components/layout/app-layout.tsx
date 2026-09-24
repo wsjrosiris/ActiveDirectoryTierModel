@@ -43,6 +43,7 @@ import { useDomains } from '@/features/domains/domain-context'
 import { DomainSwitcher } from '@/features/domains/domain-switcher'
 import { adminNav, mainNav, type NavItem } from './nav'
 import { CommandPalette, GlobalSearch } from './command-menu'
+import { t } from '@/i18n'
 
 export function useDashboardQuery() {
   return useQuery({ queryKey: ['dashboard'], queryFn: api.dashboard, refetchInterval: 15_000, meta: { silent: true } })
@@ -80,16 +81,16 @@ export function AppLayout() {
           <SidebarContent collapsed={collapsed} role={user.role} />
           {isDesktop && (
             <div className={cn('border-t p-2', collapsed && 'flex justify-center')}>
-              <Tooltip content={collapsed ? `Seitenleiste ausklappen (${modKey}+B)` : `Einklappen (${modKey}+B)`} side="right">
+              <Tooltip content={collapsed ? t('layout.appLayout.expandSidebarModkeyB', { modKey }) : t('layout.appLayout.collapseModkeyB', { modKey })} side="right">
                 <Button
                   variant="ghost"
                   size={collapsed ? 'icon-sm' : 'sm'}
                   className={cn('text-muted-foreground', !collapsed && 'w-full justify-start')}
                   onClick={() => setCollapsed(!collapsedPref)}
-                  aria-label={collapsed ? 'Seitenleiste ausklappen' : 'Seitenleiste einklappen'}
+                  aria-label={collapsed ? t('layout.appLayout.expandSidebar') : t('layout.appLayout.collapseSidebar')}
                 >
                   <ChevronsLeft className={cn('transition-transform', collapsed && 'rotate-180')} />
-                  {!collapsed && 'Einklappen'}
+                  {!collapsed && t('layout.appLayout.collapse')}
                 </Button>
               </Tooltip>
             </div>
@@ -100,7 +101,7 @@ export function AppLayout() {
       {!isTablet && (
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetContent className="left-0 right-auto w-72 max-w-[85vw] border-r border-l-0 bg-sidebar p-0 data-[state=open]:animate-overlay-in">
-            <SheetTitle className="sr-only">Navigation</SheetTitle>
+            <SheetTitle className="sr-only">{t('layout.appLayout.navigation')}</SheetTitle>
             <SidebarContent collapsed={false} role={user.role} />
           </SheetContent>
         </Sheet>
@@ -134,11 +135,11 @@ function SidebarContent({ collapsed, role }: { collapsed: boolean; role: import(
   return (
     <>
       <div className={cn('flex h-14 shrink-0 items-center border-b px-3.5', collapsed && 'justify-center px-0')}>
-        <NavLink to="/" className="rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Tier Model – Dashboard">
+        <NavLink to="/" className="rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={t('layout.appLayout.tierModelDashboard')}>
           <Wordmark collapsed={collapsed} />
         </NavLink>
       </div>
-      <nav className="flex-1 overflow-y-auto p-2" aria-label="Hauptnavigation">
+      <nav className="flex-1 overflow-y-auto p-2" aria-label={t('layout.appLayout.mainNavigation')}>
         <ul className="grid gap-0.5">
           {mainNav.map((item) => (
             <SidebarLink
@@ -147,13 +148,13 @@ function SidebarContent({ collapsed, role }: { collapsed: boolean; role: import(
               collapsed={collapsed}
               indicator={
                 item.match === '/konfiguration' && dirty ? (
-                  <span className="size-2 rounded-full bg-amber-500 ring-2 ring-sidebar" aria-label="Ungespeicherte Änderungen" />
+                  <span className="size-2 rounded-full bg-amber-500 ring-2 ring-sidebar" aria-label={t('layout.appLayout.unsavedChanges')} />
                 ) : item.to === '/laeufe' && collapsed && pending > 0 ? (
-                  <span className="size-2 rounded-full bg-amber-500 ring-2 ring-sidebar" aria-label={`${pending} Freigaben ausstehend`} />
+                  <span className="size-2 rounded-full bg-amber-500 ring-2 ring-sidebar" aria-label={t('layout.appLayout.approvalsPending', { count: pending })} />
                 ) : item.to === '/laeufe' && (active > 0 || pending > 0) ? (
                   <span className="flex items-center gap-1">
                     {pending > 0 && (
-                      <Tooltip content={`${pending} ${pending === 1 ? 'Freigabe' : 'Freigaben'} ausstehend`} side="right">
+                      <Tooltip content={t('layout.appLayout.approvalsPendingTooltip', { count: pending })} side="right">
                         <span className="inline-flex h-5 min-w-5 items-center justify-center gap-1 rounded-full bg-amber-500/15 px-1.5 text-[11px] font-semibold text-amber-800 dark:text-amber-300">
                           <Hourglass className="size-3" />
                           {pending}
@@ -175,7 +176,7 @@ function SidebarContent({ collapsed, role }: { collapsed: boolean; role: import(
         {admin.length > 0 && (
           <>
             <div className={cn('mt-5 mb-1.5 px-2.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase', collapsed && 'sr-only')}>
-              Administration
+              {t('layout.appLayout.administration')}
             </div>
             {collapsed && <div className="mx-2 my-3 h-px bg-border" aria-hidden />}
             <ul className="grid gap-0.5">
@@ -256,7 +257,7 @@ function Topbar({
   return (
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b sm:gap-3 bg-background/80 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:px-6">
       {showMenu && (
-        <Button variant="ghost" size="icon-sm" onClick={onMenu} aria-label="Navigation öffnen">
+        <Button variant="ghost" size="icon-sm" onClick={onMenu} aria-label={t('layout.appLayout.openNavigation')}>
           <Menu />
         </Button>
       )}
@@ -265,10 +266,10 @@ function Topbar({
         type="button"
         onClick={onSearch}
         className="group flex h-9 w-full min-w-0 max-w-md items-center gap-2 rounded-lg border bg-card px-3 text-sm text-muted-foreground shadow-xs transition-colors outline-none hover:border-input hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label="Suche öffnen"
+        aria-label={t('layout.appLayout.openSearch')}
       >
         <Search className="size-4" />
-        <span className="flex-1 truncate text-left">Suchen: OUs, Gruppen, ACLs, GPOs …</span>
+        <span className="flex-1 truncate text-left">{t('layout.appLayout.searchOusGroupsAclsGpos')}</span>
         <span className="hidden items-center gap-0.5 sm:flex">
           <Kbd>{modKey}</Kbd>
           <Kbd>K</Kbd>
@@ -277,19 +278,19 @@ function Topbar({
 
       <div className="ml-auto flex items-center gap-1.5">
         {pending > 0 && (
-          <Tooltip content={`${pending} ${pending === 1 ? 'Deploy wartet' : 'Deploys warten'} auf Freigabe`}>
+          <Tooltip content={t('layout.appLayout.deploymentsAwaitingApproval', { count: pending })}>
             <button
               type="button"
               onClick={() => navigate(pending === 1 ? `/laeufe/${data!.pendingApprovals[0].id}` : '/laeufe?status=AwaitingApproval')}
               className="hidden h-8 items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-500/15 sm:inline-flex dark:text-amber-300"
             >
               <Hourglass className="size-3.5" />
-              {pending} {pending === 1 ? 'Freigabe' : 'Freigaben'}
+              {t('layout.appLayout.approvals', { count: pending })}
             </button>
           </Tooltip>
         )}
         {(running > 0 || queued > 0) && (
-          <Tooltip content={`${running} laufend, ${queued} in Warteschlange`}>
+          <Tooltip content={t('layout.appLayout.runningRunningQueuedQueued', { running, queued })}>
             <button
               type="button"
               onClick={() => navigate('/laeufe')}
@@ -299,17 +300,17 @@ function Topbar({
                 <span className="absolute inline-flex size-full animate-ping rounded-full bg-sky-500 opacity-60" />
                 <span className="relative inline-flex size-2 rounded-full bg-sky-500" />
               </span>
-              {running > 0 ? `${running} läuft` : `${queued} wartend`}
+              {running > 0 ? t('layout.appLayout.runningRunning', { running }) : t('layout.appLayout.queuedCount', { queued })}
             </button>
           </Tooltip>
         )}
-        <Tooltip content={`Befehlspalette (${modKey}+Umschalt+P)`}>
-          <Button variant="ghost" size="icon-sm" onClick={onPalette} aria-label="Befehlspalette öffnen" className="text-muted-foreground">
+        <Tooltip content={t('layout.appLayout.commandPaletteModkeyShiftP', { modKey })}>
+          <Button variant="ghost" size="icon-sm" onClick={onPalette} aria-label={t('layout.appLayout.openCommandPalette')} className="text-muted-foreground">
             <Command />
           </Button>
         </Tooltip>
-        <Tooltip content={resolved === 'dark' ? 'Helles Design' : 'Dunkles Design'}>
-          <Button variant="ghost" size="icon-sm" onClick={toggle} aria-label="Design umschalten" className="text-muted-foreground">
+        <Tooltip content={resolved === 'dark' ? t('layout.appLayout.lightTheme') : t('layout.appLayout.darkTheme')}>
+          <Button variant="ghost" size="icon-sm" onClick={toggle} aria-label={t('layout.appLayout.toggleTheme')} className="text-muted-foreground">
             {resolved === 'dark' ? <Sun /> : <Moon />}
           </Button>
         </Tooltip>
@@ -318,7 +319,7 @@ function Topbar({
             <button
               type="button"
               className="ml-1 flex items-center gap-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-              aria-label="Benutzermenü"
+              aria-label={t('layout.appLayout.userMenu')}
             >
               <span className="grid size-8 place-content-center rounded-full bg-gradient-to-br from-slate-600 to-slate-800 text-xs font-semibold text-white ring-1 ring-border dark:from-slate-500 dark:to-slate-700">
                 {initials(user.displayName || user.username)}
@@ -333,26 +334,26 @@ function Topbar({
               </p>
             </div>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel>Darstellung</DropdownMenuLabel>
+            <DropdownMenuLabel>{t('layout.appLayout.appearance')}</DropdownMenuLabel>
             <DropdownMenuRadioGroup value={theme} onValueChange={(v) => setTheme(v as typeof theme)}>
-              <DropdownMenuRadioItem value="light"><Sun /> Hell</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="dark"><Moon /> Dunkel</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="system"><Laptop /> System</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="light"><Sun /> {t('layout.appLayout.light')}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="dark"><Moon /> {t('layout.appLayout.dark')}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="system"><Laptop /> {t('layout.appLayout.system')}</DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => navigate('/passwort-aendern')}>
-              <KeyRound /> Passwort ändern
+              <KeyRound /> {t('common.changePassword')}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => navigate('/api-tokens')}>
-              <KeySquare /> API-Tokens
+              <KeySquare /> {t('layout.appLayout.apiTokens')}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onPalette()}>
-              <Command /> Befehlspalette
+              <Command /> {t('layout.appLayout.commandPalette')}
               <DropdownMenuShortcut>{modKey}⇧P</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => logout()} destructive>
-              <LogOut /> Abmelden
+              <LogOut /> {t('common.signOut')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

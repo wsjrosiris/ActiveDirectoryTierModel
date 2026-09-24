@@ -31,11 +31,11 @@ function valueError(mode: Mode, v: string, aliasTargets?: Set<string>): string |
 function KeyInput({ value, onCommit, others, readOnly, label }: { value: string; onCommit: (v: string) => void; others: string[]; readOnly: boolean; label: string }) {
   const [text, setText] = React.useState(value)
   React.useEffect(() => setText(value), [value])
-  const t = text.trim()
-  const err = !t ? 'Name erforderlich' : t !== value && others.some((o) => o.toLowerCase() === t.toLowerCase()) ? 'Name bereits vorhanden' : null
+  const tt = text.trim()
+  const err = !tt ? 'Name erforderlich' : tt !== value && others.some((o) => o.toLowerCase() === tt.toLowerCase()) ? 'Name bereits vorhanden' : null
   const commit = () => {
     if (err) setText(value)
-    else if (t !== value) onCommit(t)
+    else if (tt !== value) onCommit(tt)
   }
   return (
     <div className="grid gap-1">

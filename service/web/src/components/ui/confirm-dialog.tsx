@@ -4,6 +4,7 @@ import { Button } from './button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './dialog'
 import { Input } from './input'
 import { cn } from '@/lib/utils'
+import { t } from '@/i18n'
 
 interface ConfirmOptions {
   title: string
@@ -69,7 +70,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               {opts.typeToConfirm && (
                 <div className={cn('grid gap-2', opts.destructive && 'sm:pl-12')}>
                   <label htmlFor="confirm-type" className="text-[13px] text-muted-foreground">
-                    Zur Bestätigung <span className="font-mono font-semibold text-foreground">{opts.typeToConfirm}</span> eingeben
+                    {t('ui.confirmDialog.type')} <span className="font-mono font-semibold text-foreground">{opts.typeToConfirm}</span> {t('ui.confirmDialog.toConfirm')}
                   </label>
                   <Input
                     id="confirm-type"
@@ -83,7 +84,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               )}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => close(false)}>
-                  {opts.cancelText ?? 'Abbrechen'}
+                  {opts.cancelText ?? t('common.cancel')}
                 </Button>
                 <Button
                   type="submit"
@@ -91,7 +92,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                   disabled={blocked}
                   autoFocus={!opts.typeToConfirm}
                 >
-                  {opts.confirmText ?? 'Bestätigen'}
+                  {opts.confirmText ?? t('ui.confirmDialog.confirm')}
                 </Button>
               </DialogFooter>
             </form>

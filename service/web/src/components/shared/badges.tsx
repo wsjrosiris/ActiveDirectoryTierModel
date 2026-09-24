@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { severityLabels, statusLabels } from '@/lib/labels'
 import { tierMeta, tierOf, type Tier } from '@/lib/tier'
 import { cn, formatDateShort } from '@/lib/utils'
+import { t } from '@/i18n'
 
 export function TierBadge({ tier, className, short }: { tier: Tier; className?: string; short?: boolean }) {
   if (tier === null) return null
@@ -51,7 +52,7 @@ export function RunStatusBadge({ status, className, scheduledFor }: { status: Ru
   return (
     <Badge variant={s.variant} className={className}>
       {s.icon}
-      {status === 'Scheduled' && scheduledFor ? `Geplant für ${formatDateShort(scheduledFor)}` : statusLabels[status]}
+      {status === 'Scheduled' && scheduledFor ? t('shared.badges.scheduledForScheduledfor', { scheduledFor: formatDateShort(scheduledFor) }) : statusLabels[status]}
     </Badge>
   )
 }
@@ -62,7 +63,7 @@ export function RunKindLabel({ run, className }: { run: Pick<RunSummary, 'kind' 
       <RunKindIcon kind={run.kind} />
       {runKindText(run)}
       {run.trigger === 'Schedule' && (
-        <CalendarClock className="size-3.5 text-muted-foreground" aria-label="Geplant" />
+        <CalendarClock className="size-3.5 text-muted-foreground" aria-label={t('shared.badges.scheduled')} />
       )}
     </span>
   )
@@ -70,8 +71,8 @@ export function RunKindLabel({ run, className }: { run: Pick<RunSummary, 'kind' 
 
 /** "Deploy", "Deploy (Plan)", "Audit" or "Überwachung". */
 export function runKindText(run: Pick<RunSummary, 'kind' | 'mode'> & { jitAction?: RunSummary['jitAction'] }) {
-  if (run.kind === 'Jit') return run.jitAction === 'Revoke' ? 'Befristeter Zugriff (Entzug)' : run.jitAction === 'Check' ? 'JIT-Voraussetzungen' : 'Befristeter Zugriff'
-  return run.kind === 'Deploy' ? (run.mode === 'Apply' ? 'Deploy' : 'Deploy (Plan)') : run.kind === 'Monitor' ? 'Überwachung' : 'Audit'
+  if (run.kind === 'Jit') return run.jitAction === 'Revoke' ? t('shared.badges.justInTimeAccessRevocation') : run.jitAction === 'Check' ? t('shared.badges.jitPrerequisites') : t('shared.badges.justInTimeAccess')
+  return run.kind === 'Deploy' ? (run.mode === 'Apply' ? t('shared.badges.deployment') : t('shared.badges.deploymentPlan')) : run.kind === 'Monitor' ? t('shared.badges.monitoring') : t('shared.badges.audit')
 }
 
 export function RunKindIcon({ kind, className }: { kind: RunKind; className?: string }) {
@@ -103,11 +104,11 @@ export function DriftBadge({ count, monitor }: { count: number | null; monitor?:
   if (count === 0)
     return (
       <Badge variant="success">
-        <CheckCircle2 /> {monitor ? 'Unauffällig' : 'Kein Drift'}
+        <CheckCircle2 /> {monitor ? t('shared.badges.noFindings') : t('shared.badges.noDrift')}
       </Badge>
     )
-  if (monitor) return <Badge variant="warning">{count} Auffälligkeit{count === 1 ? '' : 'en'}</Badge>
-  return <Badge variant="danger">{count} Abweichung{count === 1 ? '' : 'en'}</Badge>
+  if (monitor) return <Badge variant="warning">{t('shared.badges.findings', { count })}</Badge>
+  return <Badge variant="danger">{t('shared.badges.deviations', { count })}</Badge>
 }
 
 const severityStyle: Record<string, string> = {

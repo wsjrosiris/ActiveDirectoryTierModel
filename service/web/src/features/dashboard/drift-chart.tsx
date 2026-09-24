@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { formatDateShort } from '@/lib/utils'
+import { t } from '@/i18n'
 
 interface Point {
   runId: number
@@ -52,11 +53,11 @@ export default function DriftChart({ data }: { data: Point[] }) {
             const p = payload[0].payload as Point
             return (
               <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-lg">
-                <p className="font-medium text-foreground">Audit #{p.runId}</p>
+                <p className="font-medium text-foreground">{t('dashboard.driftChart.audit')}{p.runId}</p>
                 <p className="text-muted-foreground">{formatDateShort(p.at)}</p>
                 <p className="mt-1 flex items-center gap-1.5 text-foreground">
                   <span className="size-2 rounded-full bg-primary" />
-                  {p.driftCount === 0 ? 'Kein Drift' : `${p.driftCount} Abweichungen`}
+                  {p.driftCount === 0 ? t('dashboard.driftChart.noDrift') : t('dashboard.driftChart.driftcountDeviations', { driftCount: p.driftCount })}
                 </p>
               </div>
             )

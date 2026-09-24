@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { fieldLabel } from '@/lib/field-labels'
 import { cn } from '@/lib/utils'
+import { t } from '@/i18n'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = any
@@ -11,7 +12,7 @@ const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/
 /** Scalar value as text, the German way. */
 export function ScalarValue({ value, mono }: { value: Json; mono?: boolean }) {
   if (value === null || value === undefined || value === '') return <span className="text-muted-foreground">–</span>
-  if (typeof value === 'boolean') return <span>{value ? 'Ja' : 'Nein'}</span>
+  if (typeof value === 'boolean') return <span>{value ? t('common.yes') : t('common.no')}</span>
   if (typeof value === 'number') return <span className="tabular">{value.toLocaleString('de-DE')}</span>
   const s = String(value)
   if (ISO_RE.test(s) && !Number.isNaN(Date.parse(s))) return <span title={s}>{new Date(s).toLocaleString('de-DE')}</span>
@@ -42,7 +43,7 @@ export function KeyValueList({ value, labels, depth = 0, className }: { value: J
 
 function ValueNode({ value, labels, depth }: { value: Json; labels?: Record<string, string>; depth: number }) {
   if (Array.isArray(value)) {
-    if (!value.length) return <span className="text-muted-foreground">(keine)</span>
+    if (!value.length) return <span className="text-muted-foreground">{t('common.none')}</span>
     if (value.every((x) => x === null || typeof x !== 'object'))
       return (
         <span className="flex flex-wrap gap-1">

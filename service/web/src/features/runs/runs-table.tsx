@@ -45,8 +45,8 @@ export function RunsTable({
   const [now, setNow] = React.useState(Date.now())
   React.useEffect(() => {
     if (!items.some((r) => r.status === 'Running')) return
-    const t = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(t)
+    const tt = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(tt)
   }, [items])
 
   return (

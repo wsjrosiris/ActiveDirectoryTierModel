@@ -43,8 +43,8 @@ const lastRdn = (dn: string) => ouLabel(dn).split(' › ').pop() ?? dn
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && !!x) : [])
 
 function itemTier(o: Item): Tier {
-  const t = authTier(o)
-  return t === 0 || t === 1 || t === 2 ? t : tierOf(o.name ?? o.group)
+  const tt = authTier(o)
+  return tt === 0 || tt === 1 || tt === 2 ? tt : tierOf(o.name ?? o.group)
 }
 
 function ModeBadge({ enforce }: { enforce: unknown }) {

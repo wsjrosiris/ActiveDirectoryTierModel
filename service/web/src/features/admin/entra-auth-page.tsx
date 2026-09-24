@@ -19,6 +19,7 @@ import { settingsQuery } from '@/features/runs/run-request-form'
 import { errorMessage } from '@/lib/query'
 import { roleDescriptions, roleLabels, roles } from '@/lib/roles'
 import { cn } from '@/lib/utils'
+import { t } from '@/i18n'
 
 export function Component() {
   return (
@@ -83,15 +84,15 @@ function EntraAuthPage() {
       setErrors({})
       qc.setQueryData(queryKey, s)
       qc.invalidateQueries({ queryKey: ['auth', 'options'] })
-      toast.success('Entra-ID-Anmeldung gespeichert', {
-        description: s.enabled ? 'Die Anmeldeseite zeigt jetzt „Mit Microsoft anmelden“.' : 'Die Anmeldung mit Microsoft ist ausgeschaltet.',
+      toast.success(t('admin.entraAuth.entraIdSignInSaved'), {
+        description: s.enabled ? t('admin.entraAuth.theSignInPageNow') : t('admin.entraAuth.signInWithMicrosoftIs'),
       })
     },
     onError: (e) => {
       const next: Record<string, string> = {}
       if (e instanceof ApiError && e.errors) for (const [k, v] of Object.entries(e.errors)) next[k.toLowerCase()] = v.join(' ')
       setErrors(next)
-      toast.error('Nicht gespeichert', { description: Object.values(next)[0] ?? errorMessage(e) })
+      toast.error(t('admin.entraAuth.notSaved'), { description: Object.values(next)[0] ?? errorMessage(e) })
     },
   })
 
@@ -110,7 +111,7 @@ function EntraAuthPage() {
   if (!form || !data)
     return (
       <Page className="max-w-4xl">
-        <PageHeader icon={<Cloud />} title="Entra-ID-Anmeldung" description="Anmeldung mit Microsoft-Geschäftskonten (OpenID Connect)." />
+        <PageHeader icon={<Cloud />} title={t('admin.entraAuth.entraIdSignIn')} description={t('admin.entraAuth.signInWithMicrosoftWork')} />
         <div className="grid gap-4">
           <Skeleton className="h-24" />
           <Skeleton className="h-72" />
@@ -121,8 +122,8 @@ function EntraAuthPage() {
 
   const dirty = serialize(form) !== serialize(toForm(data))
   const total = roles.reduce((n, r) => n + form.mappings[r].length, 0)
-  const tenantError = form.tenantId.trim() && !GUID_RE.test(form.tenantId.trim()) ? 'Die Mandanten-ID ist eine GUID.' : errors['tenantid']
-  const clientError = form.clientId.trim() && !GUID_RE.test(form.clientId.trim()) ? 'Die Anwendungs-ID ist eine GUID.' : errors['clientid']
+  const tenantError = form.tenantId.trim() && !GUID_RE.test(form.tenantId.trim()) ? t('admin.entraAuth.theTenantIdIsA') : errors['tenantid']
+  const clientError = form.clientId.trim() && !GUID_RE.test(form.clientId.trim()) ? t('admin.entraAuth.theApplicationIdIsA') : errors['clientid']
   const secretMissing = form.enabled && !data.hasClientSecret && !form.clientSecret
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm({ ...form, [k]: v })
 
@@ -130,8 +131,8 @@ function EntraAuthPage() {
     <Page className="max-w-4xl">
       <PageHeader
         icon={<Cloud />}
-        title="Entra-ID-Anmeldung"
-        description="Anmeldung mit Microsoft-Geschäftskonten (OpenID Connect mit PKCE) – die Rolle ergibt sich aus Entra-Gruppen oder App-Rollen."
+        title={t('admin.entraAuth.entraIdSignIn')}
+        description={t('admin.entraAuth.signInWithMicrosoftWork2')}
       />
       <form
         className="grid gap-4"
@@ -149,17 +150,17 @@ function EntraAuthPage() {
                 </span>
                 <span className="grid min-w-0">
                   <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                    Anmeldung mit Microsoft aktivieren
-                    {data.enabled ? <Badge variant="success">Aktiv</Badge> : <Badge variant="muted">Aus</Badge>}
+                    {t('admin.entraAuth.enableSignInWithMicrosoft')}
+                    {data.enabled ? <Badge variant="success">{t('common.active')}</Badge> : <Badge variant="muted">{t('common.off')}</Badge>}
                   </span>
-                  <span className="text-xs text-muted-foreground">Zeigt auf der Anmeldeseite „Mit Microsoft anmelden“. Lokale Konten funktionieren weiterhin.</span>
+                  <span className="text-xs text-muted-foreground">{t('admin.entraAuth.showsSignInWithMicrosoft')}</span>
                 </span>
               </span>
               <Switch id="ea-enabled" checked={form.enabled} onCheckedChange={(v) => set('enabled', v)} />
             </label>
             {form.enabled && total === 0 && (
               <p className="mt-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
-                <AlertTriangle className="size-3.5 shrink-0" /> Ohne Zuordnung von Gruppen oder App-Rollen kann sich niemand mit Microsoft anmelden.
+                <AlertTriangle className="size-3.5 shrink-0" /> {t('admin.entraAuth.withoutMappedGroupsOrApp')}
               </p>
             )}
           </CardContent>
@@ -168,13 +169,13 @@ function EntraAuthPage() {
         <Card>
           <CardHeader>
             <div>
-              <CardTitle>App-Registrierung</CardTitle>
-              <CardDescription>Werte aus dem Microsoft Entra Admin Center (App-Registrierungen → Übersicht).</CardDescription>
+              <CardTitle>{t('admin.entraAuth.appRegistration')}</CardTitle>
+              <CardDescription>{t('admin.entraAuth.valuesFromTheMicrosoftEntra')}</CardDescription>
             </div>
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Mandanten-ID (Verzeichnis-ID)" htmlFor="ea-tenant" required={form.enabled} error={tenantError}>
+              <Field label={t('admin.entraAuth.tenantIdDirectoryId')} htmlFor="ea-tenant" required={form.enabled} error={tenantError}>
                 <Input
                   id="ea-tenant"
                   value={form.tenantId}
@@ -186,7 +187,7 @@ function EntraAuthPage() {
                   aria-invalid={!!tenantError || undefined}
                 />
               </Field>
-              <Field label="Anwendungs-ID (Client-ID)" htmlFor="ea-client" required={form.enabled} error={clientError}>
+              <Field label={t('admin.entraAuth.applicationIdClientId')} htmlFor="ea-client" required={form.enabled} error={clientError}>
                 <Input
                   id="ea-client"
                   value={form.clientId}
@@ -202,9 +203,9 @@ function EntraAuthPage() {
             <div className="grid gap-1.5">
               <div className="flex items-center justify-between gap-2">
                 <label htmlFor="ea-secret" className="text-[13px] font-medium">
-                  Geheimer Clientschlüssel{form.enabled && !data.hasClientSecret && <span className="ml-0.5 text-destructive" aria-hidden>*</span>}
+                  {t('admin.entraAuth.clientSecret')}{form.enabled && !data.hasClientSecret && <span className="ml-0.5 text-destructive" aria-hidden>*</span>}
                 </label>
-                {data.hasClientSecret && !form.clientSecret && <Badge variant="success"><CheckCircle2 /> gespeichert</Badge>}
+                {data.hasClientSecret && !form.clientSecret && <Badge variant="success"><CheckCircle2 /> {t('admin.entraAuth.saved')}</Badge>}
               </div>
               <Input
                 id="ea-secret"
@@ -212,15 +213,15 @@ function EntraAuthPage() {
                 autoComplete="new-password"
                 value={form.clientSecret}
                 onChange={(e) => set('clientSecret', e.target.value)}
-                placeholder={data.hasClientSecret ? '•••••••• (unverändert)' : 'Wert des geheimen Schlüssels'}
+                placeholder={data.hasClientSecret ? t('admin.entraAuth.unchanged') : t('admin.entraAuth.valueOfTheClientSecret')}
                 aria-invalid={secretMissing || !!errors['clientsecret'] || undefined}
               />
               <p className={cn('text-xs', errors['clientsecret'] ? 'text-destructive' : 'text-muted-foreground')}>
-                {errors['clientsecret'] ?? 'Den „Wert“ (nicht die ID) des Schlüssels eintragen. Er wird verschlüsselt gespeichert und nie angezeigt; Ablaufdatum in Entra ID beachten.'}
+                {errors['clientsecret'] ?? t('admin.entraAuth.enterTheValueNotThe')}
               </p>
             </div>
             <div className="grid gap-1.5">
-              <p className="text-[13px] font-medium">Umleitungs-URI (Plattform „Web“)</p>
+              <p className="text-[13px] font-medium">{t('admin.entraAuth.redirectUriPlatformWeb')}</p>
               <div className="flex min-w-0 items-center gap-2 rounded-md border bg-muted/40 py-1 pr-1 pl-3">
                 <code className="min-w-0 flex-1 truncate font-mono text-[12.5px]" title={redirectUri} data-testid="redirect-uri">{redirectUri}</code>
                 <Button
@@ -230,17 +231,17 @@ function EntraAuthPage() {
                   onClick={async () => {
                     try {
                       await navigator.clipboard.writeText(redirectUri)
-                      toast.success('Umleitungs-URI kopiert')
+                      toast.success(t('admin.entraAuth.redirectUriCopied'))
                     } catch {
-                      toast.error('Kopieren nicht möglich', { description: 'Bitte die Adresse markieren und manuell kopieren.' })
+                      toast.error(t('admin.entraAuth.copyingNotPossible'), { description: t('admin.entraAuth.pleaseSelectTheAddressAnd') })
                     }
                   }}
                 >
-                  <Copy /> Kopieren
+                  <Copy /> {t('admin.entraAuth.copy')}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                In der App-Registrierung unter „Authentifizierung“ eintragen. Die Adresse folgt der öffentlichen Adresse aus den Einstellungen; in Produktion nur https.
+                {t('admin.entraAuth.enterItInTheApp')}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3 border-t pt-4">
@@ -251,9 +252,9 @@ function EntraAuthPage() {
                 disabled={!GUID_RE.test(form.tenantId.trim())}
                 onClick={() => verify.mutate(form.tenantId.trim())}
               >
-                {!verify.isPending && <SearchCheck />} Konfiguration prüfen
+                {!verify.isPending && <SearchCheck />} {t('admin.entraAuth.checkConfiguration')}
               </Button>
-              <span className="text-xs text-muted-foreground">Ruft das OpenID-Metadatendokument des Mandanten ab.</span>
+              <span className="text-xs text-muted-foreground">{t('admin.entraAuth.retrievesTheTenantSOpenid')}</span>
             </div>
             {check && (
               <div
@@ -266,7 +267,7 @@ function EntraAuthPage() {
                 {check.ok ? <CheckCircle2 className="mt-0.5 size-4 shrink-0" /> : <XCircle className="mt-0.5 size-4 shrink-0" />}
                 <div className="grid min-w-0 gap-0.5">
                   <p className="font-medium">{check.message}</p>
-                  {check.issuer && <p className="truncate text-xs opacity-90" title={check.issuer}>Aussteller: <span className="font-mono">{check.issuer}</span></p>}
+                  {check.issuer && <p className="truncate text-xs opacity-90" title={check.issuer}>{t('admin.entraAuth.issuer')} <span className="font-mono">{check.issuer}</span></p>}
                 </div>
               </div>
             )}
@@ -276,9 +277,9 @@ function EntraAuthPage() {
         <Card>
           <CardHeader>
             <div>
-              <CardTitle className="flex items-center gap-2"><UsersRound className="size-4 text-muted-foreground" /> Rollen aus Gruppen oder App-Rollen</CardTitle>
+              <CardTitle className="flex items-center gap-2"><UsersRound className="size-4 text-muted-foreground" /> {t('admin.entraAuth.rolesFromGroupsOrApp')}</CardTitle>
               <CardDescription>
-                Je Rolle Entra-Gruppen (Objekt-ID) oder App-Rollen (Wert) eintragen. Bei mehreren Treffern gilt die höchste Rolle; ohne Treffer wird die Anmeldung abgelehnt.
+                {t('admin.entraAuth.enterEntraGroupsObjectId')}
               </CardDescription>
             </div>
           </CardHeader>
@@ -301,25 +302,24 @@ function EntraAuthPage() {
         <div className="flex gap-3 rounded-xl border bg-muted/30 px-4 py-3.5 text-[13px] text-muted-foreground">
           <Info className="mt-0.5 size-4 shrink-0 text-sky-600 dark:text-sky-400" />
           <div className="grid min-w-0 gap-1.5">
-            <p className="font-medium text-foreground">Einrichtung in Microsoft Entra ID</p>
+            <p className="font-medium text-foreground">{t('admin.entraAuth.setupInMicrosoftEntraId')}</p>
             <ol className="grid list-decimal gap-1 pl-4">
-              <li>App-Registrierung anlegen (nur Konten dieses Verzeichnisses), Plattform „Web“ mit der Umleitungs-URI oben.</li>
-              <li>Unter „Zertifikate &amp; Geheimnisse“ einen geheimen Clientschlüssel erstellen und hier eintragen.</li>
+              <li>{t('admin.entraAuth.createAnAppRegistrationAccounts')}</li>
+              <li>{t('admin.entraAuth.underCertificatesSecretsCreateA')}</li>
               <li>
-                Gruppen: unter „Tokenkonfiguration“ den Anspruch <span className="font-mono text-foreground">groups</span> (Sicherheitsgruppen, als Gruppen-ID) hinzufügen.
-                Bei mehr als 200 Gruppen je Benutzer lieber App-Rollen verwenden.
+                {t('admin.entraAuth.groupsUnderTokenConfigurationAdd')} <span className="font-mono text-foreground">{t('admin.entraAuth.groups')}</span> {t('admin.entraAuth.claimSecurityGroupsAsGroup')}
               </li>
-              <li>App-Rollen: unter „App-Rollen“ anlegen und in „Unternehmensanwendungen“ Benutzern oder Gruppen zuweisen.</li>
+              <li>{t('admin.entraAuth.appRolesCreateThemUnder')}</li>
             </ol>
           </div>
         </div>
 
         <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-end gap-2 rounded-xl border bg-card/95 px-4 py-3 shadow-lg shadow-black/5 backdrop-blur">
           <span className="mr-auto text-xs text-muted-foreground">
-            {secretMissing ? 'Zum Aktivieren den geheimen Clientschlüssel eintragen.' : dirty ? 'Ungespeicherte Änderungen' : 'Alle Änderungen gespeichert'}
+            {secretMissing ? t('admin.entraAuth.enterTheClientSecretTo') : dirty ? t('common.unsavedChanges') : t('common.allChangesSaved')}
           </span>
-          <Button type="button" variant="ghost" disabled={!dirty} onClick={() => { setForm(toForm(data)); setErrors({}) }}>Zurücksetzen</Button>
-          <Button type="submit" disabled={!dirty || !!tenantError || !!clientError} loading={save.isPending}>{!save.isPending && <Save />} Speichern</Button>
+          <Button type="button" variant="ghost" disabled={!dirty} onClick={() => { setForm(toForm(data)); setErrors({}) }}>{t('common.reset')}</Button>
+          <Button type="submit" disabled={!dirty || !!tenantError || !!clientError} loading={save.isPending}>{!save.isPending && <Save />} {t('common.save')}</Button>
         </div>
       </form>
     </Page>
@@ -335,8 +335,8 @@ function RoleRow({ role, entries, onChange, error }: { role: Role; entries: Entr
 
   const valueError = (v: string) =>
     kind === 'Group'
-      ? GUID_RE.test(v) ? null : 'Objekt-ID der Gruppe als GUID eingeben (z. B. 3f2a…-…).'
-      : APP_ROLE_RE.test(v) ? null : 'Wert der App-Rolle ohne Leerzeichen (z. B. TierModel.Admin).'
+      ? GUID_RE.test(v) ? null : t('admin.entraAuth.enterTheGroupSObject')
+      : APP_ROLE_RE.test(v) ? null : t('admin.entraAuth.appRoleValueWithoutSpaces')
 
   const add = () => {
     const v = value.trim()
@@ -347,7 +347,7 @@ function RoleRow({ role, entries, onChange, error }: { role: Role; entries: Entr
       return
     }
     if (entries.some((e) => e.kind === kind && e.value.toLowerCase() === v.toLowerCase())) {
-      setHint('Dieser Eintrag ist bereits zugeordnet.')
+      setHint(t('admin.entraAuth.thisEntryIsAlreadyMapped'))
       return
     }
     onChange([...entries, { kind, value: kind === 'Group' ? v.toLowerCase() : v, displayName: name.trim() || null }])
@@ -370,22 +370,22 @@ function RoleRow({ role, entries, onChange, error }: { role: Role; entries: Entr
       </div>
       <div className="grid min-w-0 gap-2">
         {entries.length > 0 && (
-          <ul className="flex flex-wrap gap-1.5" aria-label={`Zuordnungen für ${roleLabels[role]}`}>
+          <ul className="flex flex-wrap gap-1.5" aria-label={t('admin.entraAuth.mappingsForValue', { value: roleLabels[role] })}>
             {entries.map((e, i) => (
               <li key={`${e.kind}-${e.value}`} className="flex max-w-full items-center gap-2 rounded-lg border bg-card py-1 pr-1 pl-2.5 shadow-xs">
                 <span className="grid min-w-0">
                   <span className="flex min-w-0 items-center gap-1.5">
-                    <Badge variant={e.kind === 'Group' ? 'info' : 'default'} className="shrink-0 px-1.5 py-0 text-[10px]">{e.kind === 'Group' ? 'Gruppe' : 'App-Rolle'}</Badge>
+                    <Badge variant={e.kind === 'Group' ? 'info' : 'default'} className="shrink-0 px-1.5 py-0 text-[10px]">{e.kind === 'Group' ? t('admin.entraAuth.group') : t('admin.entraAuth.appRole')}</Badge>
                     <span className="truncate text-[13px] font-medium" title={e.displayName || e.value}>{e.displayName || e.value}</span>
                   </span>
                   {e.displayName && <span className="truncate font-mono text-[10.5px] text-muted-foreground" title={e.value}>{e.value}</span>}
                 </span>
-                <Tooltip content="Entfernen">
+                <Tooltip content={t('common.remove')}>
                   <button
                     type="button"
                     onClick={() => onChange(entries.filter((_, j) => j !== i))}
                     className="grid size-6 shrink-0 place-content-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label={`${e.displayName || e.value} entfernen`}
+                    aria-label={t('common.removeName', { name: e.displayName || e.value })}
                   >
                     <X className="size-3.5" />
                   </button>
@@ -396,12 +396,12 @@ function RoleRow({ role, entries, onChange, error }: { role: Role; entries: Entr
         )}
         <div className="grid gap-2 rounded-lg border border-dashed p-2.5">
           <Segmented<EntraEntryKind>
-            aria-label={`Art der Zuordnung für ${roleLabels[role]}`}
+            aria-label={t('admin.entraAuth.mappingTypeForValue', { value: roleLabels[role] })}
             value={kind}
             onValueChange={(k) => { setKind(k); setHint(null) }}
             options={[
-              { value: 'Group', label: 'Gruppe (Objekt-ID)' },
-              { value: 'AppRole', label: 'App-Rolle' },
+              { value: 'Group', label: t('admin.entraAuth.groupObjectId') },
+              { value: 'AppRole', label: t('admin.entraAuth.appRole') },
             ]}
           />
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto]">
@@ -414,19 +414,19 @@ function RoleRow({ role, entries, onChange, error }: { role: Role; entries: Entr
               className="font-mono text-[12.5px]"
               autoComplete="off"
               spellCheck={false}
-              aria-label={kind === 'Group' ? 'Objekt-ID der Gruppe' : 'Wert der App-Rolle'}
+              aria-label={kind === 'Group' ? t('admin.entraAuth.groupObjectId2') : t('admin.entraAuth.appRoleValue')}
               aria-invalid={!!typedError || undefined}
             />
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
-              placeholder="Anzeigename (optional)"
-              aria-label="Anzeigename (optional)"
+              placeholder={t('admin.entraAuth.displayNameOptional')}
+              aria-label={t('admin.entraAuth.displayNameOptional')}
               autoComplete="off"
             />
             <Button type="button" variant="outline" onClick={add} disabled={!typed || !!typedError}>
-              <Plus /> Hinzufügen
+              <Plus /> {t('common.add')}
             </Button>
           </div>
         </div>
@@ -435,7 +435,7 @@ function RoleRow({ role, entries, onChange, error }: { role: Role; entries: Entr
         ) : hint || typedError ? (
           <p className="text-xs text-muted-foreground">{hint ?? typedError}</p>
         ) : entries.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Keine Gruppe oder App-Rolle zugeordnet.</p>
+          <p className="text-xs text-muted-foreground">{t('admin.entraAuth.noGroupOrAppRole')}</p>
         ) : null}
       </div>
     </div>

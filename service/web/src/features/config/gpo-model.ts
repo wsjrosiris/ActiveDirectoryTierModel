@@ -178,12 +178,12 @@ export function describeGroupRelation(v: string) {
 
 // ------------------------------------------------------------------ targets
 
-export function targetTitle(key: string, t?: Obj): string {
+export function targetTitle(key: string, tt?: Obj): string {
   if (key === TEMPLATE_KEY) return 'Vorlagen (nicht verknüpft)'
   if (key === DOMAIN_DN) return 'Domänenstamm'
   const first = key.split(',')[0] ?? key
   const rdn = first.replace(/^(OU|CN)=/i, '')
-  return rdn || (typeof t?.displayName === 'string' && t.displayName) || key
+  return rdn || (typeof tt?.displayName === 'string' && tt.displayName) || key
 }
 
 export function targetHint(key: string): string {
@@ -194,14 +194,14 @@ export function targetHint(key: string): string {
 
 export const isLinked = (key: string) => key !== TEMPLATE_KEY
 
-export function gpoList(t: Obj | undefined, kind: GpoKind): Obj[] {
-  const v = t?.[kind]
+export function gpoList(tt: Obj | undefined, kind: GpoKind): Obj[] {
+  const v = tt?.[kind]
   return Array.isArray(v) ? v : []
 }
 
-export function nextLinkOrder(t: Obj | undefined): number {
+export function nextLinkOrder(tt: Obj | undefined): number {
   let max = 0
-  for (const k of GPO_KINDS) for (const g of gpoList(t, k)) if (typeof g?.linkOrder === 'number' && g.linkOrder > max) max = g.linkOrder
+  for (const k of GPO_KINDS) for (const g of gpoList(tt, k)) if (typeof g?.linkOrder === 'number' && g.linkOrder > max) max = g.linkOrder
   return max + 1
 }
 
@@ -234,8 +234,8 @@ export function removeTarget(content: Obj, key: string): Obj {
 }
 
 export function setGpoList(content: Obj, key: string, kind: GpoKind, list: Obj[]): Obj {
-  const t = (content.gpos?.[key] ?? {}) as Obj
-  return setTarget(content, key, { ...t, [kind]: list })
+  const tt = (content.gpos?.[key] ?? {}) as Obj
+  return setTarget(content, key, { ...tt, [kind]: list })
 }
 
 export function replaceGpo(content: Obj, key: string, kind: GpoKind, index: number, gpo: Obj): Obj {

@@ -41,12 +41,12 @@ export function AdminAccountWizard({ open, onClose }: { open: boolean; onClose: 
   const [memberOf, setMemberOf] = React.useState<string[]>([])
   const [protectedUsers, setProtectedUsers] = React.useState<boolean | null>(null)
 
-  const setTier = (t: TierNum) => {
-    setTierState(t)
+  const setTier = (tt: TierNum) => {
+    setTierState(tt)
     setOuPath(null)
     setProtectedUsers(null)
     // A typed name keeps its body, only the tier prefix follows the tier.
-    setSam((s) => (s !== null && /^t[012]-/i.test(s) ? tierPrefix(t) + s.slice(3) : s))
+    setSam((s) => (s !== null && /^t[012]-/i.test(s) ? tierPrefix(tt) + s.slice(3) : s))
   }
 
   const ous = ousOf(contents)

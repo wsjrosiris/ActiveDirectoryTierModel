@@ -14,6 +14,7 @@ import { PrerequisiteCard } from './jit-prerequisite'
 import { RequestDialog } from './jit-request-dialog'
 import { ActiveList, HistoryList, OpenList } from './jit-requests'
 import { JitGroupsAdmin } from './jit-groups'
+import { t } from '@/i18n'
 
 const tabs = ['anfragen', 'aktiv', 'verlauf', 'gruppen'] as const
 type Tab = (typeof tabs)[number]
@@ -60,11 +61,11 @@ export function Component() {
     <Page>
       <PageHeader
         icon={<Timer />}
-        title="Befristeter Zugriff"
-        description="Just-in-Time-Mitgliedschaft in privilegierten Gruppen – beantragt, von einer zweiten Person freigegeben und von Active Directory automatisch wieder entfernt."
+        title={t('jit.jit.justInTimeAccess')}
+        description={t('jit.jit.justInTimeMembershipIn')}
         actions={
           <Button onClick={() => setDialogOpen(true)} disabled={!overview.data || groups.length === 0 || blocked}>
-            <Plus /> Zugriff beantragen
+            <Plus /> {t('jit.jit.requestAccess')}
           </Button>
         }
       />
@@ -77,8 +78,8 @@ export function Component() {
 
       {overview.data && groups.length === 0 && (
         <p className="mb-6 rounded-lg border border-dashed px-4 py-3 text-[13px] text-muted-foreground">
-          Für Sie ist keine JIT-Gruppe freigegeben.{' '}
-          {isAdmin ? 'Legen Sie unter „JIT-Gruppen“ fest, welche Gruppen befristet beantragt werden dürfen.' : 'Ein Administrator legt fest, welche Gruppen befristet beantragt werden dürfen.'}
+          {t('jit.jit.noJitGroupIsEnabled')}{' '}
+          {isAdmin ? t('jit.jit.defineUnderJitGroupsWhich') : t('jit.jit.anAdministratorDefinesWhichGroups')}
         </p>
       )}
 
@@ -86,7 +87,7 @@ export function Component() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <TabsList className="max-w-full overflow-x-auto [scrollbar-width:none]">
             <TabsTrigger value="anfragen">
-              <ListChecks /> Anfragen
+              <ListChecks /> {t('jit.jit.requests')}
               {(waitingForMe > 0 || open.length > 0) && (
                 <span className={waitingForMe > 0 ? 'ml-1 rounded bg-amber-500/20 px-1.5 text-[11px] text-amber-800 tabular dark:text-amber-200' : 'ml-1 rounded bg-muted-foreground/15 px-1.5 text-[11px] tabular'}>
                   {waitingForMe > 0 ? waitingForMe : open.length}
@@ -94,18 +95,18 @@ export function Component() {
               )}
             </TabsTrigger>
             <TabsTrigger value="aktiv">
-              <KeyRound /> Aktiv
+              <KeyRound /> {t('common.active')}
               {active.length > 0 && <span className="ml-1 rounded bg-emerald-500/15 px-1.5 text-[11px] text-emerald-800 tabular dark:text-emerald-200">{active.length}</span>}
             </TabsTrigger>
-            <TabsTrigger value="verlauf"><History /> Verlauf</TabsTrigger>
-            {isAdmin && <TabsTrigger value="gruppen"><UsersRound /> JIT-Gruppen</TabsTrigger>}
+            <TabsTrigger value="verlauf"><History /> {t('jit.jit.history')}</TabsTrigger>
+            {isAdmin && <TabsTrigger value="gruppen"><UsersRound /> {t('jit.jit.jitGroups')}</TabsTrigger>}
           </TabsList>
           {isOperator && tab !== 'gruppen' && (
             <Segmented<'all' | 'mine'>
-              aria-label="Anträge"
+              aria-label={t('jit.jit.requests2')}
               value={scope}
               onValueChange={setScope}
-              options={[{ value: 'all', label: 'Alle' }, { value: 'mine', label: 'Eigene' }]}
+              options={[{ value: 'all', label: t('jit.jit.all') }, { value: 'mine', label: t('jit.jit.mine') }]}
             />
           )}
         </div>

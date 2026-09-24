@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Moon, Sun } from 'lucide-react'
 import { useTheme } from '@/lib/theme'
 import { Button } from '@/components/ui/button'
+import { t } from '@/i18n'
 
 export function AuthShell({ children, footer }: { children: React.ReactNode; footer?: React.ReactNode }) {
   const { resolved, toggle } = useTheme()
@@ -21,7 +22,7 @@ export function AuthShell({ children, footer }: { children: React.ReactNode; foo
           }}
         />
       </div>
-      <Button variant="ghost" size="icon-sm" onClick={toggle} className="absolute top-4 right-4 text-muted-foreground" aria-label="Design umschalten">
+      <Button variant="ghost" size="icon-sm" onClick={toggle} className="absolute top-4 right-4 text-muted-foreground" aria-label={t('auth.authShell.toggleTheme')}>
         {resolved === 'dark' ? <Sun /> : <Moon />}
       </Button>
       <div className="relative w-full max-w-[400px] rounded-2xl border bg-card/90 p-8 shadow-xl shadow-black/[0.04] backdrop-blur-sm dark:shadow-black/40">

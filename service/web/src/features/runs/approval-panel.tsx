@@ -19,6 +19,8 @@ import { includeLabels, scopeLabels, sectionFallbackTitles } from '@/lib/labels'
 import { hasRole } from '@/lib/roles'
 import { cn, formatDateTime, formatRelative } from '@/lib/utils'
 import { PlanCompact } from './plan-view'
+import { t } from '@/i18n'
+import { rich } from '@/i18n/rich'
 
 export function sameUser(a: string | null | undefined, b: string | null | undefined) {
   return !!a && !!b && a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase()
@@ -49,8 +51,8 @@ export function ApprovalPanel({ run, onShowConfig }: { run: RunDetail; onShowCon
 
   const [now, setNow] = React.useState(Date.now())
   React.useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30_000)
-    return () => clearInterval(t)
+    const tt = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(tt)
   }, [])
   const expiresMs = run.approvalExpiresAt ? new Date(run.approvalExpiresAt).getTime() - now : null
   const expiringSoon = expiresMs !== null && expiresMs < 60 * 60_000
@@ -58,7 +60,7 @@ export function ApprovalPanel({ run, onShowConfig }: { run: RunDetail; onShowCon
   const withdraw = useMutation({
     mutationFn: () => api.runs.cancel(run.id),
     onSuccess: () => {
-      toast.success('Antrag zurückgezogen')
+      toast.success(t('runs.approvalPanel.requestWithdrawn'))
       refresh()
     },
   })
@@ -75,28 +77,28 @@ export function ApprovalPanel({ run, onShowConfig }: { run: RunDetail; onShowCon
               <Hourglass className="size-5" />
             </span>
             <div className="min-w-0">
-              <h2 className="text-base font-semibold tracking-tight">Freigabe erforderlich</h2>
+              <h2 className="text-base font-semibold tracking-tight">{t('runs.approvalPanel.approvalRequired')}</h2>
               <p className="mt-0.5 text-[13px] text-muted-foreground">
-                Dieser Deploy ändert das Active Directory und wird erst ausgeführt, wenn eine zweite Person mit der Rolle Operator ihn freigibt.
+                {t('runs.approvalPanel.thisDeploymentChangesActiveDirectory')}
               </p>
             </div>
           </div>
 
           <dl className="grid gap-3 text-[13px] sm:grid-cols-3">
             <div className="rounded-lg border bg-card/70 px-3 py-2">
-              <dt className="text-xs text-muted-foreground">Angefordert von</dt>
+              <dt className="text-xs text-muted-foreground">{t('runs.approvalPanel.requestedBy')}</dt>
               <dd className="mt-0.5 flex items-center gap-1.5 font-medium">
                 <UserIcon className="size-3.5 text-muted-foreground" />
                 <span className="truncate">{run.requestedBy}</span>
-                {isRequester && <span className="text-xs font-normal text-muted-foreground">(Sie)</span>}
+                {isRequester && <span className="text-xs font-normal text-muted-foreground">{t('runs.approvalPanel.you')}</span>}
               </dd>
             </div>
             <div className="rounded-lg border bg-card/70 px-3 py-2">
-              <dt className="text-xs text-muted-foreground">Angefordert</dt>
+              <dt className="text-xs text-muted-foreground">{t('runs.approvalPanel.requested')}</dt>
               <dd className="mt-0.5 font-medium" title={formatDateTime(run.createdAt)}>{formatRelative(run.createdAt, now)}</dd>
             </div>
             <div className={cn('rounded-lg border bg-card/70 px-3 py-2', expiringSoon && 'border-rose-500/30 bg-rose-500/5')}>
-              <dt className="text-xs text-muted-foreground">Läuft ab</dt>
+              <dt className="text-xs text-muted-foreground">{t('runs.approvalPanel.expires')}</dt>
               <dd className={cn('mt-0.5 flex items-center gap-1.5 font-medium', expiringSoon && 'text-rose-700 dark:text-rose-300')} title={formatDateTime(run.approvalExpiresAt)}>
                 <Timer className="size-3.5 opacity-70" />
                 {run.approvalExpiresAt ? (expiresMs! <= 0 ? 'abgelaufen' : formatRelative(run.approvalExpiresAt, now)) : '–'}
@@ -107,24 +109,24 @@ export function ApprovalPanel({ run, onShowConfig }: { run: RunDetail; onShowCon
           <div className="grid gap-2">
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
               <p className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Festgeschriebener Stand</span> – ausgeführt wird genau diese Konfiguration.
+                {rich(t('runs.approvalPanel.fixedState'), { label: <span className="font-medium text-foreground">{t('runs.approvalPanel.fixedStateLabel')}</span> })}
               </p>
               <Button variant="link" size="xs" className="h-auto px-0" onClick={onShowConfig}>
-                <FileSearch /> Alle Versionen
+                <FileSearch /> {t('runs.approvalPanel.allVersions')}
               </Button>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              <Badge variant="secondary">{run.scope ? scopeLabels[run.scope] : 'Nur Add-ons'}</Badge>
+              <Badge variant="secondary">{run.scope ? scopeLabels[run.scope] : t('runs.approvalPanel.addOnsOnly')}</Badge>
               {run.includes.map((i) => <Badge key={i} variant="secondary">{includeLabels[i] ?? i}</Badge>)}
               <span className="mx-1 w-px self-stretch bg-border" aria-hidden />
               {versions.slice(0, 8).map(([k, v]) => (
                 <Link key={k} to={`/konfiguration/${k}`} className="inline-flex items-center gap-1 rounded-md border bg-card px-1.5 py-0.5 text-xs transition-colors hover:bg-accent">
-                  {sectionFallbackTitles[k] ?? k} <span className="font-mono text-muted-foreground">v{v}</span>
+                  {sectionFallbackTitles[k] ?? k} <span className="font-mono text-muted-foreground">{t('runs.approvalPanel.v')}{v}</span>
                 </Link>
               ))}
               {versions.length > 8 && (
                 <button type="button" onClick={onShowConfig} className="rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent">
-                  +{versions.length - 8} weitere
+                  {t('runs.approvalPanel.moreCount', { count: versions.length - 8 })}
                 </button>
               )}
             </div>
@@ -137,17 +139,17 @@ export function ApprovalPanel({ run, onShowConfig }: { run: RunDetail; onShowCon
           {canDecide ? (
             <>
               <div>
-                <p className="text-sm font-medium">Ihre Entscheidung</p>
+                <p className="text-sm font-medium">{t('runs.approvalPanel.yourDecision')}</p>
                 <p className="mt-0.5 text-[13px] text-muted-foreground">
-                  Prüfen Sie Bereich, Konfigurationsstand und Planungslauf. Mit der Freigabe wird der Deploy sofort eingereiht.
+                  {t('runs.approvalPanel.checkTheScopeConfigurationState')}
                 </p>
               </div>
               <div className="grid gap-2">
                 <Button size="lg" className="w-full bg-emerald-600 text-white shadow-emerald-600/20 hover:bg-emerald-600/90" onClick={() => setDialog('approve')}>
-                  <ShieldCheck /> Freigeben …
+                  <ShieldCheck /> {t('runs.approvalPanel.approve')}
                 </Button>
                 <Button size="lg" variant="outline" className="w-full text-destructive hover:text-destructive" onClick={() => setDialog('reject')}>
-                  <ShieldX /> Ablehnen …
+                  <ShieldX /> {t('runs.approvalPanel.reject')}
                 </Button>
               </div>
             </>
@@ -159,8 +161,8 @@ export function ApprovalPanel({ run, onShowConfig }: { run: RunDetail; onShowCon
                   <span className="relative inline-flex size-2 rounded-full bg-amber-500" />
                 </span>
                 <span>
-                  <span className="font-medium">Wartet auf Freigabe durch eine zweite Person.</span>
-                  <span className="mt-0.5 block text-xs opacity-90">Sie können Ihren eigenen Antrag nicht freigeben.</span>
+                  <span className="font-medium">{t('runs.approvalPanel.waitingForApprovalByA')}</span>
+                  <span className="mt-0.5 block text-xs opacity-90">{t('runs.approvalPanel.youCannotApproveYourOwn')}</span>
                 </span>
               </div>
               <Button
@@ -169,21 +171,21 @@ export function ApprovalPanel({ run, onShowConfig }: { run: RunDetail; onShowCon
                 loading={withdraw.isPending}
                 onClick={async () => {
                   const ok = await confirm({
-                    title: `Antrag für Deploy #${run.id} zurückziehen?`,
-                    description: 'Der Deploy wird nicht ausgeführt und erhält den Status „Abgebrochen“.',
-                    confirmText: 'Zurückziehen',
-                    cancelText: 'Behalten',
+                    title: t('runs.approvalPanel.withdrawRequestForDeploymentId', { id: run.id }),
+                    description: t('runs.approvalPanel.theDeploymentIsNotExecuted'),
+                    confirmText: t('runs.approvalPanel.withdraw'),
+                    cancelText: t('runs.approvalPanel.keep'),
                     destructive: true,
                   })
                   if (ok) withdraw.mutate()
                 }}
               >
-                {!withdraw.isPending && <Undo2 />} Antrag zurückziehen
+                {!withdraw.isPending && <Undo2 />} {t('runs.approvalPanel.withdrawRequest')}
               </Button>
             </>
           ) : (
             <div className="rounded-lg border bg-muted/40 px-3 py-2.5 text-[13px] text-muted-foreground">
-              Freigeben oder ablehnen können nur Operatoren, die den Deploy nicht selbst angefordert haben.
+              {t('runs.approvalPanel.onlyOperatorsWhoDidNot')}
             </div>
           )}
         </div>
@@ -196,13 +198,13 @@ export function ApprovalPanel({ run, onShowConfig }: { run: RunDetail; onShowCon
 /** What the approved deploy will change: the plan of the planning run it is based on. */
 function LinkedPlanSummary({ planRunId }: { planRunId: number }) {
   const q = useQuery({ queryKey: ['run-plan', planRunId], queryFn: () => api.runs.plan(planRunId), meta: { silent: true }, retry: false, staleTime: Infinity })
-  if (q.isLoading) return <div className="h-24 animate-pulse rounded-lg bg-muted/60" aria-label="Plan wird geladen" />
+  if (q.isLoading) return <div className="h-24 animate-pulse rounded-lg bg-muted/60" aria-label={t('runs.approvalPanel.loadingPlan')} />
   if (!q.data)
     return (
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-sky-500/25 bg-sky-500/5 px-3 py-2.5 text-[13px]">
         <FlaskConical className="size-4 shrink-0 text-sky-600 dark:text-sky-400" />
-        <span className="min-w-0 flex-1">Beruht auf Planung #{planRunId} – deren Plandatei ist nicht auswertbar, bitte das Protokoll prüfen.</span>
-        <Button variant="outline" size="xs" asChild><Link to={`/laeufe/${planRunId}`}>Öffnen <ArrowRight /></Link></Button>
+        <span className="min-w-0 flex-1">{t('runs.approvalPanel.planUnreadable', { id: planRunId })}</span>
+        <Button variant="outline" size="xs" asChild><Link to={`/laeufe/${planRunId}`}>{t('runs.approvalPanel.open')} <ArrowRight /></Link></Button>
       </div>
     )
   return <PlanCompact plan={q.data} planRunId={planRunId} />
@@ -211,8 +213,8 @@ function LinkedPlanSummary({ planRunId }: { planRunId: number }) {
 /** Points the approver to the most recent planning run before this request. */
 function LatestPlanHint({ run }: { run: RunDetail }) {
   const q = useQuery({
-    queryKey: ['runs', { kind: 'Deploy', page: 1, pageSize: 50 }],
-    queryFn: () => api.runs.list({ kind: 'Deploy', page: 1, pageSize: 50 }),
+    queryKey: ['runs', { kind: t('runs.approvalPanel.deployment'), page: 1, pageSize: 50 }],
+    queryFn: () => api.runs.list({ kind: t('runs.approvalPanel.deployment'), page: 1, pageSize: 50 }),
     meta: { silent: true },
   })
   const plan = q.data?.items.find((r) => r.mode === 'Plan' && r.id < run.id)
@@ -222,23 +224,23 @@ function LatestPlanHint({ run }: { run: RunDetail }) {
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-sky-500/25 bg-sky-500/5 px-3 py-2.5 text-[13px]">
       <FlaskConical className="size-4 shrink-0 text-sky-600 dark:text-sky-400" />
       {q.isLoading ? (
-        <span className="text-muted-foreground">Letzter Planungslauf wird gesucht …</span>
+        <span className="text-muted-foreground">{t('runs.approvalPanel.searchingForTheLastPlan')}</span>
       ) : plan ? (
         <>
           <span className="min-w-0 flex-1">
-            Vor der Freigabe den letzten Planungslauf prüfen:{' '}
+            {t('runs.approvalPanel.checkTheLastPlanRun')}{' '}
             <span className="font-medium">#{plan.id}</span>
             <span className="text-muted-foreground"> · {plan.requestedBy} · {formatRelative(plan.createdAt)}</span>
-            {!sameScope && <span className="ml-1.5 text-xs text-amber-700 dark:text-amber-300">(anderer Bereich)</span>}
+            {!sameScope && <span className="ml-1.5 text-xs text-amber-700 dark:text-amber-300">{t('runs.approvalPanel.differentScope')}</span>}
           </span>
           <RunStatusBadge status={plan.status} />
           <Button variant="outline" size="xs" asChild>
-            <Link to={`/laeufe/${plan.id}`}>Öffnen <ArrowRight /></Link>
+            <Link to={`/laeufe/${plan.id}`}>{t('runs.approvalPanel.open')} <ArrowRight /></Link>
           </Button>
         </>
       ) : (
         <span className="text-muted-foreground">
-          Kein vorheriger Planungslauf gefunden – ohne WhatIf-Ausgabe ist nicht nachvollziehbar, was dieser Deploy ändert.
+          {t('runs.approvalPanel.noPreviousPlanRunFound')}
         </span>
       )}
     </div>
@@ -272,20 +274,20 @@ function DecisionDialog({
         : api.runs.reject(run.id, { comment: comment.trim() }),
     meta: { silent: true },
     onSuccess: (r) => {
-      toast.success(approve ? `Deploy #${run.id} freigegeben` : `Deploy #${run.id} abgelehnt`, {
-        description: approve ? 'Der Lauf ist eingereiht und startet in Kürze.' : undefined,
+      toast.success(approve ? t('runs.approvalPanel.deploymentIdApproved', { id: run.id }) : t('runs.approvalPanel.deploymentIdRejected', { id: run.id }), {
+        description: approve ? t('runs.approvalPanel.theRunIsQueuedAnd') : undefined,
       })
       onDone(r)
       onClose()
     },
     onError: (e) => {
       const status = e instanceof ApiError ? e.status : 0
-      toast.error(approve ? 'Freigabe nicht möglich' : 'Ablehnung nicht möglich', {
+      toast.error(approve ? t('runs.approvalPanel.approvalNotPossible') : t('runs.approvalPanel.rejectionNotPossible'), {
         description:
           status === 409
-            ? 'Der Antrag wartet nicht mehr auf eine Freigabe (bereits entschieden, zurückgezogen oder abgelaufen).'
+            ? t('runs.approvalPanel.theRequestIsNoLonger')
             : status === 403
-              ? 'Sie dürfen diesen Antrag nicht entscheiden – den eigenen Antrag kann nur eine zweite Person freigeben.'
+              ? t('runs.approvalPanel.youMayNotDecideThis')
               : errorMessage(e),
       })
       if (status === 409 || status === 403) {
@@ -313,25 +315,22 @@ function DecisionDialog({
                 {approve ? <ShieldCheck className="size-4" /> : <ShieldX className="size-4" />}
               </span>
               <div className="grid gap-1.5">
-                <DialogTitle>{approve ? `Deploy #${run.id} freigeben?` : `Deploy #${run.id} ablehnen?`}</DialogTitle>
+                <DialogTitle>{approve ? t('runs.approvalPanel.approveDeploymentId', { id: run.id }) : t('runs.approvalPanel.rejectDeploymentId', { id: run.id })}</DialogTitle>
                 <DialogDescription>
                   {approve ? (
-                    <>
-                      Der Deploy von <span className="font-medium text-foreground">{run.requestedBy}</span> wird eingereiht und ändert das Active Directory über{' '}
-                      <span className="font-mono text-foreground">{run.preferredDc}</span>.
-                    </>
+                    rich(t('runs.approvalPanel.approveDescription'), { user: <span className="font-medium text-foreground">{run.requestedBy}</span>, dc: <span className="font-mono text-foreground">{run.preferredDc}</span> })
                   ) : (
-                    <>Der Antrag von <span className="font-medium text-foreground">{run.requestedBy}</span> wird verworfen. Bitte begründen Sie die Ablehnung.</>
+                    rich(t('runs.approvalPanel.rejectDescription'), { user: <span className="font-medium text-foreground">{run.requestedBy}</span> })
                   )}
                 </DialogDescription>
               </div>
             </div>
           </DialogHeader>
           <Field
-            label={approve ? 'Kommentar (optional)' : 'Begründung'}
+            label={approve ? t('runs.approvalPanel.commentOptional') : t('runs.approvalPanel.justification')}
             htmlFor="decision-comment"
             required={!approve}
-            error={touched && missing ? 'Eine Begründung ist erforderlich.' : undefined}
+            error={touched && missing ? t('runs.approvalPanel.aJustificationIsRequired') : undefined}
             className="sm:pl-12"
           >
             <Textarea
@@ -341,12 +340,12 @@ function DecisionDialog({
               maxLength={1000}
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              placeholder={approve ? 'z. B. Planungslauf #123 geprüft' : 'z. B. Bereich zu weit gefasst – bitte nur OUs deployen'}
+              placeholder={approve ? t('runs.approvalPanel.eGPlanRun123') : t('runs.approvalPanel.eGScopeTooBroad')}
               aria-invalid={(touched && missing) || undefined}
             />
           </Field>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
+            <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
             <Button
               type="submit"
               variant={approve ? 'default' : 'destructive'}
@@ -354,7 +353,7 @@ function DecisionDialog({
               loading={decide.isPending}
             >
               {!decide.isPending && (approve ? <ShieldCheck /> : <ShieldX />)}
-              {approve ? 'Freigeben' : 'Ablehnen'}
+              {approve ? t('runs.approvalPanel.approve2') : t('runs.approvalPanel.reject2')}
             </Button>
           </DialogFooter>
         </form>
@@ -371,8 +370,8 @@ export function ApprovalOutcome({ run }: { run: RunSummary }) {
       <span className="flex min-w-0 items-center gap-1 text-rose-700 dark:text-rose-300" title={run.approvedAt ? formatDateTime(run.approvedAt) : undefined}>
         <ShieldX className="size-3.5 shrink-0" />
         <span className="truncate">
-          {run.approvedBy ? `Abgelehnt von ${run.approvedBy}` : 'Freigabe abgelaufen'}
-          {run.approvalComment && <>: <span className="italic">„{run.approvalComment}“</span></>}
+          {run.approvedBy ? t('runs.approvalPanel.rejectedBy', { by: run.approvedBy }) : t('runs.approvalPanel.approvalExpired')}
+          {run.approvalComment && <>: <span className="italic">{t('common.quoted', { text: run.approvalComment })}</span></>}
         </span>
       </span>
     )
@@ -382,9 +381,9 @@ export function ApprovalOutcome({ run }: { run: RunSummary }) {
     <span className="flex min-w-0 items-center gap-1 text-emerald-700 dark:text-emerald-400" title={run.approvedAt ? formatDateTime(run.approvedAt) : undefined}>
       <ShieldCheck className="size-3.5 shrink-0" />
       <span className="truncate">
-        Freigegeben von {run.approvedBy}
+        {t('runs.approvalPanel.approvedBy', { by: run.approvedBy })}
         {run.approvedAt && <span className="text-muted-foreground"> · {formatRelative(run.approvedAt)}</span>}
-        {run.approvalComment && <span className="text-muted-foreground">: <span className="italic">„{run.approvalComment}“</span></span>}
+        {run.approvalComment && <span className="text-muted-foreground">: <span className="italic">{t('common.quoted', { text: run.approvalComment })}</span></span>}
       </span>
     </span>
   )

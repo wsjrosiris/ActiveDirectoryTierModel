@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { Tooltip } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { TierBadge } from './badges'
+import { t } from '@/i18n'
 
 /** Interactive OU tree (keyboard accessible, tier colored). */
 export function OuTree({
@@ -48,14 +49,14 @@ export function OuTree({
       {toolbar && (
         <div className="mb-2 flex items-center justify-end gap-1">
           <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={() => setExpanded(new Set(all.map((a) => a.dn)))}>
-            <ChevronsUpDown /> Alle öffnen
+            <ChevronsUpDown /> {t('shared.ouTree.expandAll')}
           </Button>
           <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={() => setExpanded(new Set())}>
-            <ChevronsDownUp /> Alle schließen
+            <ChevronsDownUp /> {t('shared.ouTree.collapseAll')}
           </Button>
         </div>
       )}
-      <div role="tree" aria-label="OU-Struktur" className="text-sm">
+      <div role="tree" aria-label={t('shared.ouTree.ouStructure')} className="text-sm">
         <div className="mb-1 flex items-center gap-2 px-2 py-1 font-mono text-[11px] text-muted-foreground">
           <span className="size-1.5 rounded-full bg-muted-foreground/50" />
           {'{{DOMAIN_DN}}'}
@@ -65,7 +66,7 @@ export function OuTree({
         ))}
         {orphans.length > 0 && (
           <div className="mt-3 rounded-md border border-dashed border-amber-500/40 p-2">
-            <p className="mb-1 px-1 text-xs font-medium text-amber-700 dark:text-amber-300">Ohne gültige übergeordnete OU</p>
+            <p className="mb-1 px-1 text-xs font-medium text-amber-700 dark:text-amber-300">{t('shared.ouTree.withoutAValidParentOu')}</p>
             {orphans.map((n) => (
               <TreeNode key={n.dn} node={n} depth={0} expanded={expanded} toggle={toggle} onSelect={onSelect} selectedIndex={selectedIndex} renderActions={renderActions} />
             ))}
@@ -120,7 +121,7 @@ function TreeNode({
             if (e.key === 'ArrowLeft' && hasChildren && isOpen) toggle(node.dn)
           }}
           className={cn('grid size-5 shrink-0 place-content-center rounded text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring', !hasChildren && 'invisible')}
-          aria-label={isOpen ? `${node.ou.name} zuklappen` : `${node.ou.name} aufklappen`}
+          aria-label={isOpen ? t('shared.ouTree.collapseName', { name: node.ou.name }) : t('shared.ouTree.expandName', { name: node.ou.name })}
         >
           <ChevronRight className={cn('size-3.5 transition-transform duration-150', isOpen && 'rotate-90')} />
         </button>
@@ -136,13 +137,13 @@ function TreeNode({
         </button>
         <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
           {node.ou.protectFromAccidentalDeletion && (
-            <Tooltip content="Vor versehentlichem Löschen geschützt"><Lock className="size-3 opacity-60" /></Tooltip>
+            <Tooltip content={t('shared.ouTree.protectedFromAccidentalDeletion')}><Lock className="size-3 opacity-60" /></Tooltip>
           )}
           {node.ou.blockGpoInheritance && (
-            <Tooltip content="GPO-Vererbung blockiert"><Ban className="size-3 opacity-60" /></Tooltip>
+            <Tooltip content={t('shared.ouTree.gpoInheritanceBlocked')}><Ban className="size-3 opacity-60" /></Tooltip>
           )}
           {node.ou.disableInheritance && (
-            <Tooltip content="ACL-Vererbung deaktiviert"><ShieldOff className="size-3 opacity-60" /></Tooltip>
+            <Tooltip content={t('shared.ouTree.aclInheritanceDisabled')}><ShieldOff className="size-3 opacity-60" /></Tooltip>
           )}
         </span>
         <TierBadge tier={tier} short className="hidden sm:inline-flex" />

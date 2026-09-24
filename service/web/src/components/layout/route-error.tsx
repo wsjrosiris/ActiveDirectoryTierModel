@@ -2,6 +2,7 @@ import { isRouteErrorResponse, Link, useRouteError } from 'react-router'
 import { AlertOctagon, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ApiError } from '@/api/client'
+import { t } from '@/i18n'
 
 export function RouteError({ inline }: { inline?: boolean }) {
   const err = useRouteError()
@@ -9,15 +10,15 @@ export function RouteError({ inline }: { inline?: boolean }) {
   const title = isRouteErrorResponse(err)
     ? `${err.status} ${err.statusText}`
     : isChunk
-      ? 'Neue Version verfügbar'
-      : 'Etwas ist schiefgelaufen'
+      ? t('layout.routeError.newVersionAvailable')
+      : t('layout.routeError.somethingWentWrong')
   const detail = isChunk
-    ? 'Die Anwendung wurde aktualisiert. Bitte laden Sie die Seite neu.'
+    ? t('layout.routeError.theApplicationHasBeenUpdated')
     : err instanceof ApiError
       ? err.userMessage
       : err instanceof Error
         ? err.message
-        : 'Unbekannter Fehler'
+        : t('layout.routeError.unknownError')
   return (
     <div className={inline ? 'grid place-content-center px-6 py-24' : 'grid min-h-dvh place-content-center bg-background px-6'}>
       <div className="flex max-w-md flex-col items-center text-center">
@@ -31,10 +32,10 @@ export function RouteError({ inline }: { inline?: boolean }) {
         )}
         <div className="mt-6 flex gap-2">
           <Button variant="outline" asChild>
-            <Link to="/">Zum Dashboard</Link>
+            <Link to="/">{t('layout.routeError.toTheDashboard')}</Link>
           </Button>
           <Button onClick={() => window.location.reload()}>
-            <RotateCcw /> Neu laden
+            <RotateCcw /> {t('layout.routeError.reload')}
           </Button>
         </div>
       </div>

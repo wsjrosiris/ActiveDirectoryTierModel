@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Tooltip } from '@/components/ui/tooltip'
 import { SeverityBadge } from '@/components/shared/badges'
 import { aclObjectTypeLabels, rightDescriptions } from '@/lib/labels'
+import { t } from '@/i18n'
 
 export function AttackPathsTab({ data }: { data: PrivilegedOverview }) {
   const paths = data.attackPaths
@@ -14,8 +15,8 @@ export function AttackPathsTab({ data }: { data: PrivilegedOverview }) {
       <Card>
         <EmptyState
           icon={<ShieldCheck />}
-          title="Keine Angriffspfade gefunden"
-          description="Außerhalb von Tier 0 hat niemand gefährliche Rechte (z. B. WriteDacl, GenericAll, Besitz) auf Domänenstamm, AdminSDHolder, geschützte Gruppen, Tier-0-OUs oder deren GPOs."
+          title={t('privileged.attackPathsTab.noAttackPathsFound')}
+          description={t('privileged.attackPathsTab.outsideTier0NobodyHas')}
         />
       </Card>
     )
@@ -30,7 +31,7 @@ export function AttackPathsTab({ data }: { data: PrivilegedOverview }) {
   return (
     <div className="grid gap-4">
       <p className="text-[13px] text-muted-foreground">
-        Wer eines dieser Rechte hat, kann sich selbst oder andere zu Tier 0 machen. Jeder Pfad ist deshalb ein Befund mit hohem Schweregrad.
+        {t('privileged.attackPathsTab.anyoneWithOneOfThese')}
       </p>
       <div className="grid items-start gap-4 xl:grid-cols-2">
         {[...byTarget.entries()].map(([dn, list]) => (
@@ -43,7 +44,7 @@ export function AttackPathsTab({ data }: { data: PrivilegedOverview }) {
                 </div>
                 <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground" title={dn}>{dn}</p>
               </div>
-              <Badge variant="danger"><Route /> {list.length} {list.length === 1 ? 'Pfad' : 'Pfade'}</Badge>
+              <Badge variant="danger"><Route /> {t('privileged.attackPathsTab.paths', { count: list.length })}</Badge>
             </div>
             <ul className="divide-y">
               {list.map((p, i) => (

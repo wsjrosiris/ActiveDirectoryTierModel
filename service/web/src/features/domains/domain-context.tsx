@@ -7,6 +7,7 @@ import { draftStore } from '@/features/config/draft-store'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { FullPageSpinner } from '@/components/layout/full-page-spinner'
 import { getDomainKey, readStoredDomain, setDomainKey, storeDomain } from '@/lib/domain'
+import { t } from '@/i18n'
 
 /* The managed domain the UI works on (roadmap 17). Chosen per user (localStorage), sent as header on every API call,
  * part of every query hash; configuration drafts are kept per domain. */
@@ -74,10 +75,10 @@ export function DomainProvider({ children }: { children: React.ReactNode }) {
       const dirty = draftStore.dirtyKeys().length
       if (dirty > 0) {
         const ok = await confirm({
-          title: `Zur Domäne „${target.displayName}“ wechseln?`,
-          description: `In „${current?.displayName}“ ${dirty === 1 ? 'gibt es 1 Bereich' : `gibt es ${dirty} Bereiche`} mit ungespeicherten Änderungen. Sie bleiben als Entwurf dieser Domäne erhalten und sind nach dem Zurückwechseln wieder da – beim Neuladen der Seite gehen sie verloren.`,
-          confirmText: 'Wechseln',
-          cancelText: 'Hierbleiben',
+          title: t('domains.domainContext.switchToDomainDisplayname', { displayName: target.displayName }),
+          description: t('domains.domainContext.switchDescription', { count: dirty, name: current?.displayName }),
+          confirmText: t('domains.domainContext.switch'),
+          cancelText: t('domains.domainContext.stayHere'),
         })
         if (!ok) return false
       }
@@ -87,8 +88,8 @@ export function DomainProvider({ children }: { children: React.ReactNode }) {
       storeDomain(user.username, target.key)
       setWanted(target.key)
       const parked = draftStore.getState().drafts
-      toast.success(`Domäne: ${target.displayName}`, {
-        description: Object.keys(parked).length > 0 ? 'Ihre Entwürfe dieser Domäne wurden wiederhergestellt.' : target.dnsName || undefined,
+      toast.success(t('domains.domainContext.domainDisplayname', { displayName: target.displayName }), {
+        description: Object.keys(parked).length > 0 ? t('domains.domainContext.yourDraftsForThisDomain') : target.dnsName || undefined,
         duration: 2500,
       })
       return true

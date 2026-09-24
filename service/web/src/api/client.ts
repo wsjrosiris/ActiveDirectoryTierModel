@@ -59,6 +59,7 @@ import type {
   WindowsAuthUpdate,
 } from './types'
 import { DOMAIN_HEADER, getDomainKey, withDomain } from '@/lib/domain'
+import { t } from '@/i18n'
 
 export class ApiError extends Error {
   readonly status: number
@@ -88,14 +89,14 @@ export class ApiError extends Error {
 
 function defaultTitle(status: number): string {
   switch (status) {
-    case 400: return 'Ungültige Anfrage'
-    case 401: return 'Nicht angemeldet'
-    case 403: return 'Keine Berechtigung'
-    case 404: return 'Nicht gefunden'
-    case 409: return 'Konflikt'
-    case 423: return 'Konto gesperrt'
-    case 0: return 'Server nicht erreichbar'
-    default: return status >= 500 ? 'Serverfehler' : `Fehler ${status}`
+    case 400: return t('api.client.invalidRequest')
+    case 401: return t('api.client.notSignedIn')
+    case 403: return t('api.client.accessDenied')
+    case 404: return t('api.client.notFound')
+    case 409: return t('api.client.conflict')
+    case 423: return t('api.client.accountLocked')
+    case 0: return t('api.client.serverUnreachable')
+    default: return status >= 500 ? t('api.client.serverError') : t('api.client.errorStatus', { status })
   }
 }
 
@@ -162,7 +163,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     })
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw e
-    throw new ApiError(0, { detail: 'Die Verbindung zum Server ist fehlgeschlagen.' })
+    throw new ApiError(0, { detail: t('api.client.theConnectionToTheServer') })
   }
 
   if (res.status === 401 && !opts.noRedirect && !isAuthPath(path)) {

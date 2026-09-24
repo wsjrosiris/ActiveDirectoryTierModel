@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field } from '@/components/ui/label'
 import { useDomainControllerOptions } from '@/features/config/lookups'
 import { settingsQuery } from '@/features/runs/run-request-form'
+import { t } from '@/i18n'
 
 /** "Jetzt prüfen": starts a monitor run with a domain controller prefilled from the settings. */
 export function MonitorStartDialog({ open, onOpenChange, onStarted }: { open: boolean; onOpenChange: (o: boolean) => void; onStarted?: (run: RunSummary) => void }) {
@@ -24,27 +25,26 @@ export function MonitorStartDialog({ open, onOpenChange, onStarted }: { open: bo
   const start = useMutation({
     mutationFn: () => api.runs.monitor(dc.trim()),
     onSuccess: (run) => {
-      toast.success(`Überwachung #${run.id} eingereiht`, { description: 'Die Ergebnisse erscheinen hier, sobald der Lauf abgeschlossen ist.' })
+      toast.success(t('privileged.monitorStart.monitoringIdQueued', { id: run.id }), { description: t('privileged.monitorStart.theResultsAppearHereAs') })
       qc.invalidateQueries({ queryKey: ['privileged'] })
       qc.invalidateQueries({ queryKey: ['runs'] })
       onOpenChange(false)
       onStarted?.(run)
     },
   })
-  const error = dc.trim() ? null : 'Bitte einen Domain Controller angeben.'
+  const error = dc.trim() ? null : t('privileged.monitorStart.pleaseEnterADomainController')
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={(e) => { e.preventDefault(); if (!error) start.mutate() }} className="grid gap-5">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><ShieldUser className="size-4 text-muted-foreground" /> Privilegierte Gruppen prüfen</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><ShieldUser className="size-4 text-muted-foreground" /> {t('privileged.monitorStart.checkPrivilegedGroups')}</DialogTitle>
             <DialogDescription>
-              Liest die Mitglieder der geschützten Gruppen und aller Tier-0-Gruppen aus der Konfiguration, prüft die Admin-Konten und die
-              Berechtigungen auf Tier-0-Objekten. Im Active Directory wird nichts verändert.
+              {t('privileged.monitorStart.readsTheMembersOfThe')}
             </DialogDescription>
           </DialogHeader>
-          <Field label="Domain Controller" htmlFor="mon-dc" required hint={settings.data?.defaultPreferredDc ? `Standard: ${settings.data.defaultPreferredDc}` : undefined}>
+          <Field label={t('privileged.monitorStart.domainController')} htmlFor="mon-dc" required hint={settings.data?.defaultPreferredDc ? t('privileged.monitorStart.defaultDefaultpreferreddc', { defaultPreferredDc: settings.data.defaultPreferredDc }) : undefined}>
             <Combobox
               id="mon-dc"
               mono
@@ -52,13 +52,13 @@ export function MonitorStartDialog({ open, onOpenChange, onStarted }: { open: bo
               onChange={setDc}
               options={dcOptions}
               placeholder="dc01.contoso.local"
-              searchPlaceholder="DC suchen oder FQDN eingeben …"
-              emptyText="Keine Domain Controller gefunden – FQDN eingeben"
+              searchPlaceholder={t('privileged.monitorStart.searchDcOrEnterFqdn')}
+              emptyText={t('privileged.monitorStart.noDomainControllersFoundEnter')}
             />
           </Field>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Abbrechen</Button>
-            <Button type="submit" disabled={!!error} loading={start.isPending}>{!start.isPending && <Play />} Jetzt prüfen</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" disabled={!!error} loading={start.isPending}>{!start.isPending && <Play />} {t('privileged.monitorStart.checkNow')}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

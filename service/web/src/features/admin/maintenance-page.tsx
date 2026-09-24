@@ -24,6 +24,7 @@ import { RequireAuth } from '@/features/auth/auth'
 import { timeZones } from '@/features/runs/cron'
 import { cn, formatDateTime, formatRelative } from '@/lib/utils'
 import { dayPresets, describeDays, describeTimes, sameDays, weekdays } from './maintenance-model'
+import { t } from '@/i18n'
 
 export function Component() {
   return (
@@ -42,12 +43,12 @@ function MaintenancePage() {
     <Page>
       <PageHeader
         icon={<CalendarRange />}
-        title="Wartungsfenster"
-        description="Wann Änderungen im Active Directory angewendet werden dürfen – und wann nicht."
+        title={t('admin.maintenance.maintenanceWindows')}
+        description={t('admin.maintenance.whenChangesMayBeApplied')}
         actions={
           <>
-            <Button variant="outline" onClick={() => setFreezeEdit('new')}><Snowflake /> Sperrzeit anlegen</Button>
-            <Button onClick={() => setWindowEdit('new')}><CalendarPlus /> Fenster anlegen</Button>
+            <Button variant="outline" onClick={() => setFreezeEdit('new')}><Snowflake /> {t('admin.maintenance.createChangeFreeze')}</Button>
+            <Button onClick={() => setWindowEdit('new')}><CalendarPlus /> {t('admin.maintenance.createWindow')}</Button>
           </>
         }
       />
@@ -87,32 +88,34 @@ function StatusCard({ status: s, hasWindows }: { status: MaintenanceStatus; hasW
           <div className="grid min-w-0 gap-1">
             <p className="font-medium">
               {s.activeFreeze
-                ? `Sperrzeit „${s.activeFreeze.reason}“ aktiv`
+                ? t('admin.maintenance.changeFreezeReasonActive', { reason: s.activeFreeze.reason })
                 : s.allowedNow
-                  ? s.currentWindow ? `Wartungsfenster „${s.currentWindow.name}“ ist geöffnet` : 'Anwenden ist jederzeit möglich'
-                  : 'Derzeit außerhalb der Wartungsfenster'}
+                  ? s.currentWindow ? t('admin.maintenance.maintenanceWindowNameIsOpen', { name: s.currentWindow.name }) : t('admin.maintenance.applyIsPossibleAtAny')
+                  : t('admin.maintenance.currentlyOutsideTheMaintenanceWindows')}
             </p>
             <p className="text-[13px] text-muted-foreground">
               {s.activeFreeze ? (
-                <>Bis {formatDateTime(s.activeFreeze.to)} ({formatRelative(s.activeFreeze.to)}) werden Anwenden-Läufe abgelehnt. Geplante Läufe starten im ersten Fenster danach{s.nextStart ? ` (${formatDateTime(s.nextStart)})` : ''}.</>
+                <>{s.nextStart
+                  ? t('admin.maintenance.freezeUntilNext', { to: formatDateTime(s.activeFreeze.to), rel: formatRelative(s.activeFreeze.to), next: formatDateTime(s.nextStart) })
+                  : t('admin.maintenance.freezeUntil', { to: formatDateTime(s.activeFreeze.to), rel: formatRelative(s.activeFreeze.to) })}</>
               ) : s.allowedNow ? (
-                s.currentWindow ? <>Anwenden-Läufe starten sofort; das Fenster schließt {formatDateTime(s.currentWindow.end)}.</> : hasWindows
-                  ? 'Alle Wartungsfenster sind deaktiviert – Anwenden ist daher jederzeit möglich (außer in Sperrzeiten).'
-                  : 'Solange kein Wartungsfenster aktiv ist, dürfen Anwenden-Läufe jederzeit starten (außer in Sperrzeiten).'
+                s.currentWindow ? <>{t('admin.maintenance.windowOpenUntil', { end: formatDateTime(s.currentWindow.end) })}</> : hasWindows
+                  ? t('admin.maintenance.allMaintenanceWindowsAreDisabled')
+                  : t('admin.maintenance.asLongAsNoMaintenance')
               ) : (
-                <>Neue Anwenden-Läufe werden geplant und starten automatisch {s.nextStart ? <strong className="text-foreground">{formatDateTime(s.nextStart)}</strong> : 'im nächsten Fenster'}.</>
+                <>{t('admin.maintenance.newRunsScheduled')} {s.nextStart ? <strong className="text-foreground">{formatDateTime(s.nextStart)}</strong> : t('admin.maintenance.inTheNextWindow')}.</>
               )}
             </p>
             <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
               <Info className="mt-px size-3.5 shrink-0" />
-              Planungsläufe, Audits und Überwachungen sind nie eingeschränkt. Die Prüfung der Planung (Gültigkeit, Konfigurationsstand) erfolgt beim Einreichen.
+              {t('admin.maintenance.planRunsAuditsAndMonitoring')}
             </p>
           </div>
         </div>
         <div className="grid content-start gap-2 text-[13px] md:min-w-64">
           {s.restricted && s.upcoming.length > 0 && (
             <div>
-              <p className="mb-1 text-xs font-medium text-muted-foreground">Nächste Fenster</p>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">{t('admin.maintenance.upcomingWindows')}</p>
               <ul className="grid gap-1">
                 {s.upcoming.slice(0, 3).map((w) => (
                   <li key={`${w.windowId}-${w.start}`} className="flex flex-wrap justify-between gap-x-3">
@@ -125,7 +128,7 @@ function StatusCard({ status: s, hasWindows }: { status: MaintenanceStatus; hasW
           )}
           {s.scheduledRuns > 0 && (
             <Link to="/laeufe?status=Scheduled" className="inline-flex items-center gap-1.5 text-primary hover:underline">
-              <CalendarClock className="size-3.5" /> {s.scheduledRuns === 1 ? '1 geplanter Lauf' : `${s.scheduledRuns} geplante Läufe`}
+              <CalendarClock className="size-3.5" /> {t('admin.maintenance.scheduledRuns', { count: s.scheduledRuns })}
             </Link>
           )}
         </div>
@@ -140,11 +143,11 @@ function WindowsCard({ windows, onEdit }: { windows: MaintenanceWindow[]; onEdit
   const invalidate = () => qc.invalidateQueries({ queryKey: ['maintenance'] })
   const toggle = useMutation({
     mutationFn: (w: MaintenanceWindow) => opsApi.maintenance.updateWindow(w.id, { ...w, enabled: !w.enabled }),
-    onSuccess: (w) => { toast.success(w.enabled ? `„${w.name}“ aktiviert` : `„${w.name}“ deaktiviert`); invalidate() },
+    onSuccess: (w) => { toast.success(w.enabled ? t('admin.maintenance.nameEnabled', { name: w.name }) : t('admin.maintenance.nameDisabled', { name: w.name })); invalidate() },
   })
   const remove = useMutation({
     mutationFn: (w: MaintenanceWindow) => opsApi.maintenance.removeWindow(w.id),
-    onSuccess: () => { toast.success('Wartungsfenster gelöscht'); invalidate() },
+    onSuccess: () => { toast.success(t('admin.maintenance.maintenanceWindowDeleted')); invalidate() },
   })
 
   return (
@@ -152,27 +155,27 @@ function WindowsCard({ windows, onEdit }: { windows: MaintenanceWindow[]; onEdit
       <CardHeader>
         <div className="flex items-center gap-2">
           <CalendarRange className="size-4 text-muted-foreground" />
-          <CardTitle>Wartungsfenster</CardTitle>
+          <CardTitle>{t('admin.maintenance.maintenanceWindows')}</CardTitle>
         </div>
-        <CardDescription>Wiederkehrende Zeiträume, in denen Anwenden-Läufe starten dürfen. Ein Lauf, der im Fenster startet, darf darüber hinaus laufen.</CardDescription>
+        <CardDescription>{t('admin.maintenance.recurringPeriodsInWhichApply')}</CardDescription>
       </CardHeader>
       {windows.length === 0 ? (
         <EmptyState
           compact
           icon={<CalendarRange />}
-          title="Keine Wartungsfenster"
-          description="Ohne Wartungsfenster dürfen Anwenden-Läufe jederzeit starten. Legen Sie ein Fenster an, um Änderungen auf feste Zeiten zu beschränken."
-          action={<Button size="sm" onClick={() => onEdit('new')}><CalendarPlus /> Fenster anlegen</Button>}
+          title={t('admin.maintenance.noMaintenanceWindows')}
+          description={t('admin.maintenance.withoutMaintenanceWindowsApplyRuns')}
+          action={<Button size="sm" onClick={() => onEdit('new')}><CalendarPlus /> {t('admin.maintenance.createWindow')}</Button>}
         />
       ) : (
         <Table>
           <THead>
             <TR>
-              <TH>Name</TH>
-              <TH>Zeit</TH>
-              <TH className="hidden md:table-cell">Zeitzone</TH>
-              <TH className="w-20">Aktiv</TH>
-              <TH className="w-10"><span className="sr-only">Aktionen</span></TH>
+              <TH>{t('common.name')}</TH>
+              <TH>{t('admin.maintenance.time')}</TH>
+              <TH className="hidden md:table-cell">{t('admin.maintenance.timeZone')}</TH>
+              <TH className="w-20">{t('common.active')}</TH>
+              <TH className="w-10"><span className="sr-only">{t('common.actions')}</span></TH>
             </TR>
           </THead>
           <TBody>
@@ -202,24 +205,24 @@ function WindowsCard({ windows, onEdit }: { windows: MaintenanceWindow[]; onEdit
                 </TD>
                 <TD className="hidden text-[13px] md:table-cell">{w.timeZone}</TD>
                 <TD>
-                  <Switch checked={w.enabled} onCheckedChange={() => toggle.mutate(w)} aria-label={`${w.name} aktiv`} />
+                  <Switch checked={w.enabled} onCheckedChange={() => toggle.mutate(w)} aria-label={t('common.nameActive', { name: w.name })} />
                 </TD>
                 <TD>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon-xs" aria-label={`Aktionen für ${w.name}`}><MoreHorizontal /></Button>
+                      <Button variant="ghost" size="icon-xs" aria-label={t('admin.maintenance.actionsForName', { name: w.name })}><MoreHorizontal /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onSelect={() => onEdit(w)}><Pencil /> Bearbeiten</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => onEdit(w)}><Pencil /> {t('common.edit')}</DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         destructive
                         onSelect={async () => {
-                          if (await confirm({ title: `Wartungsfenster „${w.name}“ löschen?`, description: 'Geplante Läufe werden auf das nächste verbleibende Fenster verschoben.', confirmText: 'Löschen', destructive: true }))
+                          if (await confirm({ title: t('admin.maintenance.deleteMaintenanceWindowName', { name: w.name }), description: t('admin.maintenance.scheduledRunsAreMovedTo'), confirmText: t('common.delete'), destructive: true }))
                             remove.mutate(w)
                         }}
                       >
-                        <Trash2 /> Löschen
+                        <Trash2 /> {t('common.delete')}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -234,10 +237,10 @@ function WindowsCard({ windows, onEdit }: { windows: MaintenanceWindow[]; onEdit
 }
 
 function FreezeState({ f }: { f: FreezePeriod }) {
-  if (!f.enabled) return <Badge variant="muted">Deaktiviert</Badge>
-  if (f.active) return <Badge variant="danger"><OctagonX /> Aktiv</Badge>
-  if (f.past) return <Badge variant="outline">Vorbei</Badge>
-  return <Badge variant="info"><CalendarClock /> Bevorstehend</Badge>
+  if (!f.enabled) return <Badge variant="muted">{t('admin.maintenance.disabled')}</Badge>
+  if (f.active) return <Badge variant="danger"><OctagonX /> {t('common.active')}</Badge>
+  if (f.past) return <Badge variant="outline">{t('admin.maintenance.past')}</Badge>
+  return <Badge variant="info"><CalendarClock /> {t('admin.maintenance.upcoming')}</Badge>
 }
 
 function FreezesCard({ freezes, onEdit }: { freezes: FreezePeriod[]; onEdit: (f: FreezePeriod | 'new') => void }) {
@@ -246,11 +249,11 @@ function FreezesCard({ freezes, onEdit }: { freezes: FreezePeriod[]; onEdit: (f:
   const invalidate = () => qc.invalidateQueries({ queryKey: ['maintenance'] })
   const toggle = useMutation({
     mutationFn: (f: FreezePeriod) => opsApi.maintenance.updateFreeze(f.id, { from: f.from, to: f.to, reason: f.reason, enabled: !f.enabled }),
-    onSuccess: (f) => { toast.success(f.enabled ? `Sperrzeit „${f.reason}“ aktiviert` : `Sperrzeit „${f.reason}“ deaktiviert`); invalidate() },
+    onSuccess: (f) => { toast.success(f.enabled ? t('admin.maintenance.changeFreezeReasonEnabled', { reason: f.reason }) : t('admin.maintenance.changeFreezeReasonDisabled', { reason: f.reason })); invalidate() },
   })
   const remove = useMutation({
     mutationFn: (f: FreezePeriod) => opsApi.maintenance.removeFreeze(f.id),
-    onSuccess: () => { toast.success('Sperrzeit gelöscht'); invalidate() },
+    onSuccess: () => { toast.success(t('admin.maintenance.changeFreezeDeleted')); invalidate() },
   })
 
   return (
@@ -258,21 +261,21 @@ function FreezesCard({ freezes, onEdit }: { freezes: FreezePeriod[]; onEdit: (f:
       <CardHeader>
         <div className="flex items-center gap-2">
           <Snowflake className="size-4 text-muted-foreground" />
-          <CardTitle>Sperrzeiten</CardTitle>
+          <CardTitle>{t('admin.maintenance.changeFreezes')}</CardTitle>
         </div>
-        <CardDescription>Zeiträume ohne Änderungen, z. B. Jahresabschluss oder Feiertage. Anwenden wird in dieser Zeit abgelehnt – auch innerhalb eines Wartungsfensters.</CardDescription>
+        <CardDescription>{t('admin.maintenance.periodsWithoutChangesEG')}</CardDescription>
       </CardHeader>
       {freezes.length === 0 ? (
-        <EmptyState compact icon={<Snowflake />} title="Keine Sperrzeiten" action={<Button size="sm" variant="outline" onClick={() => onEdit('new')}><Snowflake /> Sperrzeit anlegen</Button>} />
+        <EmptyState compact icon={<Snowflake />} title={t('admin.maintenance.noChangeFreezes')} action={<Button size="sm" variant="outline" onClick={() => onEdit('new')}><Snowflake /> {t('admin.maintenance.createChangeFreeze')}</Button>} />
       ) : (
         <Table>
           <THead>
             <TR>
-              <TH>Grund</TH>
-              <TH>Zeitraum</TH>
-              <TH className="hidden sm:table-cell">Status</TH>
-              <TH className="w-20">Aktiv</TH>
-              <TH className="w-10"><span className="sr-only">Aktionen</span></TH>
+              <TH>{t('admin.maintenance.reason')}</TH>
+              <TH>{t('admin.maintenance.period')}</TH>
+              <TH className="hidden sm:table-cell">{t('common.status')}</TH>
+              <TH className="w-20">{t('common.active')}</TH>
+              <TH className="w-10"><span className="sr-only">{t('common.actions')}</span></TH>
             </TR>
           </THead>
           <TBody>
@@ -280,32 +283,32 @@ function FreezesCard({ freezes, onEdit }: { freezes: FreezePeriod[]; onEdit: (f:
               <TR key={f.id} className={cn((!f.enabled || f.past) && 'text-muted-foreground')}>
                 <TD>
                   <p className="font-medium text-foreground">{f.reason}</p>
-                  <p className="text-xs text-muted-foreground">von {f.createdBy}</p>
+                  <p className="text-xs text-muted-foreground">{t('admin.maintenance.createdBy', { by: f.createdBy })}</p>
                   <DomainScopeBadges ids={f.domainIds} />
                 </TD>
                 <TD className="text-[13px]">
                   <p>{formatDateTime(f.from)}</p>
-                  <p className="text-xs text-muted-foreground">bis {formatDateTime(f.to)}</p>
+                  <p className="text-xs text-muted-foreground">{t('admin.maintenance.until', { to: formatDateTime(f.to) })}</p>
                 </TD>
                 <TD className="hidden sm:table-cell"><FreezeState f={f} /></TD>
                 <TD>
-                  <Switch checked={f.enabled} onCheckedChange={() => toggle.mutate(f)} aria-label={`Sperrzeit ${f.reason} aktiv`} />
+                  <Switch checked={f.enabled} onCheckedChange={() => toggle.mutate(f)} aria-label={t('admin.maintenance.changeFreezeReasonActive2', { reason: f.reason })} />
                 </TD>
                 <TD>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon-xs" aria-label={`Aktionen für ${f.reason}`}><MoreHorizontal /></Button>
+                      <Button variant="ghost" size="icon-xs" aria-label={t('admin.maintenance.actionsForReason', { reason: f.reason })}><MoreHorizontal /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onSelect={() => onEdit(f)}><Pencil /> Bearbeiten</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => onEdit(f)}><Pencil /> {t('common.edit')}</DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         destructive
                         onSelect={async () => {
-                          if (await confirm({ title: `Sperrzeit „${f.reason}“ löschen?`, confirmText: 'Löschen', destructive: true })) remove.mutate(f)
+                          if (await confirm({ title: t('admin.maintenance.deleteChangeFreezeReason', { reason: f.reason }), confirmText: t('common.delete'), destructive: true })) remove.mutate(f)
                         }}
                       >
-                        <Trash2 /> Löschen
+                        <Trash2 /> {t('common.delete')}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -334,7 +337,7 @@ function WindowSheet({ value, onClose }: { value: MaintenanceWindow | 'new' | nu
   }, [value])
 
   const toggleDay = (d: number) => setForm((f) => ({ ...f, days: f.days.includes(d) ? f.days.filter((x) => x !== d) : [...f.days, d] }))
-  const error = !form.name.trim() ? 'Name ist erforderlich.' : !form.days.length ? 'Mindestens einen Wochentag wählen.' : !/^\d{2}:\d{2}$/.test(form.from) || !/^\d{2}:\d{2}$/.test(form.to) ? 'Uhrzeiten angeben.' : null
+  const error = !form.name.trim() ? t('admin.maintenance.nameIsRequired') : !form.days.length ? t('admin.maintenance.selectAtLeastOneWeekday') : !/^\d{2}:\d{2}$/.test(form.from) || !/^\d{2}:\d{2}$/.test(form.to) ? t('admin.maintenance.enterTheTimes') : null
 
   const save = useMutation({
     mutationFn: () => {
@@ -344,7 +347,7 @@ function WindowSheet({ value, onClose }: { value: MaintenanceWindow | 'new' | nu
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['maintenance'] })
       qc.invalidateQueries({ queryKey: ['runs'] })
-      toast.success(isNew ? 'Wartungsfenster angelegt' : 'Wartungsfenster gespeichert')
+      toast.success(isNew ? t('admin.maintenance.maintenanceWindowCreated') : t('admin.maintenance.maintenanceWindowSaved'))
       onClose()
     },
   })
@@ -354,16 +357,16 @@ function WindowSheet({ value, onClose }: { value: MaintenanceWindow | 'new' | nu
       <SheetContent>
         <form className="flex h-full flex-col" onSubmit={(e) => { e.preventDefault(); if (!error) save.mutate() }}>
           <SheetHeader>
-            <SheetTitle>{isNew ? 'Neues Wartungsfenster' : 'Wartungsfenster bearbeiten'}</SheetTitle>
-            <SheetDescription>Anwenden-Läufe starten nur innerhalb eines aktiven Fensters.</SheetDescription>
+            <SheetTitle>{isNew ? t('admin.maintenance.newMaintenanceWindow') : t('admin.maintenance.editMaintenanceWindow')}</SheetTitle>
+            <SheetDescription>{t('admin.maintenance.applyRunsOnlyStartWithin')}</SheetDescription>
           </SheetHeader>
           <SheetBody className="grid content-start gap-6">
-            <Field label="Name" htmlFor="mw-name" required>
-              <Input id="mw-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="z. B. Nachtfenster werktags" autoFocus maxLength={100} />
+            <Field label={t('common.name')} htmlFor="mw-name" required>
+              <Input id="mw-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('admin.maintenance.eGWeekdayNightWindow')} autoFocus maxLength={100} />
             </Field>
             <div className="grid gap-2">
-              <p className="text-[13px] font-medium">Wochentage <span className="text-destructive" aria-hidden>*</span></p>
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Wochentage">
+              <p className="text-[13px] font-medium">{t('admin.maintenance.weekdays')} <span className="text-destructive" aria-hidden>*</span></p>
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('admin.maintenance.weekdays')}>
                 {weekdays.map((d) => {
                   const on = form.days.includes(d.value)
                   return (
@@ -397,37 +400,37 @@ function WindowSheet({ value, onClose }: { value: MaintenanceWindow | 'new' | nu
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Von" htmlFor="mw-from" required>
+              <Field label={t('admin.maintenance.from')} htmlFor="mw-from" required>
                 <Input id="mw-from" type="time" value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })} />
               </Field>
-              <Field label="Bis" htmlFor="mw-to" required>
+              <Field label={t('admin.maintenance.to')} htmlFor="mw-to" required>
                 <Input id="mw-to" type="time" value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })} />
               </Field>
             </div>
             <div className="flex items-start gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-[13px]">
               <CalendarClock className="mt-0.5 size-4 shrink-0 opacity-70" />
               <span>
-                {form.days.length ? describeDays(form.days) : 'Kein Tag gewählt'}, {describeTimes(form.from, form.to)}
+                {form.days.length ? describeDays(form.days) : t('admin.maintenance.noDaySelected')}, {describeTimes(form.from, form.to)}
                 <span className="text-muted-foreground"> ({form.timeZone})</span>
               </span>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Zeitzone" htmlFor="mw-tz" hint="Sommer- und Winterzeit werden berücksichtigt.">
-                <Combobox id="mw-tz" value={form.timeZone} onChange={(v) => setForm({ ...form, timeZone: v })} options={tzOptions} allowCustom={false} searchPlaceholder="Zeitzone suchen …" />
+              <Field label={t('admin.maintenance.timeZone')} htmlFor="mw-tz" hint={t('admin.maintenance.daylightSavingTimeIsTaken')}>
+                <Combobox id="mw-tz" value={form.timeZone} onChange={(v) => setForm({ ...form, timeZone: v })} options={tzOptions} allowCustom={false} searchPlaceholder={t('admin.maintenance.searchTimeZone')} />
               </Field>
-              <Field label="Status" htmlFor="mw-enabled">
+              <Field label={t('common.status')} htmlFor="mw-enabled">
                 <label htmlFor="mw-enabled" className="flex h-9 items-center gap-3 text-[13px]">
                   <Switch id="mw-enabled" checked={form.enabled} onCheckedChange={(v) => setForm({ ...form, enabled: v })} />
-                  {form.enabled ? 'Aktiv' : 'Deaktiviert'}
+                  {form.enabled ? t('common.active') : t('admin.maintenance.disabled')}
                 </label>
               </Field>
             </div>
-            <DomainScopeField id="mw-domains" value={form.domainIds ?? []} onChange={(v) => setForm({ ...form, domainIds: v })} what="Das Fenster" />
+            <DomainScopeField id="mw-domains" value={form.domainIds ?? []} onChange={(v) => setForm({ ...form, domainIds: v })} what={t('admin.maintenance.theWindow')} />
           </SheetBody>
           <SheetFooter>
             {error && <span className="mr-auto text-xs text-muted-foreground">{error}</span>}
-            <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
-            <Button type="submit" disabled={!!error} loading={save.isPending}>{isNew ? 'Anlegen' : 'Speichern'}</Button>
+            <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button type="submit" disabled={!!error} loading={save.isPending}>{isNew ? t('admin.maintenance.create') : t('common.save')}</Button>
           </SheetFooter>
         </form>
       </SheetContent>
@@ -469,7 +472,7 @@ function FreezeSheet({ value, onClose }: { value: FreezePeriod | 'new' | null; o
 
   const from = fromLocalInput(form.from)
   const to = fromLocalInput(form.to)
-  const error = !form.reason.trim() ? 'Grund ist erforderlich.' : !from || !to ? 'Beginn und Ende angeben.' : to <= from ? 'Das Ende muss nach dem Beginn liegen.' : null
+  const error = !form.reason.trim() ? t('admin.maintenance.reasonIsRequired') : !from || !to ? t('admin.maintenance.enterStartAndEnd') : to <= from ? t('admin.maintenance.theEndMustBeAfter') : null
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
   const save = useMutation({
@@ -480,7 +483,7 @@ function FreezeSheet({ value, onClose }: { value: FreezePeriod | 'new' | null; o
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['maintenance'] })
       qc.invalidateQueries({ queryKey: ['runs'] })
-      toast.success(isNew ? 'Sperrzeit angelegt' : 'Sperrzeit gespeichert')
+      toast.success(isNew ? t('admin.maintenance.changeFreezeCreated') : t('admin.maintenance.changeFreezeSaved'))
       onClose()
     },
   })
@@ -490,34 +493,34 @@ function FreezeSheet({ value, onClose }: { value: FreezePeriod | 'new' | null; o
       <SheetContent>
         <form className="flex h-full flex-col" onSubmit={(e) => { e.preventDefault(); if (!error) save.mutate() }}>
           <SheetHeader>
-            <SheetTitle>{isNew ? 'Neue Sperrzeit' : 'Sperrzeit bearbeiten'}</SheetTitle>
-            <SheetDescription>In einer Sperrzeit wird Anwenden abgelehnt; geplante Läufe starten im ersten Wartungsfenster danach.</SheetDescription>
+            <SheetTitle>{isNew ? t('admin.maintenance.newChangeFreeze') : t('admin.maintenance.editChangeFreeze')}</SheetTitle>
+            <SheetDescription>{t('admin.maintenance.applyIsRejectedDuringA')}</SheetDescription>
           </SheetHeader>
           <SheetBody className="grid content-start gap-6">
-            <Field label="Grund" htmlFor="fz-reason" required>
-              <Input id="fz-reason" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="z. B. Jahresabschluss" autoFocus maxLength={200} />
+            <Field label={t('admin.maintenance.reason')} htmlFor="fz-reason" required>
+              <Input id="fz-reason" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder={t('admin.maintenance.eGYearEndClosing')} autoFocus maxLength={200} />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Beginn" htmlFor="fz-from" required>
+              <Field label={t('admin.maintenance.start')} htmlFor="fz-from" required>
                 <Input id="fz-from" type="datetime-local" value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })} />
               </Field>
-              <Field label="Ende" htmlFor="fz-to" required>
+              <Field label={t('admin.maintenance.end')} htmlFor="fz-to" required>
                 <Input id="fz-to" type="datetime-local" value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })} />
               </Field>
             </div>
-            <p className="-mt-3 text-xs text-muted-foreground">Zeiten in Ihrer Zeitzone ({zone}).</p>
-            <Field label="Status" htmlFor="fz-enabled">
+            <p className="-mt-3 text-xs text-muted-foreground">{t('admin.maintenance.timesInYourZone', { zone })}</p>
+            <Field label={t('common.status')} htmlFor="fz-enabled">
               <label htmlFor="fz-enabled" className="flex h-9 items-center gap-3 text-[13px]">
                 <Switch id="fz-enabled" checked={form.enabled} onCheckedChange={(v) => setForm({ ...form, enabled: v })} />
-                {form.enabled ? 'Aktiv' : 'Deaktiviert'}
+                {form.enabled ? t('common.active') : t('admin.maintenance.disabled')}
               </label>
             </Field>
-            <DomainScopeField id="fz-domains" value={form.domainIds} onChange={(v) => setForm({ ...form, domainIds: v })} what="Die Sperrzeit" />
+            <DomainScopeField id="fz-domains" value={form.domainIds} onChange={(v) => setForm({ ...form, domainIds: v })} what={t('admin.maintenance.theChangeFreeze')} />
           </SheetBody>
           <SheetFooter>
             {error && <span className="mr-auto text-xs text-muted-foreground">{error}</span>}
-            <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
-            <Button type="submit" disabled={!!error} loading={save.isPending}>{isNew ? 'Anlegen' : 'Speichern'}</Button>
+            <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button type="submit" disabled={!!error} loading={save.isPending}>{isNew ? t('admin.maintenance.create') : t('common.save')}</Button>
           </SheetFooter>
         </form>
       </SheetContent>
@@ -531,15 +534,15 @@ function DomainScopeField({ id, value, onChange, what }: { id: string; value: nu
   if (domains.length < 2) return null
   const options = domains.map((d) => ({ value: String(d.id), label: d.displayName, hint: d.dnsName || d.key }))
   return (
-    <Field label="Gilt für Domänen" htmlFor={id} hint={value.length === 0 ? `Leer lassen: ${what} gilt für alle Domänen.` : `${what} gilt nur für Anwenden-Läufe der gewählten Domänen.`}>
+    <Field label={t('admin.maintenance.appliesToDomains')} htmlFor={id} hint={value.length === 0 ? t('admin.maintenance.leaveEmptyWhatAppliesTo', { what }) : t('admin.maintenance.whatOnlyAppliesToApply', { what })}>
       <MultiCombobox
         id={id}
         values={value.map(String)}
         onChange={(v) => onChange(v.map(Number))}
         options={options}
         allowCustom={false}
-        placeholder={value.length === 0 ? 'Alle Domänen – Domäne wählen …' : 'Weitere Domäne …'}
-        emptyText="Keine Domäne gefunden"
+        placeholder={value.length === 0 ? t('admin.maintenance.allDomainsSelectADomain') : t('admin.maintenance.anotherDomain')}
+        emptyText={t('admin.maintenance.noDomainFound')}
       />
     </Field>
   )
@@ -552,7 +555,7 @@ function DomainScopeBadges({ ids }: { ids: number[] | undefined }) {
   return (
     <div className="mt-1 flex flex-wrap gap-1">
       {ids.map((id) => (
-        <Badge key={id} variant="outline">{byId(id)?.displayName ?? `Domäne ${id}`}</Badge>
+        <Badge key={id} variant="outline">{byId(id)?.displayName ?? t('admin.maintenance.domainId', { id })}</Badge>
       ))}
     </div>
   )

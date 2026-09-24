@@ -129,11 +129,11 @@ export function GposEditor(props: EditorProps) {
   const rows = React.useMemo<TargetRow[]>(
     () =>
       keys.map((k) => {
-        const t = map[k]
-        const imp = gpoList(t, 'ImportOnlyGpo')
-        const post = gpoList(t, 'PostConfigureGpo')
-        const title = targetTitle(k, t)
-        const selfMatch = !!query && `${title} ${k} ${t?.displayName ?? ''}`.toLowerCase().includes(query)
+        const tt = map[k]
+        const imp = gpoList(tt, 'ImportOnlyGpo')
+        const post = gpoList(tt, 'PostConfigureGpo')
+        const title = targetTitle(k, tt)
+        const selfMatch = !!query && `${title} ${k} ${tt?.displayName ?? ''}`.toLowerCase().includes(query)
         const hits = query ? imp.filter((g) => matchesQuery(g, query)).length + post.filter((g) => matchesQuery(g, query)).length : 0
         return { k, title, imp: imp.length, post: post.length, hits, selfMatch, visible: !query || selfMatch || hits > 0 }
       }),
@@ -167,11 +167,11 @@ export function GposEditor(props: EditorProps) {
     setEditing({ id: ++editSeq, targetKey, kind, index: null, original: null, reference: null, initial: newGpo(kind, targetKey, contentRef.current?.gpos?.[targetKey]) })
   }, [])
   const duplicateGpo = React.useCallback((targetKey: string, kind: GpoKind, index: number) => {
-    const t = contentRef.current?.gpos?.[targetKey]
-    const g = gpoList(t, kind)[index]
+    const tt = contentRef.current?.gpos?.[targetKey]
+    const g = gpoList(tt, kind)[index]
     if (!g) return
     const copy: Obj = { ...structuredClone(g), name: `${g.name ?? ''} (Kopie)` }
-    if (isLinked(targetKey) && 'linkOrder' in g) copy.linkOrder = nextLinkOrder(t)
+    if (isLinked(targetKey) && 'linkOrder' in g) copy.linkOrder = nextLinkOrder(tt)
     setEditing({ id: ++editSeq, targetKey, kind, index: null, original: null, reference: null, initial: copy })
   }, [])
   const removeGpo = React.useCallback(
@@ -211,13 +211,13 @@ export function GposEditor(props: EditorProps) {
 
   const removeTargetKey = React.useCallback(
     async (key: string) => {
-      const t = contentRef.current?.gpos?.[key]
-      const n = GPO_KINDS.reduce((s, k) => s + gpoList(t, k).length, 0)
+      const tt = contentRef.current?.gpos?.[key]
+      const n = GPO_KINDS.reduce((s, k) => s + gpoList(tt, k).length, 0)
       const ok = await confirm({
         title: 'Verknüpfungsziel entfernen?',
         description: (
           <>
-            <span className="font-medium text-foreground">{targetTitle(key, t)}</span>
+            <span className="font-medium text-foreground">{targetTitle(key, tt)}</span>
             <span className="block font-mono text-xs break-all">{key}</span>
             {n > 0 ? ` Alle ${n} GPO-Einträge dieses Ziels werden ebenfalls entfernt.` : ' Das Ziel enthält keine GPOs.'} Die Änderung kann mit Strg+Z rückgängig gemacht werden.
           </>
@@ -227,7 +227,7 @@ export function GposEditor(props: EditorProps) {
       })
       if (!ok) return
       apply((c) => removeTarget(c, key))
-      toast('Verknüpfungsziel entfernt', { description: targetTitle(key, t) })
+      toast('Verknüpfungsziel entfernt', { description: targetTitle(key, tt) })
     },
     [apply, confirm],
   )
@@ -250,12 +250,12 @@ export function GposEditor(props: EditorProps) {
 
   const submitGpo = (st: EditState, value: Obj): Record<string, string> | null => {
     const c = contentRef.current
-    const t = c?.gpos?.[st.targetKey]
-    if (!t) {
+    const tt = c?.gpos?.[st.targetKey]
+    if (!tt) {
       toast.error('Verknüpfungsziel existiert nicht mehr')
       return null
     }
-    const list = gpoList(t, st.kind)
+    const list = gpoList(tt, st.kind)
     // The list may have changed while the sheet was open (undo/redo): find the entry by identity.
     const index = st.index === null ? null : list[st.index] === st.original ? st.index : list.indexOf(st.original!)
     if (index === -1) {
@@ -264,7 +264,7 @@ export function GposEditor(props: EditorProps) {
       return null
     }
     const final = finalizeGpo(value, st.reference)
-    const errs = validateGpo(final, st.targetKey, t, st.kind, index)
+    const errs = validateGpo(final, st.targetKey, tt, st.kind, index)
     if (Object.keys(errs).length) return errs
     if (index !== null && JSON.stringify(final) === JSON.stringify(st.original)) {
       setEditing(null)
@@ -554,8 +554,8 @@ const TargetDetail = React.memo(function TargetDetail(p: DetailProps) {
               onChange={(e) => {
                 const v = e.target.value
                 apply((c) => {
-                  const t = (c.gpos?.[targetKey] ?? {}) as Obj
-                  return setTarget(c, targetKey, setText(t, 'displayName', v, !('displayName' in target)))
+                  const tt = (c.gpos?.[targetKey] ?? {}) as Obj
+                  return setTarget(c, targetKey, setText(tt, 'displayName', v, !('displayName' in target)))
                 }, `gpo-displayName-${targetKey}`)
               }}
             />

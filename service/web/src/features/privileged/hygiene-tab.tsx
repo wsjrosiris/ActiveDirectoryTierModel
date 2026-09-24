@@ -11,17 +11,18 @@ import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { SeverityBadge, TierBadge } from '@/components/shared/badges'
 import { useCan } from '@/features/auth/auth'
 import { objectClassLabels } from '@/lib/labels'
+import { t } from '@/i18n'
 
 /** What each rule means, shown under the rule name. */
 const ruleHints: Record<string, string> = {
-  NotInProtectedUsers: 'Tier-0-Konten gehören in „Protected Users“ (kein NTLM, keine Delegierung, kurze Tickets).',
-  DelegationAllowed: '„Konto ist vertraulich und kann nicht delegiert werden“ fehlt.',
-  PasswordOld: 'Passwort älter als erlaubt.',
-  Stale: 'Aktiviert, aber lange nicht angemeldet.',
-  HasSpn: 'Mit SPN lässt sich ein Ticket anfordern und das Passwort offline raten (Kerberoasting).',
-  PasswordNeverExpires: 'Passwort läuft nie ab.',
-  OrphanedAdminCount: 'Früher privilegiert, Berechtigungen weiterhin eingeschränkt.',
-  DisabledButPrivileged: 'Deaktiviert, aber noch Mitglied einer privilegierten Gruppe.',
+  NotInProtectedUsers: t('privileged.hygieneTab.tier0AccountsBelongIn'),
+  DelegationAllowed: t('privileged.hygieneTab.accountIsSensitiveAndCannot'),
+  PasswordOld: t('privileged.hygieneTab.passwordOlderThanAllowed'),
+  Stale: t('privileged.hygieneTab.enabledButHasNotSigned'),
+  HasSpn: t('privileged.hygieneTab.withAnSpnAnyoneCan'),
+  PasswordNeverExpires: t('privileged.hygieneTab.passwordNeverExpires'),
+  OrphanedAdminCount: t('privileged.hygieneTab.formerlyPrivilegedPermissionsStillRestricted'),
+  DisabledButPrivileged: t('privileged.hygieneTab.disabledButStillAMember'),
 }
 
 export function HygieneTab({ data }: { data: PrivilegedOverview }) {
@@ -36,47 +37,47 @@ export function HygieneTab({ data }: { data: PrivilegedOverview }) {
   const filtered = findings.filter(
     (f) => (severity === 'all' || f.severity === severity) && (rule === 'all' || f.rule === rule) && (!needle || `${f.account} ${f.value} ${f.title}`.toLowerCase().includes(needle)),
   )
-  const t = data.thresholds
+  const tt = data.thresholds
 
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <Segmented<'all' | Severity>
-          aria-label="Schweregrad"
+          aria-label={t('privileged.hygieneTab.severity')}
           value={severity}
           onValueChange={setSeverity}
           options={[
-            { value: 'all', label: `Alle (${findings.length})` },
-            { value: 'High', label: `Hoch (${count('High')})` },
-            { value: 'Medium', label: `Mittel (${count('Medium')})` },
-            { value: 'Low', label: `Niedrig (${count('Low')})` },
+            { value: 'all', label: t('privileged.hygieneTab.allLength', { length: findings.length }) },
+            { value: 'High', label: t('privileged.hygieneTab.highValue', { value: count('High') }) },
+            { value: 'Medium', label: t('privileged.hygieneTab.mediumValue', { value: count('Medium') }) },
+            { value: 'Low', label: t('privileged.hygieneTab.lowValue', { value: count('Low') }) },
           ]}
         />
         <div className="w-full sm:w-60">
-          <Select size="sm" aria-label="Regel" value={rule} onValueChange={setRule} options={[{ value: 'all', label: 'Alle Regeln' }, ...rules.map(([value, label]) => ({ value, label }))]} />
+          <Select size="sm" aria-label={t('privileged.hygieneTab.rule')} value={rule} onValueChange={setRule} options={[{ value: 'all', label: t('privileged.hygieneTab.allRules') }, ...rules.map(([value, label]) => ({ value, label }))]} />
         </div>
         <div className="relative w-full sm:max-w-xs">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Konto suchen …" className="h-8 pl-8 text-[13px]" aria-label="Hygiene-Befunde durchsuchen" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('privileged.hygieneTab.searchAccount')} className="h-8 pl-8 text-[13px]" aria-label={t('privileged.hygieneTab.searchHygieneFindings')} />
         </div>
       </div>
       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-        <span>Schwellwerte: {t.staleDays} Tage ohne Anmeldung, Passwort höchstens {t.passwordMaxAgeDays} Tage alt.</span>
-        {canAdmin && <Link to="/admin/einstellungen" className="inline-flex items-center gap-1 text-primary hover:underline"><Settings2 className="size-3" /> In den Einstellungen ändern</Link>}
+        <span>{t('privileged.hygieneTab.thresholds', { stale: tt.staleDays, maxAge: tt.passwordMaxAgeDays })}</span>
+        {canAdmin && <Link to="/admin/einstellungen" className="inline-flex items-center gap-1 text-primary hover:underline"><Settings2 className="size-3" /> {t('privileged.hygieneTab.changeInTheSettings')}</Link>}
       </p>
       <Card className="overflow-hidden">
         {findings.length === 0 ? (
-          <EmptyState icon={<CheckCircle2 />} title="Keine Hygiene-Befunde" description="Alle privilegierten Konten erfüllen die Regeln." />
+          <EmptyState icon={<CheckCircle2 />} title={t('privileged.hygieneTab.noHygieneFindings')} description={t('privileged.hygieneTab.allPrivilegedAccountsComplyWith')} />
         ) : filtered.length === 0 ? (
-          <EmptyState compact icon={<Search />} title="Keine Treffer" />
+          <EmptyState compact icon={<Search />} title={t('common.noMatches')} />
         ) : (
           <Table>
             <THead>
               <TR>
-                <TH className="w-24">Schweregrad</TH>
-                <TH>Regel</TH>
-                <TH>Konto</TH>
-                <TH className="hidden lg:table-cell">Befund</TH>
+                <TH className="w-24">{t('privileged.hygieneTab.severity')}</TH>
+                <TH>{t('privileged.hygieneTab.rule')}</TH>
+                <TH>{t('privileged.hygieneTab.account')}</TH>
+                <TH className="hidden lg:table-cell">{t('privileged.hygieneTab.finding')}</TH>
               </TR>
             </THead>
             <TBody>
@@ -103,7 +104,7 @@ export function HygieneTab({ data }: { data: PrivilegedOverview }) {
         )}
       </Card>
       {findings.length > 0 && (
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><HeartPulse className="size-3.5" /> Geprüft werden Konten in Tier-0/1-Gruppen und in den Tier-0/1-Konten-OUs.</p>
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><HeartPulse className="size-3.5" /> {t('privileged.hygieneTab.accountsInTier01')}</p>
       )}
     </div>
   )

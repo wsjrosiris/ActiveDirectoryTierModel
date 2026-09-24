@@ -46,15 +46,17 @@ import { errorMessage } from '@/lib/query'
 import { tierOf } from '@/lib/tier'
 import { cn } from '@/lib/utils'
 import { setupStateKey } from './setup-card'
+import { t } from '@/i18n'
+import { rich } from '@/i18n/rich'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = any
 
 const STEPS = [
-  { key: 'domain', title: 'Domäne', icon: Network },
-  { key: 'structure', title: 'Struktur', icon: Tag },
-  { key: 'ous', title: 'Vorhandene OUs', icon: FolderInput },
-  { key: 'plan', title: 'Erste Planung', icon: Rocket },
+  { key: 'domain', title: t('setup.setup.domain'), icon: Network },
+  { key: 'structure', title: t('setup.setup.structure'), icon: Tag },
+  { key: 'ous', title: t('setup.setup.existingOus'), icon: FolderInput },
+  { key: 'plan', title: t('setup.setup.firstPlan'), icon: Rocket },
 ] as const
 
 const levelText = (level: string) => {
@@ -78,24 +80,24 @@ export function Component() {
     mutationFn: (skipped: boolean) => api.setup.complete(skipped),
     onSuccess: (_d, skipped) => {
       qc.invalidateQueries({ queryKey: setupStateKey })
-      toast.success(skipped ? 'Einrichtungsassistent übersprungen' : 'Einrichtung abgeschlossen')
+      toast.success(skipped ? t('setup.setup.setupAssistantSkipped') : t('setup.setup.setupCompleted'))
       navigate('/')
     },
-    onError: (e) => toast.error('Nicht gespeichert', { description: errorMessage(e) }),
+    onError: (e) => toast.error(t('setup.setup.notSaved'), { description: errorMessage(e) }),
   })
 
   if (!isAdmin)
     return (
       <Page>
-        <Card><EmptyState icon={<ShieldCheck />} title="Nur für Administratoren" description="Die Einrichtung kann nur ein Administrator durchführen." /></Card>
+        <Card><EmptyState icon={<ShieldCheck />} title={t('setup.setup.administratorsOnly')} description={t('setup.setup.onlyAnAdministratorCanPerform')} /></Card>
       </Page>
     )
 
   const skip = async () => {
     const ok = await confirm({
-      title: 'Einrichtung überspringen?',
-      description: 'Der Hinweis auf dem Dashboard wird ausgeblendet. Alle Schritte lassen sich später auch einzeln in der Konfiguration erledigen.',
-      confirmText: 'Überspringen',
+      title: t('setup.setup.skipSetup'),
+      description: t('setup.setup.theNoticeOnTheDashboard'),
+      confirmText: t('setup.setup.skip'),
     })
     if (ok) complete.mutate(true)
   }
@@ -103,11 +105,11 @@ export function Component() {
   return (
     <Page className="pb-24">
       <PageHeader
-        title="Einrichtung"
-        description="In vier Schritten von der mitgelieferten Vorlage zur ersten Planung."
-        actions={<Button variant="ghost" onClick={skip} disabled={complete.isPending}>Überspringen</Button>}
+        title={t('setup.setup.setup')}
+        description={t('setup.setup.fromTheSuppliedTemplateTo')}
+        actions={<Button variant="ghost" onClick={skip} disabled={complete.isPending}>{t('setup.setup.skip')}</Button>}
       />
-      <ol className="mb-5 grid grid-cols-4 gap-1.5" aria-label="Schritte">
+      <ol className="mb-5 grid grid-cols-4 gap-1.5" aria-label={t('setup.setup.steps')}>
         {STEPS.map((s, i) => {
           const Icon = s.icon
           const done = i < step
@@ -133,7 +135,7 @@ export function Component() {
           )
         })}
       </ol>
-      <p className="mb-3 text-[13px] font-medium sm:hidden">Schritt {step + 1}: {STEPS[step].title}</p>
+      <p className="mb-3 text-[13px] font-medium sm:hidden">{t('setup.setup.step')} {step + 1}: {STEPS[step].title}</p>
 
       {!ready ? (
         <Card className="p-5"><div className="grid gap-2">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-9" />)}</div></Card>
@@ -149,8 +151,8 @@ export function Component() {
 
       {step > 0 && step < 3 && (
         <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
-          <Button variant="outline" onClick={() => setStep(step - 1)}><ArrowLeft /> Zurück</Button>
-          <Button onClick={() => setStep(step + 1)}>Weiter <ArrowRight /></Button>
+          <Button variant="outline" onClick={() => setStep(step - 1)}><ArrowLeft /> {t('common.back')}</Button>
+          <Button onClick={() => setStep(step + 1)}>{t('setup.setup.next')} <ArrowRight /></Button>
         </div>
       )}
 
@@ -159,9 +161,9 @@ export function Component() {
           <div className="pointer-events-auto flex max-w-full flex-wrap items-center gap-3 rounded-xl border bg-popover/95 py-2 pr-2 pl-4 shadow-xl shadow-black/10 backdrop-blur">
             <span className="size-2 rounded-full bg-amber-500" />
             <span className="min-w-0 text-[13px]">
-              Ungespeicherte Änderungen<span className="text-muted-foreground"> in {dirty.map((k) => sectionFallbackTitles[k] ?? k).join(', ')}</span>
+              {t('common.unsavedChanges')}<span className="text-muted-foreground"> {t('setup.setup.inSections', { sections: dirty.map((k) => sectionFallbackTitles[k] ?? k).join(', ') })}</span>
             </span>
-            <Button size="sm" onClick={() => setSaveOpen(true)}><Save /> Speichern …</Button>
+            <Button size="sm" onClick={() => setSaveOpen(true)}><Save /> {t('setup.setup.save')}</Button>
           </div>
         </div>
       )}
@@ -207,7 +209,7 @@ function DomainStep({ onNext }: { onNext: () => void }) {
   const options = React.useMemo(() => {
     const o = (domain?.domainControllers ?? []).map((d) => ({
       value: d.name,
-      hint: [d.site ? `Standort ${d.site}` : null, d.isGlobalCatalog ? 'Globaler Katalog' : null].filter(Boolean).join(' · ') || 'Domänencontroller',
+      hint: [d.site ? t('setup.setup.siteSite', { site: d.site }) : null, d.isGlobalCatalog ? t('setup.setup.globalCatalog') : null].filter(Boolean).join(' · ') || t('setup.setup.domainController'),
       icon: <Server className="size-4 text-muted-foreground" />,
     }))
     for (const x of dcOptions) if (!o.some((y) => y.value.toLowerCase() === x.value.toLowerCase())) o.push({ ...x, hint: x.hint ?? '', icon: <Server className="size-4 text-muted-foreground" /> })
@@ -221,43 +223,43 @@ function DomainStep({ onNext }: { onNext: () => void }) {
     },
     onSuccess: (s) => {
       qc.setQueryData(settingsQuery.queryKey, s)
-      toast.success('Domänencontroller gespeichert', { description: s.defaultPreferredDc })
+      toast.success(t('setup.setup.domainControllerSaved'), { description: s.defaultPreferredDc })
       onNext()
     },
-    onError: (e) => toast.error('Nicht gespeichert', { description: errorMessage(e) }),
+    onError: (e) => toast.error(t('setup.setup.notSaved'), { description: errorMessage(e) }),
   })
 
   return (
-    <StepCard icon={<Network />} title="Domäne erkennen" description="Die Domäne, in der der Dienst läuft, und der Domänencontroller für Planungen, Deploys und Audits.">
+    <StepCard icon={<Network />} title={t('setup.setup.detectDomain')} description={t('setup.setup.theDomainTheServiceRuns')}>
       {tree.isLoading ? (
         <Skeleton className="h-28" />
       ) : domain ? (
         <>
-          {tree.data?.source === 'Testdaten' && <p className="mb-3 text-[13px] text-amber-700 dark:text-amber-300">Entwicklungsmodus: Es werden Testdaten angezeigt.</p>}
+          {tree.data?.source === 'Testdaten' && <p className="mb-3 text-[13px] text-amber-700 dark:text-amber-300">{t('setup.setup.developmentModeTestDataIs')}</p>}
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            <Fact label="DNS-Name" value={domain.dnsName} />
-            <Fact label="NetBIOS-Name" value={domain.netBiosName} />
-            <Fact label="Distinguished Name" value={domain.distinguishedName} mono />
-            <Fact label="Domänenfunktionsebene" value={levelText(domain.domainFunctionalLevel)} />
-            <Fact label="Gesamtstruktur" value={`${domain.forestName} (${levelText(domain.forestFunctionalLevel)})`} />
-            <Fact label="Domänencontroller" value={domain.domainControllers.length} />
+            <Fact label={t('setup.setup.dnsName')} value={domain.dnsName} />
+            <Fact label={t('setup.setup.netbiosName')} value={domain.netBiosName} />
+            <Fact label={t('setup.setup.distinguishedName')} value={domain.distinguishedName} mono />
+            <Fact label={t('setup.setup.domainFunctionalLevel')} value={levelText(domain.domainFunctionalLevel)} />
+            <Fact label={t('setup.setup.forest')} value={`${domain.forestName} (${levelText(domain.forestFunctionalLevel)})`} />
+            <Fact label={t('setup.setup.domainController')} value={domain.domainControllers.length} />
           </div>
         </>
       ) : (
         <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[13px] text-amber-900 dark:text-amber-200">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-          <p>{tree.data?.message ?? 'Die Domäne konnte nicht erkannt werden.'} Den Domänencontroller können Sie trotzdem angeben.</p>
+          <p>{tree.data?.message ?? t('setup.setup.theDomainCouldNotBe')} {t('setup.setup.youCanStillSpecifyThe')}</p>
         </div>
       )}
       <div className="mt-5 grid max-w-xl gap-3">
-        <Field label="Bevorzugter Domänencontroller" htmlFor="setup-dc" hint="Wird als Vorgabe für alle Läufe gespeichert (Einstellungen).">
-          <Combobox id="setup-dc" value={value} onChange={setDc} options={options} placeholder="Domänencontroller wählen" searchPlaceholder="DC suchen oder eingeben …" />
+        <Field label={t('setup.setup.preferredDomainController')} htmlFor="setup-dc" hint={t('setup.setup.savedAsTheDefaultFor')}>
+          <Combobox id="setup-dc" value={value} onChange={setDc} options={options} placeholder={t('setup.setup.selectDomainController')} searchPlaceholder={t('setup.setup.searchOrEnterDc')} />
         </Field>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => save.mutate()} disabled={!value.trim() || !settings.data || save.isPending}>
-            Speichern und weiter <ArrowRight />
+            {t('setup.setup.saveAndContinue')} <ArrowRight />
           </Button>
-          <Button variant="ghost" onClick={onNext}>Ohne Änderung weiter</Button>
+          <Button variant="ghost" onClick={onNext}>{t('setup.setup.continueWithoutChanges')}</Button>
         </div>
       </div>
     </StepCard>
@@ -271,33 +273,33 @@ function StructureStep() {
   const groups = (useSectionContent('groups')?.groups ?? []) as Json[]
   const gpos = useSectionContent('gpos')
   const counts = React.useMemo(() => {
-    const c = [0, 1, 2].map((t) => ({ tier: t as 0 | 1 | 2, ous: 0, groups: 0, gpos: 0 }))
+    const c = [0, 1, 2].map((tt) => ({ tier: tt as 0 | 1 | 2, ous: 0, groups: 0, gpos: 0 }))
     for (const o of ous) {
-      const t = tierOf(`${o.name},${o.path}`)
-      if (t === 0 || t === 1 || t === 2) c[t].ous++
+      const tt = tierOf(`${o.name},${o.path}`)
+      if (tt === 0 || tt === 1 || tt === 2) c[tt].ous++
     }
     for (const g of groups) {
-      const t = tierOf(g.name ?? g.samaccountname)
-      if (t === 0 || t === 1 || t === 2) c[t].groups++
+      const tt = tierOf(g.name ?? g.samaccountname)
+      if (tt === 0 || tt === 1 || tt === 2) c[tt].groups++
     }
     const names = new Set<string>()
     for (const v of Object.values((gpos?.gpos ?? {}) as Record<string, Json>))
       for (const list of Object.values(v ?? {})) if (Array.isArray(list)) list.forEach((g: Json) => g?.name && names.add(g.name))
     for (const n of names) {
-      const t = tierOf(n)
-      if (t === 0 || t === 1 || t === 2) c[t].gpos++
+      const tt = tierOf(n)
+      if (tt === 0 || tt === 1 || tt === 2) c[tt].gpos++
     }
     return c
   }, [ous, groups, gpos])
 
   return (
     <div className="grid min-w-0 gap-4 [&>*]:min-w-0">
-      <StepCard icon={<Sparkles />} title="Vorgeschlagene Tier-Struktur" description="So legt der erste Deploy die OUs an. Anpassen können Sie die Struktur jederzeit unter Konfiguration › Organisationseinheiten.">
+      <StepCard icon={<Sparkles />} title={t('setup.setup.suggestedTierStructure')} description={t('setup.setup.thisIsHowTheFirst')}>
         <div className="mb-4 grid gap-2 sm:grid-cols-3">
           {counts.map((c) => (
             <div key={c.tier} className="rounded-lg border bg-card px-3 py-2.5">
-              <p className="flex items-center gap-1.5 text-[13px] font-medium"><TierDot tier={c.tier} /> Tier {c.tier}</p>
-              <p className="mt-1 text-[13px] text-muted-foreground">{c.ous} OUs · {c.groups} Gruppen · {c.gpos} GPOs</p>
+              <p className="flex items-center gap-1.5 text-[13px] font-medium"><TierDot tier={c.tier} /> {t('setup.setup.tier')} {c.tier}</p>
+              <p className="mt-1 text-[13px] text-muted-foreground">{c.ous} {t('setup.setup.ous')} {c.groups} {t('setup.setup.groups')} {c.gpos} {t('setup.setup.gpos')}</p>
             </div>
           ))}
         </div>
@@ -316,7 +318,7 @@ function PrefixCard() {
   const run = useMutation({
     mutationFn: () => api.setup.prefixPreview(prefix.trim()),
     onSuccess: setPreview,
-    onError: (e) => toast.error('Keine Vorschau', { description: errorMessage(e) }),
+    onError: (e) => toast.error(t('setup.setup.noPreview'), { description: errorMessage(e) }),
   })
   const apply = () => {
     if (!preview) return
@@ -345,7 +347,7 @@ function PrefixCard() {
         winLapsDelegations: winlaps.winLapsDelegations.map((w: Json) => (w?.decryptorGpoName && map.has(w.decryptorGpoName) ? { ...w, decryptorGpoName: map.get(w.decryptorGpoName) } : w)),
       }
     draftStore.apply(changes)
-    toast.success(`${preview.renames.length} Namen im Entwurf geändert`, { description: 'Zum Übernehmen speichern.' })
+    toast.success(t('setup.setup.namesChanged', { count: preview.renames.length }), { description: t('setup.setup.saveToApply') })
     setPreview(null)
   }
   const shown = preview?.renames.slice(0, 8) ?? []
@@ -354,8 +356,8 @@ function PrefixCard() {
   return (
     <StepCard
       icon={<Tag />}
-      title="Namenspräfix der GPOs"
-      description={<>Die mitgelieferten GPO-Namen beginnen mit dem Platzhalter <span className="font-medium text-foreground">„*-“</span>, z. B. „*- Tier 0 DCs SOE - Computer“. Ersetzen Sie ihn durch ein eigenes Präfix wie „CONTOSO -“. Optional.</>}
+      title={t('setup.setup.gpoNamePrefix')}
+      description={<>{t('setup.setup.theSuppliedGpoNamesStart')} <span className="font-medium text-foreground">„*-“</span>{t('setup.setup.eGTier0Dcs')}</>}
     >
       <form
         className="flex max-w-xl flex-wrap items-end gap-2"
@@ -364,21 +366,23 @@ function PrefixCard() {
           if (prefix.trim()) run.mutate()
         }}
       >
-        <Field label="Neues Präfix" htmlFor="setup-prefix" className="min-w-48 flex-1" hint="Höchstens 20 Zeichen, ohne \ / : * ? &quot; < > |">
-          <Input id="setup-prefix" value={prefix} onChange={(e) => setPrefix(e.target.value)} placeholder="z. B. CONTOSO -" maxLength={20} />
+        <Field label={t('setup.setup.newPrefix')} htmlFor="setup-prefix" className="min-w-48 flex-1" hint={t('setup.setup.atMost20CharactersWithout')}>
+          <Input id="setup-prefix" value={prefix} onChange={(e) => setPrefix(e.target.value)} placeholder={t('setup.setup.eGContoso')} maxLength={20} />
         </Field>
-        <Button type="submit" variant="outline" disabled={!prefix.trim() || run.isPending} className="mb-5">Vorschau</Button>
+        <Button type="submit" variant="outline" disabled={!prefix.trim() || run.isPending} className="mb-5">{t('setup.setup.preview')}</Button>
       </form>
       {preview && (
         <div className="mt-2 grid gap-3">
           {preview.renames.length === 0 ? (
-            <p className="text-[13px] text-muted-foreground">Kein GPO-Name beginnt mit „{preview.current}“ – es gibt nichts umzubenennen.</p>
+            <p className="text-[13px] text-muted-foreground">{t('setup.setup.nothingToRename', { prefix: preview.current })}</p>
           ) : (
             <>
               <p className="text-[13px]">
-                „{preview.current}“ wird in <span className="font-medium">{preview.gpoCount} GPO-Namen</span>
-                {preview.renames.length - preview.gpoCount - lapsCount > 0 && <> und {preview.renames.length - preview.gpoCount - lapsCount} Umbenennungen</>}
-                {lapsCount > 0 && <> sowie {lapsCount} LAPS-{lapsCount === 1 ? 'Eintrag' : 'Einträgen'}</>} durch „{preview.prefix}“ ersetzt:
+                {rich(t('setup.setup.renamePreview', { current: preview.current, prefix: preview.prefix }), {
+                  gpos: <span className="font-medium">{t('setup.setup.gpoNames', { count: preview.gpoCount })}</span>,
+                  renames: preview.renames.length - preview.gpoCount - lapsCount > 0 ? t('setup.setup.andRenames', { count: preview.renames.length - preview.gpoCount - lapsCount }) : null,
+                  laps: lapsCount > 0 ? t('setup.setup.andLaps', { count: lapsCount }) : null,
+                })}
               </p>
               <ul className="grid gap-1.5">
                 {shown.map((r, i) => (
@@ -389,10 +393,10 @@ function PrefixCard() {
                   </li>
                 ))}
               </ul>
-              {preview.renames.length > shown.length && <p className="text-xs text-muted-foreground">… und {preview.renames.length - shown.length} weitere.</p>}
+              {preview.renames.length > shown.length && <p className="text-xs text-muted-foreground">{t('setup.setup.andMore', { count: preview.renames.length - shown.length })}</p>}
               <div className="flex flex-wrap gap-2">
-                <Button onClick={apply}><Check /> Im Entwurf übernehmen</Button>
-                <Button variant="ghost" onClick={() => setPreview(null)}>Verwerfen</Button>
+                <Button onClick={apply}><Check /> {t('setup.setup.applyToDraft')}</Button>
+                <Button variant="ghost" onClick={() => setPreview(null)}>{t('setup.setup.discard')}</Button>
               </div>
             </>
           )}
@@ -415,13 +419,13 @@ function OusStep() {
   const adopted = (i: (typeof extra)[number]) => configured.has(`${i.name}|${i.suggestedPath}`.toLowerCase())
 
   return (
-    <StepCard icon={<FolderInput />} title="Vorhandene OUs übernehmen" description="OUs, die es im Active Directory gibt, die aber nicht in der Konfiguration stehen. Übernommene OUs landen im Entwurf und werden erst beim Speichern Teil der Konfiguration.">
+    <StepCard icon={<FolderInput />} title={t('setup.setup.adoptExistingOus')} description={t('setup.setup.ousThatExistInActive')}>
       {compare.isLoading ? (
         <Skeleton className="h-40" />
       ) : !compare.data?.available ? (
-        <p className="text-[13px] text-muted-foreground">{compare.data?.message ?? 'Active Directory ist nicht verfügbar.'}</p>
+        <p className="text-[13px] text-muted-foreground">{compare.data?.message ?? t('setup.setup.activeDirectoryIsNotAvailable')}</p>
       ) : extra.length === 0 ? (
-        <p className="flex items-center gap-2 text-[13px] text-muted-foreground"><CircleCheck className="size-4 text-emerald-500" /> Im AD gibt es keine OUs außerhalb der Konfiguration.</p>
+        <p className="flex items-center gap-2 text-[13px] text-muted-foreground"><CircleCheck className="size-4 text-emerald-500" /> {t('setup.setup.thereAreNoOusIn')}</p>
       ) : (
         <div className="grid gap-3">
           <ul className="grid gap-1.5">
@@ -443,7 +447,7 @@ function OusStep() {
                       <span className="block text-xs break-words text-muted-foreground">{adPath(i.dn, compare.data?.domain?.distinguishedName)}</span>
                       {i.differences.slice(1).map((d, k) => <span key={k} className="block text-xs text-muted-foreground">{d.text}</span>)}
                     </span>
-                    {done ? <Badge variant="success">im Entwurf</Badge> : <CompareBadge status={i.status} />}
+                    {done ? <Badge variant="success">{t('setup.setup.inDraft')}</Badge> : <CompareBadge status={i.status} />}
                   </label>
                 </li>
               )
@@ -455,13 +459,13 @@ function OusStep() {
               onClick={() => {
                 const n = adoptOus(extra.filter((i) => picked.has(i.dn)), items)
                 setPicked(new Set())
-                toast.success(n === 1 ? '1 OU in den Entwurf übernommen' : `${n} OUs in den Entwurf übernommen`, { description: 'Übergeordnete OUs werden bei Bedarf mit übernommen. Zum Übernehmen speichern.' })
+                toast.success(t('setup.setup.ousAdopted', { count: n }), { description: t('setup.setup.parentOusAreAdoptedAs') })
               }}
             >
-              <FolderInput /> Ausgewählte übernehmen{picked.size ? ` (${picked.size})` : ''}
+              <FolderInput /> {t('setup.setup.adoptSelected')}{picked.size ? ` (${picked.size})` : ''}
             </Button>
             <Button variant="ghost" asChild>
-              <Link to="/konfiguration/ous?ansicht=vergleich">Vollständigen Vergleich öffnen</Link>
+              <Link to="/konfiguration/ous?ansicht=vergleich">{t('setup.setup.openFullComparison')}</Link>
             </Button>
           </div>
         </div>
@@ -481,38 +485,38 @@ function PlanStep({ onFinish, finishing, onSave }: { onFinish: () => void; finis
     mutationFn: () => api.runs.deploy({ preferredDc: dc, scope: 'FullDeployment', includeMsa: false, includeGmsa: false, includeDmsa: false, includeWinLaps: false, confirmApply: false, admlLanguage: settings.data?.admlLanguage }),
     onSuccess: (r) => {
       setRun(r)
-      toast.success(`Planung #${r.id} gestartet`)
+      toast.success(t('setup.setup.planIdStarted', { id: r.id }))
     },
-    onError: (e) => toast.error('Planung nicht gestartet', { description: errorMessage(e) }),
+    onError: (e) => toast.error(t('setup.setup.planNotStarted'), { description: errorMessage(e) }),
   })
   return (
-    <StepCard icon={<Rocket />} title="Erste Planung" description="Eine Planung ändert nichts im Active Directory. Sie zeigt, was ein vollständiger Deploy anlegen und ändern würde.">
+    <StepCard icon={<Rocket />} title={t('setup.setup.firstPlan')} description={t('setup.setup.aPlanChangesNothingIn')}>
       <div className="grid gap-4">
         <div className="grid gap-2 sm:grid-cols-2">
-          <Fact label="Domänencontroller" value={dc || 'nicht festgelegt'} />
-          <Fact label="Bereich" value="Vollständig (ohne Add-ons)" />
+          <Fact label={t('setup.setup.domainController')} value={dc || t('setup.setup.notSet')} />
+          <Fact label={t('setup.setup.scope')} value="Vollständig (ohne Add-ons)" />
         </div>
         {dirty.length > 0 && (
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[13px] text-amber-900 dark:text-amber-200">
             <TriangleAlert className="size-4 shrink-0" />
-            <p className="min-w-0 flex-1">Es gibt ungespeicherte Änderungen. Die Planung verwendet die gespeicherte Konfiguration.</p>
-            <Button size="sm" variant="outline" onClick={onSave}><Save /> Jetzt speichern …</Button>
+            <p className="min-w-0 flex-1">{t('setup.setup.thereAreUnsavedChangesThe')}</p>
+            <Button size="sm" variant="outline" onClick={onSave}><Save /> {t('setup.setup.saveNow')}</Button>
           </div>
         )}
         {run ? (
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[13px]">
             <CircleCheck className="size-4 shrink-0 text-emerald-600" />
-            <p className="min-w-0 flex-1">Planung #{run.id} läuft. Das Ergebnis erscheint in der Laufansicht.</p>
-            <Button size="sm" variant="outline" asChild><Link to={`/laeufe/${run.id}`}>Planung öffnen <ArrowRight /></Link></Button>
+            <p className="min-w-0 flex-1">{t('setup.setup.planRunning', { id: run.id })}</p>
+            <Button size="sm" variant="outline" asChild><Link to={`/laeufe/${run.id}`}>{t('setup.setup.openPlan')} <ArrowRight /></Link></Button>
           </div>
         ) : (
           <div>
-            <Button onClick={() => start.mutate()} disabled={!dc || start.isPending}><Play /> Planung starten</Button>
-            {!dc && <p className="mt-1.5 text-xs text-muted-foreground">Bitte zuerst im Schritt „Domäne“ einen Domänencontroller festlegen.</p>}
+            <Button onClick={() => start.mutate()} disabled={!dc || start.isPending}><Play /> {t('setup.setup.startPlan')}</Button>
+            {!dc && <p className="mt-1.5 text-xs text-muted-foreground">{t('setup.setup.pleaseSetADomainController')}</p>}
           </div>
         )}
         <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-4">
-          <Button onClick={onFinish} disabled={finishing}><Check /> Einrichtung abschließen</Button>
+          <Button onClick={onFinish} disabled={finishing}><Check /> {t('setup.setup.completeSetup')}</Button>
         </div>
       </div>
     </StepCard>

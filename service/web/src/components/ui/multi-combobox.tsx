@@ -4,6 +4,7 @@ import { Check, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverAnchor } from './popover'
 import type { ComboOption } from './combobox'
+import { t } from '@/i18n'
 
 /**
  * Multi-value picker: selected values as removable chips, a search field with suggestions
@@ -13,8 +14,8 @@ export function MultiCombobox({
   values,
   onChange,
   options,
-  placeholder = 'Hinzufügen …',
-  emptyText = 'Keine Treffer',
+  placeholder = t('ui.multiCombobox.add'),
+  emptyText = t('common.noMatches'),
   allowCustom = true,
   onSearchChange,
   loading,
@@ -90,7 +91,7 @@ export function MultiCombobox({
                   {!disabled && (
                     <button
                       type="button"
-                      aria-label={`${o?.label ?? v} entfernen`}
+                      aria-label={t('common.removeName', { name: o?.label ?? v })}
                       className="grid size-4 place-content-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
                       onClick={(e) => {
                         e.stopPropagation()
@@ -137,7 +138,7 @@ export function MultiCombobox({
         >
           <Command.List className="max-h-72 overflow-y-auto p-1">
             <Command.Empty className="px-3 py-5 text-center text-sm text-muted-foreground">
-              {showCustom ? null : loading ? 'Suche …' : emptyText}
+              {showCustom ? null : loading ? t('ui.multiCombobox.search') : emptyText}
             </Command.Empty>
             {showCustom && (
               <Command.Item
@@ -151,7 +152,7 @@ export function MultiCombobox({
                 ) : (
                   <>
                     <Plus className="size-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Hinzufügen:</span>
+                    <span className="text-muted-foreground">{t('ui.multiCombobox.add2')}</span>
                     <span className={cn('truncate', mono && 'font-mono text-xs')}>{trimmed}</span>
                   </>
                 )}

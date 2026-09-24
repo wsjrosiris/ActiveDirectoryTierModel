@@ -71,8 +71,8 @@ export function Component() {
   const [now, setNow] = React.useState(Date.now())
   React.useEffect(() => {
     if (!active) return
-    const t = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(t)
+    const tt = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(tt)
   }, [active])
 
   const cancel = useMutation({
@@ -367,13 +367,13 @@ function Findings({ run }: { run: RunDetail }) {
   const resTypes = React.useMemo(() => [...new Set(findings.map((f) => f.resourceType))].sort(), [findings])
   const summary: { key: string; label: string; type?: string; value: number }[] = run.summary
     ? [
-        ...summaryTiles.filter((t) => typeof run.summary![t.key] === 'number').map((t) => ({ ...t, value: run.summary![t.key] })),
+        ...summaryTiles.filter((tt) => typeof run.summary![tt.key] === 'number').map((tt) => ({ ...tt, value: run.summary![tt.key] })),
         // Keys a newer report version might add.
         ...Object.entries(run.summary)
-          .filter(([k, v]) => typeof v === 'number' && !summaryTiles.some((t) => t.key === k))
+          .filter(([k, v]) => typeof v === 'number' && !summaryTiles.some((tt) => tt.key === k))
           .map(([k, v]) => ({ key: k, label: k, value: v })),
       ]
-    : types.map((t) => ({ key: t, label: findingTypeLabels[t] ?? t, type: t, value: findings.filter((f) => f.type === t).length }))
+    : types.map((tt) => ({ key: tt, label: findingTypeLabels[tt] ?? tt, type: tt, value: findings.filter((f) => f.type === tt).length }))
   const areas = React.useMemo(() => [...new Set(findings.map((f) => findingArea(f)).filter((a): a is string => !!a))], [findings])
   const hasSeverity = findings.some((f) => f.severity)
   const filtered = findings.filter(
@@ -388,17 +388,17 @@ function Findings({ run }: { run: RunDetail }) {
     <div className="grid gap-4">
       {summary.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {summary.map(({ key, label, type: t, value: v }) => (
+          {summary.map(({ key, label, type: tt, value: v }) => (
             <button
               key={key}
               type="button"
-              disabled={!t}
-              onClick={() => t && setType(type === t ? 'all' : t)}
-              className={cn('rounded-xl border bg-card p-3.5 text-left transition-all outline-none enabled:hover:border-input focus-visible:ring-2 focus-visible:ring-ring', t && type === t && 'border-primary/50 ring-1 ring-primary/30')}
-              aria-pressed={t ? type === t : undefined}
+              disabled={!tt}
+              onClick={() => tt && setType(type === tt ? 'all' : tt)}
+              className={cn('rounded-xl border bg-card p-3.5 text-left transition-all outline-none enabled:hover:border-input focus-visible:ring-2 focus-visible:ring-ring', tt && type === tt && 'border-primary/50 ring-1 ring-primary/30')}
+              aria-pressed={tt ? type === tt : undefined}
             >
               <p className="text-xs text-muted-foreground">{label}</p>
-              <p className={cn('mt-1 text-2xl font-semibold tabular', v > 0 && t && findingTone[t] ? findingTone[t].split(' ').filter((c) => c.startsWith('text-') || c.startsWith('dark:text-')).join(' ') : '', v > 0 && key === 'driftCount' && 'text-rose-600 dark:text-rose-400')}>
+              <p className={cn('mt-1 text-2xl font-semibold tabular', v > 0 && tt && findingTone[tt] ? findingTone[tt].split(' ').filter((c) => c.startsWith('text-') || c.startsWith('dark:text-')).join(' ') : '', v > 0 && key === 'driftCount' && 'text-rose-600 dark:text-rose-400')}>
                 {formatNumber(v)}
               </p>
             </button>
@@ -413,10 +413,10 @@ function Findings({ run }: { run: RunDetail }) {
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Befunde durchsuchen …" className="h-8 pl-8 text-[13px]" aria-label="Befunde durchsuchen" />
           </div>
           <div className="w-44">
-            <Select size="sm" aria-label="Befundtyp" value={type} onValueChange={setType} options={[{ value: 'all', label: 'Alle Typen' }, ...types.map((t) => ({ value: t, label: findingTypeLabels[t] ?? t }))]} />
+            <Select size="sm" aria-label="Befundtyp" value={type} onValueChange={setType} options={[{ value: 'all', label: 'Alle Typen' }, ...types.map((tt) => ({ value: tt, label: findingTypeLabels[tt] ?? tt }))]} />
           </div>
           <div className="w-48">
-            <Select size="sm" aria-label="Ressourcentyp" value={res} onValueChange={setRes} options={[{ value: 'all', label: 'Alle Ressourcen' }, ...resTypes.map((t) => ({ value: t, label: t }))]} />
+            <Select size="sm" aria-label="Ressourcentyp" value={res} onValueChange={setRes} options={[{ value: 'all', label: 'Alle Ressourcen' }, ...resTypes.map((tt) => ({ value: tt, label: tt }))]} />
           </div>
           {areas.length > 0 && (
             <div className="w-44">
@@ -506,11 +506,11 @@ function MonitorResult({ summary: s }: { summary: MonitorSummary }) {
         </Button>
       </div>
       <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3 xl:grid-cols-5">
-        {tiles.map((t) => (
-          <Link key={t.label} to={t.to} className="bg-card px-4 py-3 transition-colors outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset">
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground [&_svg]:size-3.5">{t.icon} {t.label}</p>
-            <p className={cn('mt-1 text-2xl font-semibold tabular', t.alert && 'text-rose-600 dark:text-rose-400')}>{formatNumber(t.value)}</p>
-            <p className="truncate text-xs text-muted-foreground">{t.sub}</p>
+        {tiles.map((tt) => (
+          <Link key={tt.label} to={tt.to} className="bg-card px-4 py-3 transition-colors outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset">
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground [&_svg]:size-3.5">{tt.icon} {tt.label}</p>
+            <p className={cn('mt-1 text-2xl font-semibold tabular', tt.alert && 'text-rose-600 dark:text-rose-400')}>{formatNumber(tt.value)}</p>
+            <p className="truncate text-xs text-muted-foreground">{tt.sub}</p>
           </Link>
         ))}
       </div>

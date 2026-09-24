@@ -54,8 +54,8 @@ export function ServerAreaWizard({ open, onClose }: { open: boolean; onClose: ()
   const [gpoSource, setGpoSource] = React.useState<string | null>(null)
   const [gpoNames, setGpoNames] = React.useState<string[] | null>(null)
 
-  const setTier = (t: TierNum) => {
-    setTierState(t)
+  const setTier = (tt: TierNum) => {
+    setTierState(tt)
     setParent(null)
     setGroupOu(null)
     setGpoSource(null)
@@ -234,7 +234,7 @@ export function ServerAreaWizard({ open, onClose }: { open: boolean; onClose: ()
               value: p.id,
               title: p.label,
               description: p.description,
-              extra: p.id === preset ? p.entries.map((t, i) => <AclTemplateLine key={i} t={t} />) : undefined,
+              extra: p.id === preset ? p.entries.map((tt, i) => <AclTemplateLine key={i} t={tt} />) : undefined,
             }))}
           />
           <p className="text-xs text-muted-foreground">

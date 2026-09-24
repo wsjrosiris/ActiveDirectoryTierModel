@@ -3,6 +3,7 @@ import { Command } from 'cmdk'
 import { Check, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from './popover'
+import { t } from '@/i18n'
 
 export interface ComboOption {
   value: string
@@ -19,9 +20,9 @@ export function Combobox({
   value,
   onChange,
   options,
-  placeholder = 'Auswählen…',
-  searchPlaceholder = 'Suchen…',
-  emptyText = 'Keine Treffer',
+  placeholder = t('ui.combobox.select'),
+  searchPlaceholder = t('ui.combobox.search'),
+  emptyText = t('common.noMatches'),
   allowCustom = true,
   id,
   disabled,
@@ -101,7 +102,7 @@ export function Combobox({
           />
           <Command.List className="max-h-72 overflow-y-auto p-1">
             <Command.Empty className="px-3 py-6 text-center text-sm text-muted-foreground">
-              {showCustom ? null : loading ? 'Suche …' : emptyText}
+              {showCustom ? null : loading ? t('ui.combobox.search2') : emptyText}
             </Command.Empty>
             {showCustom && (
               <Command.Item
@@ -114,13 +115,13 @@ export function Combobox({
                   <span className="text-xs text-destructive">{customError}</span>
                 ) : (
                   <>
-                    <span className="text-muted-foreground">Verwenden:</span>
+                    <span className="text-muted-foreground">{t('ui.combobox.use')}</span>
                     <span className={cn('truncate', mono && 'font-mono text-xs')}>{trimmed}</span>
                   </>
                 )}
               </Command.Item>
             )}
-            {loading && showCustom && <p className="px-2 py-1.5 text-xs text-muted-foreground">Suche im Active Directory …</p>}
+            {loading && showCustom && <p className="px-2 py-1.5 text-xs text-muted-foreground">{t('ui.combobox.searchingActiveDirectory')}</p>}
             {options.map((o) => (
               <Command.Item
                 key={o.value}

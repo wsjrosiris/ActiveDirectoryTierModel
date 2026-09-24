@@ -24,6 +24,7 @@ import { errorMessage } from '@/lib/query'
 import { roleLabels, roles } from '@/lib/roles'
 import type { Tier } from '@/lib/tier'
 import { formatMinutes, MAX_DURATIONS } from './jit-model'
+import { t } from '@/i18n'
 
 const key = ['jit', 'groups'] as const
 
@@ -37,8 +38,8 @@ export function JitGroupsAdmin() {
   const remove = useMutation({
     mutationFn: (g: JitGroup) => jitApi.groups.remove(g.id),
     meta: { silent: true },
-    onSuccess: () => { toast.success('JIT-Gruppe gelöscht'); invalidate() },
-    onError: (e) => toast.error('Löschen nicht möglich', { description: e instanceof ApiError ? e.detail ?? e.title : errorMessage(e) }),
+    onSuccess: () => { toast.success(t('jit.jitGroups.jitGroupDeleted')); invalidate() },
+    onError: (e) => toast.error(t('jit.jitGroups.deletionNotPossible'), { description: e instanceof ApiError ? e.detail ?? e.title : errorMessage(e) }),
   })
   const toggle = useMutation({
     mutationFn: (g: JitGroup) => jitApi.groups.update(g.id, { ...toInput(g), enabled: !g.enabled }),
@@ -49,15 +50,15 @@ export function JitGroupsAdmin() {
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-2xl text-[13px] text-muted-foreground">
-          Nur diese Gruppen können befristet beantragt werden. Empfohlen sind eigene JIT-Gruppen (z. B. mit Rechten auf Tier-0-Objekte) statt der integrierten Administratorgruppen.
+          {t('jit.jitGroups.onlyTheseGroupsCanBe')}
         </p>
-        <Button onClick={() => setEdit('new')}><Plus /> JIT-Gruppe hinzufügen</Button>
+        <Button onClick={() => setEdit('new')}><Plus /> {t('jit.jitGroups.addJitGroup')}</Button>
       </div>
       {q.isLoading ? (
         <Skeleton className="h-32" />
       ) : !q.data?.length ? (
         <Card>
-          <EmptyState icon={<UsersRound />} title="Noch keine JIT-Gruppen" description="Legen Sie fest, welche Gruppen mit welcher Höchstdauer beantragt werden dürfen." action={<Button variant="outline" onClick={() => setEdit('new')}><Plus /> JIT-Gruppe hinzufügen</Button>} />
+          <EmptyState icon={<UsersRound />} title={t('jit.jitGroups.noJitGroupsYet')} description={t('jit.jitGroups.defineWhichGroupsMayBe')} action={<Button variant="outline" onClick={() => setEdit('new')}><Plus /> {t('jit.jitGroups.addJitGroup')}</Button>} />
         </Card>
       ) : (
         <Card className="divide-y">
@@ -67,33 +68,33 @@ export function JitGroupsAdmin() {
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <TierBadge tier={(g.tier ?? null) as Tier} short />
                   <span className="truncate font-medium">{g.displayName}</span>
-                  {!g.enabled && <Badge variant="muted">Deaktiviert</Badge>}
+                  {!g.enabled && <Badge variant="muted">{t('jit.jitGroups.disabled')}</Badge>}
                 </div>
                 <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   <span className="font-mono">{g.group}</span>
-                  <span>max. {formatMinutes(g.maxMinutes)}</span>
-                  <span className="flex items-center gap-1">{g.requiresApproval ? <><Hourglass className="size-3" /> mit Freigabe</> : <><ShieldCheck className="size-3" /> ohne Freigabe</>}</span>
-                  <span>ab {roleLabels[g.minimumRole]}</span>
+                  <span>{t('jit.jitGroups.max')} {formatMinutes(g.maxMinutes)}</span>
+                  <span className="flex items-center gap-1">{g.requiresApproval ? <><Hourglass className="size-3" /> {t('jit.jitGroups.withApproval')}</> : <><ShieldCheck className="size-3" /> {t('jit.jitGroups.withoutApproval')}</>}</span>
+                  <span>{t('jit.jitGroups.from')} {roleLabels[g.minimumRole]}</span>
                   {g.eligibleUsers.length > 0 && <span className="flex items-center gap-1"><Users className="size-3" /> {g.eligibleUsers.join(', ')}</span>}
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Switch checked={g.enabled} onCheckedChange={() => toggle.mutate(g)} aria-label={`${g.displayName} aktiv`} />
+                <Switch checked={g.enabled} onCheckedChange={() => toggle.mutate(g)} aria-label={t('common.nameActive', { name: g.displayName })} />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon-sm" aria-label="Aktionen"><MoreHorizontal /></Button>
+                    <Button variant="ghost" size="icon-sm" aria-label={t('common.actions')}><MoreHorizontal /></Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={() => setEdit(g)}><Pencil /> Bearbeiten</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setEdit(g)}><Pencil /> {t('common.edit')}</DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
                       onSelect={async () => {
-                        if (await confirm({ title: `JIT-Gruppe „${g.displayName}“ löschen?`, description: 'Bisherige Anträge bleiben im Verlauf erhalten.', confirmText: 'Löschen', destructive: true }))
+                        if (await confirm({ title: t('jit.jitGroups.deleteJitGroupDisplayname', { displayName: g.displayName }), description: t('jit.jitGroups.previousRequestsRemainInThe'), confirmText: t('common.delete'), destructive: true }))
                           remove.mutate(g)
                       }}
                     >
-                      <Trash2 /> Löschen
+                      <Trash2 /> {t('common.delete')}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -121,8 +122,8 @@ const emptyInput: JitGroupInput = {
 function useGroupCandidates(search: string) {
   const [q, setQ] = React.useState('')
   React.useEffect(() => {
-    const t = setTimeout(() => setQ(search.trim()), 250)
-    return () => clearTimeout(t)
+    const tt = setTimeout(() => setQ(search.trim()), 250)
+    return () => clearTimeout(tt)
   }, [search])
   const query = useQuery({ queryKey: ['jit', 'lookup', 'groups', q], queryFn: ({ signal }) => jitApi.lookup.groups(q, signal), staleTime: 60_000 })
   return { items: query.data ?? [], loading: query.isFetching }
@@ -155,13 +156,13 @@ function GroupSheet({ value, onClose }: { value: JitGroup | 'new' | null; onClos
     mutationFn: () => (value === 'new' || value === null ? jitApi.groups.create(form) : jitApi.groups.update(value.id, form)),
     meta: { silent: true },
     onSuccess: () => {
-      toast.success(value === 'new' ? 'JIT-Gruppe angelegt' : 'JIT-Gruppe gespeichert')
+      toast.success(value === 'new' ? t('jit.jitGroups.jitGroupCreated') : t('jit.jitGroups.jitGroupSaved'))
       qc.invalidateQueries({ queryKey: ['jit'] })
       onClose()
     },
     onError: (e) => {
       if (e instanceof ApiError && e.errors) setErrors(e.errors)
-      toast.error('Speichern nicht möglich', { description: errorMessage(e) })
+      toast.error(t('jit.jitGroups.savingNotPossible'), { description: errorMessage(e) })
     },
   })
   const err = (k: string) => errors[k]?.[0]
@@ -171,11 +172,11 @@ function GroupSheet({ value, onClose }: { value: JitGroup | 'new' | null; onClos
       <SheetContent>
         <form className="flex h-full min-h-0 flex-col" onSubmit={(e) => { e.preventDefault(); save.mutate() }}>
           <SheetHeader>
-            <SheetTitle>{value === 'new' ? 'JIT-Gruppe hinzufügen' : 'JIT-Gruppe bearbeiten'}</SheetTitle>
-            <SheetDescription>Welche Gruppe befristet beantragt werden darf, wie lange und von wem.</SheetDescription>
+            <SheetTitle>{value === 'new' ? t('jit.jitGroups.addJitGroup') : t('jit.jitGroups.editJitGroup')}</SheetTitle>
+            <SheetDescription>{t('jit.jitGroups.whichGroupMayBeRequested')}</SheetDescription>
           </SheetHeader>
           <SheetBody className="grid content-start gap-5">
-            <Field label="Gruppe" htmlFor="jit-g-group" required error={err('group')} hint="Aus der Konfiguration, den integrierten Gruppen oder – auf dem Server – aus dem Active Directory; auch samAccountName oder SID.">
+            <Field label={t('jit.jitGroups.group')} htmlFor="jit-g-group" required error={err('group')} hint={t('jit.jitGroups.fromTheConfigurationTheBuilt')}>
               <Combobox
                 id="jit-g-group"
                 value={form.group}
@@ -192,25 +193,25 @@ function GroupSheet({ value, onClose }: { value: JitGroup | 'new' | null; onClos
                 options={groupOptions}
                 onSearchChange={setSearch}
                 loading={candidates.loading}
-                placeholder="Gruppe wählen …"
-                searchPlaceholder="Gruppe suchen oder eingeben …"
+                placeholder={t('jit.jitGroups.selectGroup')}
+                searchPlaceholder={t('jit.jitGroups.searchOrEnterGroup')}
                 mono
                 invalid={!!err('group')}
               />
             </Field>
-            <Field label="Anzeigename" htmlFor="jit-g-name" error={err('displayName')}>
-              <Input id="jit-g-name" value={form.displayName} maxLength={128} onChange={(e) => set('displayName', e.target.value)} placeholder="z. B. Domänen-Admins (befristet)" />
+            <Field label={t('jit.jitGroups.displayName')} htmlFor="jit-g-name" error={err('displayName')}>
+              <Input id="jit-g-name" value={form.displayName} maxLength={128} onChange={(e) => set('displayName', e.target.value)} placeholder={t('jit.jitGroups.eGDomainAdminsTime')} />
             </Field>
             <div className="grid gap-5 sm:grid-cols-2">
-              <Field label="Tier" htmlFor="jit-g-tier" error={err('tier')}>
+              <Field label={t('jit.jitGroups.tier')} htmlFor="jit-g-tier" error={err('tier')}>
                 <Select
                   id="jit-g-tier"
                   value={form.tier === null ? 'none' : String(form.tier)}
                   onValueChange={(v) => set('tier', v === 'none' ? null : Number(v))}
-                  options={[{ value: '0', label: 'Tier 0' }, { value: '1', label: 'Tier 1' }, { value: '2', label: 'Tier 2' }, { value: 'none', label: 'Ohne Tier' }]}
+                  options={[{ value: '0', label: t('jit.jitGroups.tier0') }, { value: '1', label: t('jit.jitGroups.tier1') }, { value: '2', label: t('jit.jitGroups.tier2') }, { value: 'none', label: t('jit.jitGroups.noTier') }]}
                 />
               </Field>
-              <Field label="Höchstdauer" htmlFor="jit-g-max" error={err('maxMinutes')}>
+              <Field label={t('jit.jitGroups.maximumDuration')} htmlFor="jit-g-max" error={err('maxMinutes')}>
                 <Select
                   id="jit-g-max"
                   value={String(form.maxMinutes)}
@@ -221,25 +222,25 @@ function GroupSheet({ value, onClose }: { value: JitGroup | 'new' | null; onClos
             </div>
             <label className="flex items-start justify-between gap-4 rounded-lg border px-4 py-3" htmlFor="jit-g-approval">
               <span className="grid gap-0.5">
-                <span className="text-[13px] font-medium">Freigabe erforderlich</span>
-                <span className="text-xs text-muted-foreground">Eine zweite Person mit der Rolle Operator muss den Antrag freigeben (Vier-Augen-Prinzip).</span>
+                <span className="text-[13px] font-medium">{t('jit.jitGroups.approvalRequired')}</span>
+                <span className="text-xs text-muted-foreground">{t('jit.jitGroups.aSecondPersonWithThe')}</span>
               </span>
               <Switch id="jit-g-approval" checked={form.requiresApproval} onCheckedChange={(v) => set('requiresApproval', v)} />
             </label>
-            <Field label="Beantragen ab Rolle" htmlFor="jit-g-role" error={err('minimumRole')}>
+            <Field label={t('jit.jitGroups.requestFromRole')} htmlFor="jit-g-role" error={err('minimumRole')}>
               <Select id="jit-g-role" value={form.minimumRole} onValueChange={(v) => set('minimumRole', v as Role)} options={roles.map((r) => ({ value: r, label: roleLabels[r] }))} />
             </Field>
-            <Field label="Nur diese Benutzer (optional)" htmlFor="jit-g-users" error={err('eligibleUsers')} hint="Leer: alle Benutzer mit der Mindestrolle.">
-              <MultiCombobox id="jit-g-users" values={form.eligibleUsers} onChange={(v) => set('eligibleUsers', v)} options={userOptions} placeholder="Benutzer suchen …" allowCustom={false} />
+            <Field label={t('jit.jitGroups.onlyTheseUsersOptional')} htmlFor="jit-g-users" error={err('eligibleUsers')} hint={t('jit.jitGroups.emptyAllUsersWithThe')}>
+              <MultiCombobox id="jit-g-users" values={form.eligibleUsers} onChange={(v) => set('eligibleUsers', v)} options={userOptions} placeholder={t('jit.jitGroups.searchUsers')} allowCustom={false} />
             </Field>
             <label className="flex items-center justify-between gap-4 rounded-lg border px-4 py-3" htmlFor="jit-g-enabled">
-              <span className="text-[13px] font-medium">Aktiv</span>
+              <span className="text-[13px] font-medium">{t('common.active')}</span>
               <Switch id="jit-g-enabled" checked={form.enabled} onCheckedChange={(v) => set('enabled', v)} />
             </label>
           </SheetBody>
           <SheetFooter>
-            <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
-            <Button type="submit" loading={save.isPending}>Speichern</Button>
+            <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button type="submit" loading={save.isPending}>{t('common.save')}</Button>
           </SheetFooter>
         </form>
       </SheetContent>

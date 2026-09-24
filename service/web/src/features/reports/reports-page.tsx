@@ -42,6 +42,7 @@ import { Page, PageHeader } from '@/components/shared/page-header'
 import { useCan } from '@/features/auth/auth'
 import { errorMessage } from '@/lib/query'
 import { cn, formatDateTime, formatRelative } from '@/lib/utils'
+import { t } from '@/i18n'
 
 export function Component() {
   return <ReportsPage />
@@ -60,9 +61,9 @@ const typeTones: Record<ReportType, string> = {
 }
 
 const typeTitles: Record<ReportType, string> = {
-  'soll-ist': 'Soll/Ist-Bericht',
-  aenderungen: 'Änderungen im Zeitraum',
-  privilegiert: 'Privilegierte Zugriffe',
+  'soll-ist': t('reports.reports.desiredActualReport'),
+  aenderungen: t('reports.reports.changesInPeriod'),
+  privilegiert: t('reports.reports.privilegedAccess'),
 }
 
 function isoDate(d: Date) {
@@ -77,10 +78,10 @@ function daysAgo(n: number) {
 }
 
 const presets: { value: string; label: string; from: () => string }[] = [
-  { value: '7', label: '7 Tage', from: () => daysAgo(6) },
-  { value: '30', label: '30 Tage', from: () => daysAgo(29) },
-  { value: '90', label: '90 Tage', from: () => daysAgo(89) },
-  { value: 'jahr', label: 'Dieses Jahr', from: () => `${new Date().getFullYear()}-01-01` },
+  { value: '7', label: t('reports.reports.n7Days'), from: () => daysAgo(6) },
+  { value: '30', label: t('reports.reports.n30Days'), from: () => daysAgo(29) },
+  { value: '90', label: t('reports.reports.n90Days'), from: () => daysAgo(89) },
+  { value: 'jahr', label: t('reports.reports.thisYear'), from: () => `${new Date().getFullYear()}-01-01` },
 ]
 
 function ReportsPage() {
@@ -97,7 +98,7 @@ function ReportsPage() {
   const params = { from: type === 'soll-ist' ? undefined : from, to }
   const previewUrl = rangeInvalid ? null : `${api.reports.url(type, { ...params, format: 'html' })}&v=${version}`
   const pdfUrl = api.reports.url(type, { ...params, format: 'pdf' })
-  const info = types.data?.find((t) => t.type === type)
+  const info = types.data?.find((tt) => tt.type === type)
 
   React.useEffect(() => setLoading(true), [previewUrl])
 
@@ -105,13 +106,13 @@ function ReportsPage() {
     <Page wide className="max-w-[1400px]">
       <PageHeader
         icon={<FileText />}
-        title="Berichte"
-        description="Nachweise als PDF: Soll/Ist-Abgleich, Änderungen im Zeitraum und privilegierte Zugriffe – mit Vorschau und Versand per E-Mail."
+        title={t('reports.reports.reports')}
+        description={t('reports.reports.evidenceAsPdfDesiredActual')}
       />
 
-      <div role="radiogroup" aria-label="Bericht" className="grid gap-3 md:grid-cols-3">
-        {(types.data ?? []).map((t) => (
-          <TypeCard key={t.type} info={t} selected={t.type === type} onSelect={() => setType(t.type)} />
+      <div role="radiogroup" aria-label={t('reports.reports.report')} className="grid gap-3 md:grid-cols-3">
+        {(types.data ?? []).map((tt) => (
+          <TypeCard key={tt.type} info={tt} selected={tt.type === type} onSelect={() => setType(tt.type)} />
         ))}
         {types.isLoading && Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-32" />)}
       </div>
@@ -119,21 +120,21 @@ function ReportsPage() {
       <Card className="mt-4">
         <CardContent className="flex flex-wrap items-end gap-x-4 gap-y-3 pt-5">
           {type === 'soll-ist' ? (
-            <Field label="Stand" htmlFor="rp-to" hint="Letztes Audit bis zu diesem Tag" className="w-full sm:w-44">
+            <Field label={t('reports.reports.asOf')} htmlFor="rp-to" hint={t('reports.reports.lastAuditUpToThis')} className="w-full sm:w-44">
               <Input id="rp-to" type="date" value={to} max={isoDate(new Date())} onChange={(e) => { setTo(e.target.value); setPreset('') }} />
             </Field>
           ) : (
             <>
-              <Field label="Von" htmlFor="rp-from" className="w-[calc(50%-0.5rem)] sm:w-44">
+              <Field label={t('reports.reports.from')} htmlFor="rp-from" className="w-[calc(50%-0.5rem)] sm:w-44">
                 <Input id="rp-from" type="date" value={from} max={to} onChange={(e) => { setFrom(e.target.value); setPreset('') }} aria-invalid={rangeInvalid || undefined} />
               </Field>
-              <Field label="Bis" htmlFor="rp-to" className="w-[calc(50%-0.5rem)] sm:w-44">
+              <Field label={t('reports.reports.to')} htmlFor="rp-to" className="w-[calc(50%-0.5rem)] sm:w-44">
                 <Input id="rp-to" type="date" value={to} min={from} onChange={(e) => { setTo(e.target.value); setPreset('') }} aria-invalid={rangeInvalid || undefined} />
               </Field>
               <div className="grid gap-1.5">
-                <span className="text-[13px] font-medium">Zeitraum</span>
+                <span className="text-[13px] font-medium">{t('reports.reports.period')}</span>
                 <Segmented
-                  aria-label="Zeitraum wählen"
+                  aria-label={t('reports.reports.selectPeriod')}
                   value={preset}
                   onValueChange={(v) => {
                     const p = presets.find((x) => x.value === v)!
@@ -147,50 +148,50 @@ function ReportsPage() {
             </>
           )}
           <div className="flex w-full flex-wrap items-center gap-2 lg:ml-auto lg:w-auto">
-            <Tooltip content="Vorschau neu erzeugen">
-              <Button type="button" variant="outline" size="icon" aria-label="Vorschau aktualisieren" onClick={() => setVersion((v) => v + 1)} disabled={rangeInvalid}>
+            <Tooltip content={t('reports.reports.regeneratePreview')}>
+              <Button type="button" variant="outline" size="icon" aria-label={t('reports.reports.refreshPreview')} onClick={() => setVersion((v) => v + 1)} disabled={rangeInvalid}>
                 <RefreshCw />
               </Button>
             </Tooltip>
             <Button asChild variant="outline" className={cn(rangeInvalid && 'pointer-events-none opacity-50')}>
               <a aria-disabled={rangeInvalid || undefined} href={api.reports.url(type, { ...params, format: 'html' })} target="_blank" rel="noopener">
-                <ExternalLink /> Im Browser öffnen
+                <ExternalLink /> {t('reports.reports.openInBrowser')}
               </a>
             </Button>
             <Button asChild className={cn(rangeInvalid && 'pointer-events-none opacity-50')}>
               <a aria-disabled={rangeInvalid || undefined} href={pdfUrl} download data-testid="report-pdf">
-                <Download /> PDF herunterladen
+                <Download /> {t('reports.reports.downloadPdf')}
               </a>
             </Button>
           </div>
-          {rangeInvalid && <p className="w-full text-xs text-destructive">Das Enddatum muss nach dem Anfangsdatum liegen.</p>}
+          {rangeInvalid && <p className="w-full text-xs text-destructive">{t('reports.reports.theEndDateMustBe')}</p>}
         </CardContent>
       </Card>
 
-      <section aria-label="Vorschau" className="mt-4 overflow-hidden rounded-xl border bg-muted/40">
+      <section aria-label={t('reports.reports.preview')} className="mt-4 overflow-hidden rounded-xl border bg-muted/40">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-card px-4 py-2.5 text-xs text-muted-foreground">
           <span className="flex min-w-0 items-center gap-2">
-            <span className="font-medium text-foreground">Vorschau</span>
-            <span className="truncate">{typeTitles[type]}{info?.basis ? ` · Grundlage: ${info.basis}` : ''}</span>
+            <span className="font-medium text-foreground">{t('reports.reports.preview')}</span>
+            <span className="truncate">{typeTitles[type]}{info?.basis ? t('reports.reports.basisBasis', { basis: info.basis }) : ''}</span>
           </span>
-          <span>Das PDF enthält Deckblatt, Seitenzahlen und dieselben Inhalte.</span>
+          <span>{t('reports.reports.thePdfContainsACover')}</span>
         </div>
         <div className="relative">
           {previewUrl ? (
             <iframe
               key={previewUrl}
-              title={`Vorschau: ${typeTitles[type]}`}
+              title={t('reports.reports.previewValue', { value: typeTitles[type] })}
               src={previewUrl}
               sandbox=""
               className="block h-[75vh] min-h-[480px] w-full bg-[#e5e7eb]"
               onLoad={() => setLoading(false)}
             />
           ) : (
-            <div className="grid h-64 place-content-center text-sm text-muted-foreground">Bitte einen gültigen Zeitraum wählen.</div>
+            <div className="grid h-64 place-content-center text-sm text-muted-foreground">{t('reports.reports.pleaseSelectAValidPeriod')}</div>
           )}
           {loading && previewUrl && (
             <div className="absolute inset-0 grid place-content-center bg-muted/60 text-sm text-muted-foreground backdrop-blur-[1px]">
-              <span className="flex items-center gap-2"><RefreshCw className="size-4 animate-spin" /> Bericht wird erstellt …</span>
+              <span className="flex items-center gap-2"><RefreshCw className="size-4 animate-spin" /> {t('reports.reports.generatingReport')}</span>
             </div>
           )}
         </div>
@@ -224,11 +225,11 @@ function TypeCard({ info, selected, onSelect }: { info: ReportTypeInfo; selected
       <span className="text-xs text-muted-foreground">{info.description}</span>
       <span className="mt-auto text-xs">
         {info.needsRange ? (
-          <span className="text-muted-foreground">Zeitraum frei wählbar</span>
+          <span className="text-muted-foreground">{t('reports.reports.periodFreelySelectable')}</span>
         ) : missing ? (
-          <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300"><AlertTriangle className="size-3.5" /> Noch keine Daten – zuerst {info.type === 'soll-ist' ? 'ein Audit' : 'eine Überwachung'} starten</span>
+          <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300"><AlertTriangle className="size-3.5" /> {info.type === 'soll-ist' ? t('reports.reports.noDataAudit') : t('reports.reports.noDataMonitor')}</span>
         ) : (
-          <span className="text-muted-foreground">Grundlage: {info.basis}{info.basisAt ? ` vom ${formatDateTime(info.basisAt)}` : ''}</span>
+          <span className="text-muted-foreground">{info.basisAt ? t('reports.reports.basisFrom', { basis: info.basis, at: formatDateTime(info.basisAt) }) : t('reports.reports.basis', { basis: info.basis })}</span>
         )}
       </span>
     </button>
@@ -237,12 +238,12 @@ function TypeCard({ info, selected, onSelect }: { info: ReportTypeInfo; selected
 
 // ---------------------------------------------------------------- scheduled delivery (Admin)
 
-const weekdays = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag']
+const weekdays = [t('reports.reports.sunday'), t('reports.reports.monday'), t('reports.reports.tuesday'), t('reports.reports.wednesday'), t('reports.reports.thursday'), t('reports.reports.friday'), t('reports.reports.saturday')]
 const schedulesKey = ['reports', 'schedules'] as const
 const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+$/
 
 function describe(s: Pick<ReportSchedule, 'frequency' | 'day' | 'time'>) {
-  return s.frequency === 'Weekly' ? `Jeden ${weekdays[s.day] ?? '?'} um ${s.time} Uhr · letzte 7 Tage` : `Monatlich am ${s.day}. um ${s.time} Uhr · letzter Monat`
+  return s.frequency === 'Weekly' ? t('reports.reports.everyValueAtTimeLast', { value: weekdays[s.day] ?? '?', time: s.time }) : t('reports.reports.monthlyAt', { day: s.day, time: s.time })
 }
 
 function toInput(s: ReportSchedule): ReportScheduleInput {
@@ -263,34 +264,34 @@ function Schedules({ types }: { types: ReportTypeInfo[] }) {
     onSuccess: (data) => {
       qc.setQueryData(schedulesKey, data)
     },
-    onError: (e) => toast.error('Nicht gespeichert', { description: errorMessage(e) }),
+    onError: (e) => toast.error(t('reports.reports.notSaved'), { description: errorMessage(e) }),
   })
   const send = useMutation({
     mutationFn: (s: ReportSchedule) => api.reports.sendSchedule(s.id),
     meta: { silent: true },
-    onSuccess: (_d, s) => toast.success('Bericht gesendet', { description: `„${s.name}“ an ${s.recipients.join(', ')}` }),
-    onError: (e) => toast.error('Bericht nicht gesendet', { description: e instanceof ApiError ? (e.detail || e.title) : errorMessage(e), duration: 10_000 }),
+    onSuccess: (_d, s) => toast.success(t('reports.reports.reportSent'), { description: t('reports.reports.nameToJoin', { name: s.name, join: s.recipients.join(', ') }) }),
+    onError: (e) => toast.error(t('reports.reports.reportNotSent'), { description: e instanceof ApiError ? (e.detail || e.title) : errorMessage(e), duration: 10_000 }),
   })
 
   return (
     <Card className="mt-6">
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
         <div>
-          <CardTitle className="flex items-center gap-2"><CalendarClock className="size-4 text-muted-foreground" /> Versand per E-Mail</CardTitle>
-          <CardDescription>Berichte regelmäßig als PDF-Anhang an Postfächer senden (Uhrzeit des Servers, SMTP aus „Benachrichtigungen“).</CardDescription>
+          <CardTitle className="flex items-center gap-2"><CalendarClock className="size-4 text-muted-foreground" /> {t('reports.reports.deliveryByEMail')}</CardTitle>
+          <CardDescription>{t('reports.reports.sendReportsRegularlyAsPdf')}</CardDescription>
         </div>
-        <Button type="button" variant="outline" onClick={() => setEditing('new')}><Plus /> Zeitplan hinzufügen</Button>
+        <Button type="button" variant="outline" onClick={() => setEditing('new')}><Plus /> {t('reports.reports.addSchedule')}</Button>
       </CardHeader>
       <CardContent className="grid gap-3">
         {smtp.data && !smtp.data.host.trim() && (
           <p className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
-            <AlertTriangle className="size-3.5 shrink-0" /> Es ist kein SMTP-Server eingerichtet – Berichte können erst nach der Einrichtung unter „Benachrichtigungen“ versendet werden.
+            <AlertTriangle className="size-3.5 shrink-0" /> {t('reports.reports.noSmtpServerIsSet')}
           </p>
         )}
         {q.isLoading ? (
           <Skeleton className="h-20" />
         ) : list.length === 0 ? (
-          <EmptyState icon={<Mail />} title="Kein Zeitplan" description="Zum Beispiel jeden Montag die Änderungen der letzten Woche an das Sicherheitsteam." />
+          <EmptyState icon={<Mail />} title={t('reports.reports.noSchedule')} description={t('reports.reports.forExampleEveryMondayLast')} />
         ) : (
           <ul className="grid gap-2">
             {list.map((s) => (
@@ -300,41 +301,41 @@ function Schedules({ types }: { types: ReportTypeInfo[] }) {
                   <span className="flex flex-wrap items-center gap-2 text-[13px] font-medium">
                     {s.name}
                     <Badge variant="outline">{typeTitles[s.type]}</Badge>
-                    {!s.enabled && <Badge variant="muted">Pausiert</Badge>}
+                    {!s.enabled && <Badge variant="muted">{t('reports.reports.paused')}</Badge>}
                     <ScheduleDomainBadge id={s.domainId} />
                   </span>
                   <span className="text-xs text-muted-foreground">{describe(s)}</span>
-                  <span className="truncate text-xs text-muted-foreground" title={s.recipients.join(', ')}>An {s.recipients.join(', ')}</span>
+                  <span className="truncate text-xs text-muted-foreground" title={s.recipients.join(', ')}>{t('reports.reports.to2')} {s.recipients.join(', ')}</span>
                 </div>
                 <div className="order-last grid w-full gap-0.5 pl-[3.25rem] text-xs text-muted-foreground sm:order-none sm:w-auto sm:pl-0 sm:text-right">
                   {s.lastError ? (
                     <Tooltip content={s.lastError}>
-                      <span className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400"><XCircle className="size-3.5" /> Letzter Versand fehlgeschlagen</span>
+                      <span className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400"><XCircle className="size-3.5" /> {t('reports.reports.lastDeliveryFailed')}</span>
                     </Tooltip>
                   ) : s.lastSentAt ? (
-                    <span className="flex items-center gap-1.5"><CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" /> Zuletzt {formatRelative(s.lastSentAt)}</span>
+                    <span className="flex items-center gap-1.5"><CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" /> {t('reports.reports.last')} {formatRelative(s.lastSentAt)}</span>
                   ) : null}
-                  {s.nextRunAt && <span>Nächster Versand {formatDateTime(s.nextRunAt)}</span>}
+                  {s.nextRunAt && <span>{t('reports.reports.nextDelivery')} {formatDateTime(s.nextRunAt)}</span>}
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon-xs" aria-label={`Aktionen für ${s.name}`}><MoreHorizontal /></Button>
+                    <Button variant="ghost" size="icon-xs" aria-label={t('reports.reports.actionsForName', { name: s.name })}><MoreHorizontal /></Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={() => setEditing(s)}><Pencil /> Bearbeiten</DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => send.mutate(s)}><Send /> Jetzt senden</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setEditing(s)}><Pencil /> {t('common.edit')}</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => send.mutate(s)}><Send /> {t('reports.reports.sendNow')}</DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => save.mutate(list.map((x) => (x.id === s.id ? { ...toInput(x), enabled: !x.enabled } : toInput(x))))}>
-                      {s.enabled ? 'Pausieren' : 'Fortsetzen'}
+                      {s.enabled ? t('reports.reports.pause') : t('reports.reports.resume')}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       destructive
                       onSelect={async () => {
-                        if (await confirm({ title: `Zeitplan „${s.name}“ löschen?`, description: 'Der Bericht wird dann nicht mehr automatisch versendet.', confirmText: 'Löschen', destructive: true }))
-                          save.mutate(list.filter((x) => x.id !== s.id).map(toInput), { onSuccess: () => toast.success(`Zeitplan „${s.name}“ gelöscht`) })
+                        if (await confirm({ title: t('reports.reports.deleteScheduleName', { name: s.name }), description: t('reports.reports.theReportWillThenNo'), confirmText: t('common.delete'), destructive: true }))
+                          save.mutate(list.filter((x) => x.id !== s.id).map(toInput), { onSuccess: () => toast.success(t('reports.reports.scheduleNameDeleted', { name: s.name })) })
                       }}
                     >
-                      <Trash2 /> Löschen
+                      <Trash2 /> {t('common.delete')}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -352,7 +353,7 @@ function Schedules({ types }: { types: ReportTypeInfo[] }) {
           const next = editing === 'new' ? [...list.map(toInput), input] : list.map((x) => (x.id === input.id ? input : toInput(x)))
           save.mutate(next, {
             onSuccess: () => {
-              toast.success(editing === 'new' ? `Zeitplan „${input.name}“ angelegt` : 'Änderungen gespeichert')
+              toast.success(editing === 'new' ? t('reports.reports.scheduleNameCreated', { name: input.name }) : t('reports.reports.changesSaved'))
               setEditing(null)
             },
           })
@@ -385,16 +386,16 @@ function ScheduleSheet({
   }, [value])
 
   const errors = {
-    name: !form.name.trim() ? 'Name angeben.' : undefined,
-    recipients: form.recipients.length === 0 ? 'Mindestens einen Empfänger angeben.' : undefined,
-    time: !/^([01]\d|2[0-3]):[0-5]\d$/.test(form.time) ? 'Uhrzeit angeben.' : undefined,
+    name: !form.name.trim() ? t('reports.reports.enterAName') : undefined,
+    recipients: form.recipients.length === 0 ? t('reports.reports.enterAtLeastOneRecipient') : undefined,
+    time: !/^([01]\d|2[0-3]):[0-5]\d$/.test(form.time) ? t('reports.reports.enterATime') : undefined,
   }
   const hasError = Object.values(errors).some(Boolean)
   const dayOptions =
     form.frequency === 'Weekly'
       ? [1, 2, 3, 4, 5, 6, 0].map((d) => ({ value: String(d), label: weekdays[d] }))
-      : Array.from({ length: 28 }, (_, i) => ({ value: String(i + 1), label: `${i + 1}. des Monats` }))
-  const typeOptions = (types.length ? types.map((t) => t.type) : (Object.keys(typeTitles) as ReportType[])).map((t) => ({ value: t, label: typeTitles[t] }))
+      : Array.from({ length: 28 }, (_, i) => ({ value: String(i + 1), label: t('reports.reports.dayOfMonth', { day: i + 1 }) }))
+  const typeOptions = (types.length ? types.map((tt) => tt.type) : (Object.keys(typeTitles) as ReportType[])).map((tt) => ({ value: tt, label: typeTitles[tt] }))
 
   return (
     <Sheet open={!!value} onOpenChange={(o) => !o && onClose()}>
@@ -408,39 +409,39 @@ function ScheduleSheet({
           }}
         >
           <SheetHeader>
-            <SheetTitle>{isNew ? 'Zeitplan hinzufügen' : `„${(value as ReportSchedule | null)?.name ?? ''}“ bearbeiten`}</SheetTitle>
-            <SheetDescription>Welcher Bericht wann an wen geht. Der Zeitraum ergibt sich aus der Häufigkeit.</SheetDescription>
+            <SheetTitle>{isNew ? t('reports.reports.addSchedule') : t('reports.reports.editValue', { value: (value as ReportSchedule | null)?.name ?? '' })}</SheetTitle>
+            <SheetDescription>{t('reports.reports.whichReportGoesToWhom')}</SheetDescription>
           </SheetHeader>
           <SheetBody className="grid content-start gap-5">
-            <Field label="Name" htmlFor="rs-name" required error={touched ? errors.name : undefined}>
-              <Input id="rs-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="z. B. Wochenbericht Sicherheit" autoComplete="off" autoFocus={isNew} />
+            <Field label={t('common.name')} htmlFor="rs-name" required error={touched ? errors.name : undefined}>
+              <Input id="rs-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('reports.reports.eGWeeklySecurityReport')} autoComplete="off" autoFocus={isNew} />
             </Field>
-            <Field label="Bericht" htmlFor="rs-type">
-              <Combobox id="rs-type" value={form.type} onChange={(v) => setForm({ ...form, type: v as ReportType })} options={typeOptions} allowCustom={false} hideValue searchPlaceholder="Bericht suchen …" />
+            <Field label={t('reports.reports.report')} htmlFor="rs-type">
+              <Combobox id="rs-type" value={form.type} onChange={(v) => setForm({ ...form, type: v as ReportType })} options={typeOptions} allowCustom={false} hideValue searchPlaceholder={t('reports.reports.searchReport')} />
             </Field>
             <ScheduleDomainField value={form.domainId ?? null} onChange={(v) => setForm({ ...form, domainId: v })} />
             <div className="grid gap-1.5">
-              <p className="text-[13px] font-medium">Häufigkeit</p>
+              <p className="text-[13px] font-medium">{t('reports.reports.frequency')}</p>
               <Segmented<ReportFrequency>
-                aria-label="Häufigkeit"
+                aria-label={t('reports.reports.frequency')}
                 value={form.frequency}
                 onValueChange={(f) => setForm({ ...form, frequency: f, day: f === 'Weekly' ? 1 : 1 })}
                 options={[
-                  { value: 'Weekly', label: 'Wöchentlich' },
-                  { value: 'Monthly', label: 'Monatlich' },
+                  { value: 'Weekly', label: t('reports.reports.weekly') },
+                  { value: 'Monthly', label: t('reports.reports.monthly') },
                 ]}
               />
             </div>
             <div className="grid grid-cols-[minmax(0,1fr)_120px] gap-3">
-              <Field label={form.frequency === 'Weekly' ? 'Wochentag' : 'Tag'} htmlFor="rs-day">
-                <Combobox id="rs-day" value={String(form.day)} onChange={(v) => setForm({ ...form, day: Number(v) })} options={dayOptions} allowCustom={false} hideValue searchPlaceholder="Suchen …" />
+              <Field label={form.frequency === 'Weekly' ? t('reports.reports.weekday') : t('reports.reports.day')} htmlFor="rs-day">
+                <Combobox id="rs-day" value={String(form.day)} onChange={(v) => setForm({ ...form, day: Number(v) })} options={dayOptions} allowCustom={false} hideValue searchPlaceholder={t('reports.reports.search')} />
               </Field>
-              <Field label="Uhrzeit" htmlFor="rs-time" error={touched ? errors.time : undefined}>
+              <Field label={t('reports.reports.time')} htmlFor="rs-time" error={touched ? errors.time : undefined}>
                 <Input id="rs-time" type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
               </Field>
             </div>
             <p className="-mt-2 text-xs text-muted-foreground">{describe(form)}</p>
-            <Field label="Empfänger" htmlFor="rs-to" required error={touched ? errors.recipients : undefined} hint="Adressen eingeben und mit Enter übernehmen.">
+            <Field label={t('reports.reports.recipients')} htmlFor="rs-to" required error={touched ? errors.recipients : undefined} hint={t('reports.reports.enterAddressesAndConfirmWith')}>
               <MultiCombobox
                 id="rs-to"
                 values={form.recipients}
@@ -448,22 +449,22 @@ function ScheduleSheet({
                 options={[]}
                 mono
                 placeholder="secops@contoso.com"
-                emptyText="Adresse eingeben und mit Enter übernehmen"
-                validateCustom={(v) => (EMAIL_RE.test(v) ? null : `„${v}“ ist keine gültige E-Mail-Adresse`)}
+                emptyText={t('reports.reports.enterAnAddressAndConfirm')}
+                validateCustom={(v) => (EMAIL_RE.test(v) ? null : t('reports.reports.vIsNotAValid', { v }))}
                 invalid={touched && !!errors.recipients}
               />
             </Field>
             <label htmlFor="rs-enabled" className="flex items-center justify-between gap-4 rounded-lg border px-3.5 py-3">
               <span className="grid">
-                <span className="text-[13px] font-medium">Aktiv</span>
-                <span className="text-xs text-muted-foreground">Pausierte Zeitpläne senden nichts.</span>
+                <span className="text-[13px] font-medium">{t('common.active')}</span>
+                <span className="text-xs text-muted-foreground">{t('reports.reports.pausedSchedulesSendNothing')}</span>
               </span>
               <Switch id="rs-enabled" checked={form.enabled} onCheckedChange={(v) => setForm({ ...form, enabled: v })} />
             </label>
           </SheetBody>
           <SheetFooter>
-            <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
-            <Button type="submit" loading={pending}>{isNew ? <><Plus /> Anlegen</> : 'Speichern'}</Button>
+            <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button type="submit" loading={pending}>{isNew ? <><Plus /> {t('reports.reports.create')}</> : t('common.save')}</Button>
           </SheetFooter>
         </form>
       </SheetContent>
@@ -475,10 +476,10 @@ function ScheduleSheet({
 function ScheduleDomainField({ value, onChange }: { value: number | null; onChange: (v: number | null) => void }) {
   const { domains } = useDomains()
   if (domains.length < 2) return null
-  const options = [{ value: '', label: 'Standard-Domäne' }, ...domains.map((d) => ({ value: String(d.id), label: d.displayName, hint: d.dnsName || d.key }))]
+  const options = [{ value: '', label: t('reports.reports.defaultDomain') }, ...domains.map((d) => ({ value: String(d.id), label: d.displayName, hint: d.dnsName || d.key }))]
   return (
-    <Field label="Domäne" htmlFor="rs-domain" hint="Der Bericht zeigt Audits, Läufe und Überwachung dieser Domäne.">
-      <Combobox id="rs-domain" value={value === null ? '' : String(value)} onChange={(v) => onChange(v ? Number(v) : null)} options={options} allowCustom={false} hideValue placeholder="Standard-Domäne" searchPlaceholder="Domäne suchen …" />
+    <Field label={t('reports.reports.domain')} htmlFor="rs-domain" hint={t('reports.reports.theReportShowsAuditsRuns')}>
+      <Combobox id="rs-domain" value={value === null ? '' : String(value)} onChange={(v) => onChange(v ? Number(v) : null)} options={options} allowCustom={false} hideValue placeholder={t('reports.reports.defaultDomain')} searchPlaceholder={t('reports.reports.searchDomain')} />
     </Field>
   )
 }

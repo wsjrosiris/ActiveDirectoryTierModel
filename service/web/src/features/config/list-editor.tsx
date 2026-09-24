@@ -119,8 +119,8 @@ export function ListEditor(props: ListEditorProps) {
   const tierCounts = React.useMemo(() => {
     const c = { '0': 0, '1': 0, '2': 0 }
     items.forEach((i) => {
-      const t = tierOf(i)
-      if (t === 0 || t === 1 || t === 2) c[String(t) as '0'] += 1
+      const tt = tierOf(i)
+      if (tt === 0 || tt === 1 || tt === 2) c[String(tt) as '0'] += 1
     })
     return c
   }, [items, tierOf])

@@ -12,6 +12,8 @@ import { Field } from '@/components/ui/label'
 import { useDomainControllerOptions } from '@/features/config/lookups'
 import { errorMessage } from '@/lib/query'
 import { cn, formatDateTime, formatRelative } from '@/lib/utils'
+import { t } from '@/i18n'
+import { rich } from '@/i18n/rich'
 
 /** State of the forest prerequisite (Privileged Access Management feature) with an explanation when it is missing. */
 export function PrerequisiteCard({ overview }: { overview: JitOverview }) {
@@ -20,45 +22,45 @@ export function PrerequisiteCard({ overview }: { overview: JitOverview }) {
   const checkButton = overview.canCheck && (
     <Button variant="outline" size="sm" onClick={() => setCheckOpen(true)} disabled={p.status === 'Running'}>
       {p.status === 'Running' ? <Loader2 className="animate-spin" /> : p.status === 'Unknown' ? <SearchCheck /> : <RefreshCw />}
-      {p.status === 'Unknown' ? 'Jetzt prüfen' : 'Erneut prüfen'}
+      {p.status === 'Unknown' ? t('jit.jitPrerequisite.checkNow') : t('jit.jitPrerequisite.checkAgain')}
     </Button>
   )
   const checked = p.checkedAt && (
-    <span title={formatDateTime(p.checkedAt)}>geprüft {formatRelative(p.checkedAt)}{p.dc && <> über <span className="font-mono">{p.dc}</span></>}</span>
+    <span title={formatDateTime(p.checkedAt)}>{t('jit.jitPrerequisite.checkedAt', { when: formatRelative(p.checkedAt) })}{p.dc && <> {t('jit.jitPrerequisite.via')} <span className="font-mono">{p.dc}</span></>}</span>
   )
 
   let body: React.ReactNode
   if (p.status === 'Ready') {
     body = (
-      <Row tone="emerald" icon={<ShieldCheck />} title="Voraussetzungen erfüllt" action={checkButton}>
-        Privileged Access Management Feature ist aktiviert{p.forestMode && <>, Funktionsebene {p.forestMode}</>} – {checked}. Active Directory entfernt befristete Mitgliedschaften selbstständig.
+      <Row tone="emerald" icon={<ShieldCheck />} title={t('jit.jitPrerequisite.prerequisitesMet')} action={checkButton}>
+        {t('jit.jitPrerequisite.privilegedAccessManagementFeatureIs')}{p.forestMode && <>{t('jit.jitPrerequisite.functionalLevel')} {p.forestMode}</>} – {checked}{t('jit.jitPrerequisite.activeDirectoryRemovesTimeLimited')}
       </Row>
     )
   } else if (p.status === 'NotReady') {
     body = (
       <div className="grid gap-4 p-5">
-        <Row tone="rose" icon={<ShieldOff />} title="Privileged Access Management Feature ist nicht aktiviert" action={checkButton} bare>
-          Befristete Gruppenmitgliedschaften (Time-to-Live) setzen dieses optionale Feature der Gesamtstruktur voraus – {checked}. Bis eine erneute Prüfung erfolgreich ist, können keine Anträge gestellt werden.
+        <Row tone="rose" icon={<ShieldOff />} title={t('jit.jitPrerequisite.privilegedAccessManagementFeatureIs2')} action={checkButton} bare>
+          {t('jit.jitPrerequisite.timeLimitedGroupMembershipsTime')} {checked}{t('jit.jitPrerequisite.untilANewCheckSucceeds')}
         </Row>
         <div className="rounded-lg border border-rose-500/25 bg-rose-500/[0.04] px-4 py-3 text-[13px]">
-          <p className="font-medium">Der Dienst schaltet das Feature nicht ein – Hinweise:</p>
+          <p className="font-medium">{t('jit.jitPrerequisite.theServiceDoesNotTurn')}</p>
           <ul className="mt-2 grid list-disc gap-1.5 pl-5 text-muted-foreground marker:text-rose-500">
-            <li><span className="text-foreground">Das Aktivieren ist endgültig</span> und lässt sich nicht rückgängig machen. Es gilt für die gesamte Gesamtstruktur.</li>
+            <li><span className="text-foreground">{t('jit.jitPrerequisite.enablingItIsPermanent')}</span> {t('jit.jitPrerequisite.andCannotBeUndoneIt')}</li>
             <li>
-              Die Funktionsebene der Gesamtstruktur muss mindestens Windows Server 2016 sein
-              {p.forestMode && <> (aktuell: <span className="font-mono text-foreground">{p.forestMode}</span>{p.forestLevelSufficient === false ? ' – zu niedrig' : ''})</>}.
+              {t('jit.jitPrerequisite.theForestFunctionalLevelMust')}
+              {p.forestMode && <> {t('jit.jitPrerequisite.currently')} <span className="font-mono text-foreground">{p.forestMode}</span>{p.forestLevelSufficient === false ? t('jit.jitPrerequisite.tooLow') : ''})</>}.
             </li>
             <li>
-              Ein Organisations-Administrator aktiviert das Feature nach eigener Prüfung, z. B. mit
+              {t('jit.jitPrerequisite.anEnterpriseAdministratorEnablesThe')}
               <code className="mt-1 block rounded-md border bg-muted/60 px-2 py-1.5 font-mono text-[12px] break-all text-foreground">
                 Enable-ADOptionalFeature 'Privileged Access Management Feature' -Scope ForestOrConfigurationSet -Target contoso.com
               </code>
             </li>
-            <li>Kerberos-Tickets von Mitgliedern einer befristeten Mitgliedschaft laufen spätestens mit der Mitgliedschaft ab.</li>
+            <li>{t('jit.jitPrerequisite.kerberosTicketsOfMembersOf')}</li>
           </ul>
           {p.messages.length > 0 && (
             <div className="mt-3 border-t border-rose-500/20 pt-2">
-              <p className="text-xs font-medium text-muted-foreground">Meldungen der Prüfung</p>
+              <p className="text-xs font-medium text-muted-foreground">{t('jit.jitPrerequisite.checkMessages')}</p>
               <ul className="mt-1 grid gap-1 text-xs text-muted-foreground">
                 {p.messages.map((m) => <li key={m} className="break-words">{m}</li>)}
               </ul>
@@ -69,22 +71,21 @@ export function PrerequisiteCard({ overview }: { overview: JitOverview }) {
     )
   } else if (p.status === 'Running') {
     body = (
-      <Row tone="sky" icon={<Loader2 className="animate-spin" />} title="Voraussetzungen werden geprüft …" action={checkButton}>
-        Lesende Prüfung über <span className="font-mono">{p.dc}</span> – es wird nichts verändert.
-        {p.runId && <> <Link to={`/laeufe/${p.runId}`} className="text-primary hover:underline">Lauf #{p.runId}</Link></>}
+      <Row tone="sky" icon={<Loader2 className="animate-spin" />} title={t('jit.jitPrerequisite.checkingPrerequisites')} action={checkButton}>
+        {rich(t('jit.jitPrerequisite.readOnlyCheck'), { dc: <span className="font-mono">{p.dc}</span> })}
+        {p.runId && <> <Link to={`/laeufe/${p.runId}`} className="text-primary hover:underline">{t('jit.jitPrerequisite.run')}{p.runId}</Link></>}
       </Row>
     )
   } else if (p.status === 'Error') {
     body = (
-      <Row tone="rose" icon={<AlertTriangle />} title="Prüfung fehlgeschlagen" action={checkButton}>
-        {p.error} {p.runId && <Link to={`/laeufe/${p.runId}`} className="text-primary hover:underline">Protokoll von Lauf #{p.runId}</Link>}
+      <Row tone="rose" icon={<AlertTriangle />} title={t('jit.jitPrerequisite.checkFailed')} action={checkButton}>
+        {p.error} {p.runId && <Link to={`/laeufe/${p.runId}`} className="text-primary hover:underline">{t('jit.jitPrerequisite.logOfRun')}{p.runId}</Link>}
       </Row>
     )
   } else {
     body = (
-      <Row tone="sky" icon={<Info />} title="Voraussetzungen noch nicht geprüft" action={checkButton}>
-        Befristete Mitgliedschaften brauchen das <span className="text-foreground">Privileged Access Management Feature</span> und die Funktionsebene Windows Server 2016.
-        Die Prüfung ist rein lesend.
+      <Row tone="sky" icon={<Info />} title={t('jit.jitPrerequisite.prerequisitesNotCheckedYet')} action={checkButton}>
+        {t('jit.jitPrerequisite.timeLimitedMembershipsRequireThe')} <span className="text-foreground">{t('jit.jitPrerequisite.privilegedAccessManagementFeature')}</span> {t('jit.jitPrerequisite.andTheWindowsServer2016')}
       </Row>
     )
   }
@@ -127,28 +128,28 @@ function CheckDialog({ open, onOpenChange, defaultDc }: { open: boolean; onOpenC
     mutationFn: () => jitApi.check(dc.trim()),
     meta: { silent: true },
     onSuccess: () => {
-      toast.success('Prüfung gestartet', { description: 'Das Ergebnis erscheint in wenigen Sekunden.' })
+      toast.success(t('jit.jitPrerequisite.checkStarted'), { description: t('jit.jitPrerequisite.theResultAppearsInA') })
       qc.invalidateQueries({ queryKey: ['jit'] })
       onOpenChange(false)
     },
-    onError: (e) => toast.error('Prüfung nicht möglich', { description: errorMessage(e) }),
+    onError: (e) => toast.error(t('jit.jitPrerequisite.checkNotPossible'), { description: errorMessage(e) }),
   })
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); if (dc.trim()) check.mutate() }}>
           <DialogHeader>
-            <DialogTitle>Voraussetzungen prüfen</DialogTitle>
+            <DialogTitle>{t('jit.jitPrerequisite.checkPrerequisites')}</DialogTitle>
             <DialogDescription>
-              Liest, ob das Privileged Access Management Feature aktiviert ist und welche Funktionsebene die Gesamtstruktur hat. Es wird nichts verändert.
+              {t('jit.jitPrerequisite.readsWhetherThePrivilegedAccess')}
             </DialogDescription>
           </DialogHeader>
-          <Field label="Domänencontroller" htmlFor="jit-check-dc" required>
-            <Combobox id="jit-check-dc" value={dc} onChange={setDc} options={dcOptions} placeholder="z. B. dc01.contoso.com" searchPlaceholder="Domänencontroller suchen oder eingeben …" mono />
+          <Field label={t('jit.jitPrerequisite.domainController')} htmlFor="jit-check-dc" required>
+            <Combobox id="jit-check-dc" value={dc} onChange={setDc} options={dcOptions} placeholder={t('jit.jitPrerequisite.eGDc01ContosoCom')} searchPlaceholder={t('jit.jitPrerequisite.searchOrEnterDomainController')} mono />
           </Field>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Abbrechen</Button>
-            <Button type="submit" loading={check.isPending} disabled={!dc.trim()}>{!check.isPending && <SearchCheck />} Prüfen</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" loading={check.isPending} disabled={!dc.trim()}>{!check.isPending && <SearchCheck />} {t('jit.jitPrerequisite.check')}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

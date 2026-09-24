@@ -535,7 +535,7 @@ function ValidationCard({ previewId, initial, selected }: { previewId: string; i
     }
     let cancelled = false
     setLoading(true)
-    const t = setTimeout(() => {
+    const tt = setTimeout(() => {
       transferApi
         .validate(previewId, key ? key.split(',') : [])
         .then((r) => !cancelled && setIssues(r))
@@ -544,7 +544,7 @@ function ValidationCard({ previewId, initial, selected }: { previewId: string; i
     }, 300)
     return () => {
       cancelled = true
-      clearTimeout(t)
+      clearTimeout(tt)
     }
   }, [previewId, key])
 

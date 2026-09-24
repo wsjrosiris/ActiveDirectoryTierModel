@@ -1,22 +1,23 @@
 import cronstrue from 'cronstrue'
+import { currentLanguage, t } from '../../i18n/index.ts'
 import 'cronstrue/locales/de'
 
 export const cronPresets = [
-  { label: 'Stündlich', cron: '0 * * * *' },
-  { label: 'Täglich 02:00', cron: '0 2 * * *' },
-  { label: 'Werktags 06:00', cron: '0 6 * * 1-5' },
-  { label: 'Wöchentlich Mo 06:00', cron: '0 6 * * 1' },
-  { label: 'Monatlich am 1., 03:00', cron: '0 3 1 * *' },
+  { label: t('runs.cron.hourly'), cron: '0 * * * *' },
+  { label: t('runs.cron.daily0200'), cron: '0 2 * * *' },
+  { label: t('runs.cron.weekdays0600'), cron: '0 6 * * 1-5' },
+  { label: t('runs.cron.weeklyMon0600'), cron: '0 6 * * 1' },
+  { label: t('runs.cron.monthlyOnThe1st03'), cron: '0 3 1 * *' },
 ]
 
 export function describeCron(cron: string): { text: string; error: boolean } {
   const c = cron.trim()
-  if (!c) return { text: 'Bitte einen Cron-Ausdruck eingeben.', error: true }
-  if (c.split(/\s+/).length !== 5) return { text: 'Erwartet werden genau 5 Felder: Minute Stunde Tag Monat Wochentag.', error: true }
+  if (!c) return { text: t('runs.cron.pleaseEnterACronExpression'), error: true }
+  if (c.split(/\s+/).length !== 5) return { text: t('runs.cron.exactly5FieldsAreExpected'), error: true }
   try {
-    return { text: cronstrue.toString(c, { locale: 'de', use24HourTimeFormat: true, verbose: false }), error: false }
+    return { text: cronstrue.toString(c, { locale: currentLanguage(), use24HourTimeFormat: true, verbose: false }), error: false }
   } catch (e) {
-    return { text: `Ungültiger Ausdruck: ${String(e).replace(/^Error:\s*/, '')}`, error: true }
+    return { text: t('runs.cron.invalidExpressionReplace', { replace: String(e).replace(/^Error:\s*/, '') }), error: true }
   }
 }
 
