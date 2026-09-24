@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-24
+
+### Added
+- **TierModel Service** (`service/`): permanent Windows service with a modern web UI and a PostgreSQL database, replacing `Start-TierModelManager.ps1`.
+  - ASP.NET Core 10 backend running as a Windows service (HTTPS via a certificate from `LocalMachine\My`).
+  - Versioned configuration in PostgreSQL (seeded from `config/*.json`) with diff, restore, conflict detection and cross-reference validation.
+  - Deploy (plan/apply) and audit runs in a queue with isolated working copies, live log, cancel, timeout, and the config versions each run used.
+  - Scheduled audits (cron + time zone), drift history and trend, change log.
+  - Own user accounts with roles (Viewer, Editor, Operator, Admin), lockout, forced password change, CSRF protection and security headers.
+  - React/TypeScript web UI (light/dark mode, global search, command palette, undo/redo, OU tree).
+  - Interactive installer `Setup.cmd` / `Install-TierModelService.ps1`: prerequisites (PowerShell 7, RSAT), local PostgreSQL install or existing server, database provisioning, gMSA/domain service account, certificate, firewall, service registration, first admin; update with rollback and uninstall.
+  - `service/build/Build-Release.ps1` builds a self-contained `win-x64` release package.
+- `Deploy-TierModel.ps1`: new `-Unattended` switch that skips the interactive `-ConfirmApply` prompt for callers that have already obtained confirmation.
+
+### Removed
+- `Start-TierModelManager.ps1` and its screenshots/mockup. The script exposed unauthenticated endpoints (with `Access-Control-Allow-Origin: *`) that any website could use to run a deployment or overwrite config files. It also never passed the mandatory `-PreferredDc`, so its deploy and audit buttons did not work.
+
 ## [1.2.2] - 2026-07-31
 
 ### Added

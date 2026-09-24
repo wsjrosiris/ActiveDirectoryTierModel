@@ -7,8 +7,10 @@ Dieses Repository basiert auf dem offiziellen Microsoft Active Directory Tier Mo
 | Feature | Status | Beschreibung |
 |---------|--------|-------------|
 | **Multi-Language Support** | ✅ Neu | 19 Sprachen (DE, EN, FR, ES, ...) statt nur Englisch |
-| **Web Management Console** | ✅ Neu | Lokale Web-Oberflaeche zur visuellen Verwaltung |
-| **Form-basierte Konfiguration** | ✅ Neu | Kein JSON-Editor - alles per Dropdown/Felder |
+| **TierModel Service** | ✅ Neu | Windows-Dienst mit moderner Web-Oberfläche, PostgreSQL, Benutzern & Rollen |
+| **Installer** | ✅ Neu | `Setup.cmd` – interaktiver Assistent richtet alles automatisch ein |
+| **Versionierte Konfiguration** | ✅ Neu | Formulare statt JSON, jede Änderung als Version mit Diff und Wiederherstellung |
+| **Geplante Audits** | ✅ Neu | Drift-Erkennung per Zeitplan, Historie und Trend |
 
 ---
 
@@ -73,69 +75,34 @@ Das originale Microsoft-Framework unterstuetzt ausschliesslich Englisch (`en-US`
 
 ---
 
-### 🖥️ Web Management Console
+### 🖥️ TierModel Service (Web-Oberfläche + Windows-Dienst)
 
-Eine lokale Web-Anwendung zur visuellen Verwaltung des Tier Models. Startet einen PowerShell-Webserver auf Port 8080.
+Ein dauerhaft laufender Dienst auf einem Windows Server mit **PostgreSQL-Datenbank** und moderner Web-Oberfläche.
+Er ersetzt die frühere `Start-TierModelManager.ps1`.
 
-```powershell
-.\Start-TierModelManager.ps1
-# Browser oeffnet automatisch: http://localhost:8080
-```
+| Dashboard | Konfiguration bearbeiten |
+|---|---|
+| ![Dashboard](service/docs/screenshots/dashboard-light.png) | ![ACL bearbeiten](service/docs/screenshots/config-edit-sheet-light.png) |
+| **Lauf mit Live-Log** | **Audit-Befunde** |
+| ![Lauf](service/docs/screenshots/run-log-dark.png) | ![Befunde](service/docs/screenshots/run-findings-light.png) |
+| **Deploy** | **OU-Struktur** |
+| ![Deploy](service/docs/screenshots/deploy-light.png) | ![OUs](service/docs/screenshots/config-ous-dark.png) |
 
-**Neue Datei:** `Start-TierModelManager.ps1`
+| Bereich | Funktionen |
+|---|---|
+| **Dashboard** | Kennzahlen, letzter Audit-/Deploy-Status, Drift-Trend, OU-Baum mit Tier-Farben, letzte Läufe und Änderungen |
+| **Konfiguration** | Formulare für OUs, Gruppen, Benutzer, ACLs, MSA/gMSA/dMSA, Windows LAPS; JSON-Editor für GPOs/ADMX; Rückgängig/Wiederholen, Diff vor dem Speichern, Versionen und Wiederherstellung, Validierung, OU-Umbenennung mit Referenz-Update |
+| **Deploy** | Planung (WhatIf) oder Anwenden – Anwenden nur für Operatoren und mit ausdrücklicher Bestätigung |
+| **Audits** | Sofort oder per Zeitplan (Cron + Zeitzone), Befunde je Lauf |
+| **Läufe** | Warteschlange, Live-Log, Abbrechen, verwendete Konfigurationsversionen |
+| **Änderungsprotokoll** | Wer hat wann was geändert, gestartet oder angemeldet |
+| **Administration** | Benutzer mit Rollen (Viewer, Editor, Operator, Admin), Einstellungen |
 
-#### Dashboard
-Zeigt Statistiken (OUs, Gruppen, User, ACLs) und eine interaktive OU-Baumstruktur mit Tier-Badges (T0/T1/T2).
+**Installation:** Release-Paket auf dem Server entpacken, `Setup.cmd` starten – der Assistent prüft die Voraussetzungen,
+installiert bei Bedarf PowerShell 7, RSAT und PostgreSQL, legt Datenbank und DB-Benutzer an und richtet Dienstkonto (gMSA),
+HTTPS-Zertifikat, Firewall, Windows-Dienst und das erste Admin-Konto ein.
 
-![Dashboard](docs/screenshots/dashboard.svg)
-
-#### Konfiguration - OUs
-Formular-basierte Verwaltung aller Organizational Units mit Feldern fuer Name, Pfad, Kommentar, Schutz- und GPO-Block-Checkboxes.
-
-![OUs Konfiguration](docs/screenshots/config-ous.svg)
-
-#### Konfiguration - Gruppen
-Sicherheitsgruppen verwalten mit Dropdowns fuer Scope (Global/Universal/DomainLocal) und Kategorie (Security/Distribution).
-
-![Gruppen Konfiguration](docs/screenshots/config-groups.svg)
-
-#### Konfiguration - ACLs
-ACL-Delegationen mit Principal-Dropdown (aus Gruppen), Access-Typ, Objekttyp und Vererbungs-Dropdowns.
-
-![ACLs Konfiguration](docs/screenshots/config-acls.svg)
-
-#### Deploy & Audit
-`Deploy-TierModel.ps1` und `Audit-TierModel.ps1` direkt aus der Web-Oberflaeche ausfuehren mit Optionen (WhatIf, MSA, gMSA, dMSA, WinLAPS).
-
-![Deploy](docs/screenshots/deploy.svg)
-
-#### Modal - Neue ACL hinzufuegen
-Rechte-Auswahl per Checkbox-Grid (GenericAll, CreateChild, DeleteChild, ReadProperty, WriteProperty, ExtendedRight).
-
-![ACL Modal](docs/screenshots/modal-acl.svg)
-
-#### Features der Web Console
-
-| Seite | Funktionen |
-|-------|-----------|
-| **Dashboard** | Statistiken, OU-Baum mit Tier-Badges |
-| **OUs** | Tabelle mit Suche, Hinzufuegen, Loeschen |
-| **Gruppen** | Sicherheitsgruppen verwalten |
-| **Benutzer** | Service-Accounts (aktiv/inaktiv) |
-| **ACLs** | OU-Berechtigungen verwalten |
-| **Konfiguration** | 5 Tabs (OUs/Gruppen/Benutzer/ACLs/GPOs) mit Formularen |
-| **Deploy** | Tier Model deployen mit Optionen |
-| **Audit** | Drift Detection ausfuehren |
-
-#### API Endpunkte
-
-| Endpoint | Methode | Beschreibung |
-|----------|---------|-------------|
-| `GET /` | GET | HTML Oberflaeche |
-| `GET /api/config/{file}` | GET | JSON-Konfiguration lesen |
-| `POST /api/config/{file}` | POST | JSON-Konfiguration speichern |
-| `POST /api/deploy` | POST | Deploy-TierModel.ps1 ausfuehren |
-| `POST /api/audit` | POST | Audit-TierModel.ps1 ausfuehren |
+➡️ Details, Architektur, Sicherheit und Entwicklung: **[service/README.md](service/README.md)** · REST-API: [service/docs/API.md](service/docs/API.md)
 
 ---
 
@@ -154,11 +121,12 @@ Rechte-Auswahl per Checkbox-Grid (GenericAll, CreateChild, DeleteChild, ReadProp
 git clone https://github.com/wsjrosiris/ActiveDirectoryTierModel.git
 cd ActiveDirectoryTierModel
 
-# Web Console starten
-.\Start-TierModelManager.ps1
+# Release-Paket für den Server bauen (PowerShell 7, .NET 10 SDK, Node.js)
+pwsh service/build/Build-Release.ps1
+# → service/artifacts/TierModelService-<version>.zip auf den Server kopieren, entpacken, Setup.cmd starten
 
 # Oder direkt deployen (original Microsoft Script)
-.\Deploy-TierModel.ps1 -WhatIf
+.\Deploy-TierModel.ps1 -PreferredDc dc01.contoso.com -FullDeployment
 ```
 
 ## 📁 Projektstruktur
@@ -167,7 +135,12 @@ cd ActiveDirectoryTierModel
 ActiveDirectoryTierModel/
 ├── Deploy-TierModel.ps1          # [Microsoft] Deploy Script
 ├── Audit-TierModel.ps1           # [Microsoft] Audit Script
-├── Start-TierModelManager.ps1    # [NEU] Web Management Console
+├── service/                      # [NEU] TierModel Service
+│   ├── src/TierModel.Service/    #   ASP.NET Core 10 Backend (Windows-Dienst)
+│   ├── web/                      #   React-Oberfläche
+│   ├── installer/                #   Setup.cmd + Installationsassistent
+│   ├── build/                    #   Build-Release.ps1
+│   └── tests/                    #   Unit- und API-Tests
 ├── config/                       # [Microsoft] Konfigurationsdateien
 │   ├── tiermodel-ous.json
 │   ├── tiermodel-groups.json
@@ -178,8 +151,7 @@ ActiveDirectoryTierModel/
 │   ├── TierModel.psm1
 │   └── public/                   # 60+ Cmdlets
 ├── tests/                        # [Microsoft] Pester Tests (1.766 Tests)
-├── docs/
-│   └── screenshots/              # [NEU] Screenshots fuer README
+├── docs/                         # [Microsoft] Dokumentation
 └── optional/                     # [Microsoft] Optionale Features
 ```
 
@@ -190,8 +162,7 @@ ActiveDirectoryTierModel/
 | **Fork** | https://github.com/wsjrosiris/ActiveDirectoryTierModel |
 | **Original** | https://github.com/microsoft/ActiveDirectoryTierModel |
 | **Doku (Microsoft)** | https://microsoft.github.io/ActiveDirectoryTierModel |
-| **Mockup** | [tiermodel-mockup.html](docs/tiermodel-mockup.html) |
 
 ---
 
-**Version**: 1.3.0 | **Basis**: Microsoft Tier Model v1.2.2 | **License**: MIT
+**Version**: 1.4.0 | **Basis**: Microsoft Tier Model v1.2.2 | **License**: MIT

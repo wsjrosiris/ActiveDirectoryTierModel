@@ -424,3 +424,10 @@ FodyWeavers.xsd
 
 # Test-run scratch directory (Pester GPO mock artifacts written/cleaned by Invoke-AllTests.ps1)
 Temp/
+
+# TierModel Service
+service/**/bin/
+service/**/obj/
+service/.dev-data/
+service/src/TierModel.Service/wwwroot/
+service/artifacts/

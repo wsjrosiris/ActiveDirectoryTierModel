@@ -45,6 +45,11 @@ Provides consolidated reporting at completion.
 Execute the deployment plan. Without this switch, the script runs in planning
 mode only, showing what changes would be made without applying them.
 
+.PARAMETER Unattended
+Skip the interactive confirmation prompt for -ConfirmApply. Intended for
+non-interactive callers such as the TierModel Service, which obtains the
+confirmation itself before starting the run.
+
 .PARAMETER Logging
 Enable detailed logging to files. When specified, deployment operations and
 results will be logged to files in the LogPath directory (or current directory).
@@ -88,6 +93,10 @@ param(
     [switch]$AdmxOnly,
     [switch]$FullDeployment,
     [switch]$ConfirmApply,
+
+    # Skips the interactive confirmation prompt for -ConfirmApply. Used by the
+    # TierModel Service, which collects the confirmation in its web UI instead.
+    [switch]$Unattended,
     
     [switch]$IncludeMsa,
     [switch]$IncludeGmsa,
@@ -236,7 +245,10 @@ if ($IncludeDmsa) {
 }
 
 # Confirmation prompt for ConfirmApply to prevent accidental execution
-if ($ConfirmApply) {
+if ($ConfirmApply -and $Unattended) {
+    Write-Host "Unattended execution: confirmation was given by the caller." -ForegroundColor Yellow
+}
+elseif ($ConfirmApply) {
     Write-Host ""
     Write-Host "WARNING: You are about to execute Active Directory changes!" -ForegroundColor Yellow
     Write-Host "These changes, while low risk, will modify your Active Directory environment." -ForegroundColor Yellow
