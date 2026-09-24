@@ -80,7 +80,13 @@ Das originale Microsoft-Framework unterstuetzt ausschliesslich Englisch (`en-US`
 Ein dauerhaft laufender Dienst auf einem Windows Server mit **PostgreSQL-Datenbank** und moderner Web-Oberfläche.
 Er ersetzt die frühere `Start-TierModelManager.ps1`.
 
-<!-- SCREENSHOTS -->
+| Dashboard | Konfiguration bearbeiten |
+|---|---|
+| ![Dashboard](service/docs/screenshots/dashboard-light.png) | ![ACL bearbeiten](service/docs/screenshots/config-edit-sheet-light.png) |
+| **Lauf mit Live-Log** | **Audit-Befunde** |
+| ![Lauf](service/docs/screenshots/run-log-dark.png) | ![Befunde](service/docs/screenshots/run-findings-light.png) |
+| **Deploy** | **OU-Struktur** |
+| ![Deploy](service/docs/screenshots/deploy-light.png) | ![OUs](service/docs/screenshots/config-ous-dark.png) |
 
 | Bereich | Funktionen |
 |---|---|
