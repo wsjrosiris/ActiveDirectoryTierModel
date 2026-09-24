@@ -61,6 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Service: **multiple domains** per instance (header `X-TierModel-Domain`, default domain fallback), domain
   switcher, per-domain configuration, runs, schedules, monitoring, JIT, setup, Git subfolders; migration assigns
   existing data to the first domain; PowerShell client `-Domain`.
+- `Audit-TierModel.ps1 -OutputFormat Html` (self-contained, print-friendly report) and `-OutputFormat NUnitXml`
+  (NUnit 3, one suite per area) – previously placeholders.
 - Service: **compliance score** per tier on the dashboard with 30-day history and breakdown.
 - Roadmap for the next features (`docs/service/roadmap.md`).
 
@@ -68,6 +70,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Audit-TierModel.ps1 -FullDeployment` (and include audits) kept only the findings of the last entity in the JSON
   report and left `auditSummary` at zero.
 - Domain Admins prerequisite check aborted on domains with localized group names.
+- `Test-TierModelPrerequisites`: the elevation check no longer aborts the whole check on hosts without
+  WindowsIdentity; AD language detection compares case-sensitively (pt-BR was reported as es-ES).
+- Pester tests of the prerequisite/language check describe the current behaviour.
 
 ## [1.4.0] - 2026-09-24
 

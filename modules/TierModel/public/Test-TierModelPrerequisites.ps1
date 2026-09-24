@@ -126,7 +126,13 @@ function Test-TierModelPrerequisites {
         }
         
         # Test elevation (Administrator privileges)
-        $isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        # WindowsIdentity is unavailable on non-Windows hosts (e.g. unit tests on Linux): report "not elevated" instead of failing the whole check.
+        $isElevated = $false
+        try {
+            $isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        } catch {
+            Write-Verbose "Elevation check not available on this platform: $($_.Exception.Message)"
+        }
         $result.EnvironmentSnapshot.IsElevated = $isElevated
         
         # Note elevation status but don't fail prerequisites for testing scenarios
@@ -533,9 +539,9 @@ function Test-TierModelPrerequisites {
                             foreach ($sid in @('S-1-5-32-549','S-1-5-32-548')) {
                                 # Names identical to the English ones (e.g. ja-JP keeps "Server Operators") cannot identify a language.
                                 if ($knownGroupNames.ContainsKey($sid) -and $knownGroupNames[$sid].ContainsKey($lang) -and $knownGroupNames[$sid][$lang] -cne $knownGroupNames[$sid]['en-US']) {
-                                    $resolvedSidName = $null
+                                    # Case-sensitive: es-ES "Operadores de servidor" and pt-BR "Operadores de Servidor" differ only in case.
                                     foreach ($key in $resolvedGroupNames.Keys) {
-                                        if ($resolvedGroupNames[$key] -eq $knownGroupNames[$sid][$lang]) {
+                                        if ($resolvedGroupNames[$key] -ceq $knownGroupNames[$sid][$lang]) {
                                             $matchCount++
                                             break
                                         }

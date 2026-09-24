@@ -12,6 +12,8 @@
         # This allows the module to work in development/testing environments where RSAT may not be available
     )
     FunctionsToExport = @(
+        'ConvertTo-TierModelAuditHtml',
+        'ConvertTo-TierModelAuditNUnitXml',
         'Copy-TierModelAdmx',
         'Export-TierModelPlan',
         'Export-TierModelPrivilegedSnapshot',

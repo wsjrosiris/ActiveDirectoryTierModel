@@ -836,8 +836,14 @@ Describe 'Audit-TierModel.ps1 - Output Format Generation' -Tag 'Integration', 'A
             $generatedFiles | Should -Not -BeNullOrEmpty
             
             $content = Get-Content -Path $generatedFiles[0].FullName -Raw
-            $content | Should -Match '<html>'
+            $content | Should -Match '^<!DOCTYPE html>'
+            $content | Should -Match '<html lang="en">'
             $content | Should -Match 'TierModel Audit Report'
+            $content | Should -Match '<dd>OuOnly</dd>'
+            # Self-contained: no scripts, no external resources
+            $content | Should -Not -Match '<script|<link |src="http'
+            # The renderer emits well-formed markup
+            { [xml]$content } | Should -Not -Throw
         }
     }
     
@@ -852,9 +858,18 @@ Describe 'Audit-TierModel.ps1 - Output Format Generation' -Tag 'Integration', 'A
             $generatedFiles | Should -Not -BeNullOrEmpty
             
             $content = Get-Content -Path $generatedFiles[0].FullName -Raw
-            $content | Should -Match '<?xml version'
-            $content | Should -Match '<test-results'
+            $content | Should -Match '<\?xml version'
+            $content | Should -Match '<test-run '
             $content | Should -Match 'name="TierModelAudit"'
+
+            # NUnit 3 structure: test-run -> test-suite -> test-suite (per area) -> test-case
+            [xml]$xml = $content
+            $run = $xml.'test-run'
+            $cases = @($xml.SelectNodes('//test-case'))
+            $cases.Count | Should -BeGreaterThan 0
+            [int]$run.total | Should -Be $cases.Count
+            [int]$run.failed | Should -Be @($cases | Where-Object { $_.result -eq 'Failed' }).Count
+            [int]$run.passed | Should -Be @($cases | Where-Object { $_.result -eq 'Passed' }).Count
         }
     }
     

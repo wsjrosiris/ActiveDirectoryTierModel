@@ -253,8 +253,9 @@ function Merge-TierModelAuditResult {
 
     .OUTPUTS
     PSCustomObject with Summary (hashtable: TotalChecked, DriftCount, MissingCount, UnexpectedCount,
-    MismatchCount, OrphanedGpoLinkCount, SecurityDeltaCount, ErrorCount, CompliantCount) and
-    Findings (array).
+    MismatchCount, OrphanedGpoLinkCount, SecurityDeltaCount, ErrorCount, CompliantCount),
+    Findings (array) and Areas (ordered hashtable area -> @{ Checked; Compliant; Findings }, the
+    per-area counts used by the HTML and NUnit XML reports).
     #>
     [CmdletBinding()]
     param(
@@ -267,6 +268,7 @@ function Merge-TierModelAuditResult {
 
     $gpoTargets = Get-TierModelGpoTargetMap -Config $Config
     $findings = New-Object System.Collections.Generic.List[object]
+    $areas = [ordered]@{}
     $summary = [ordered]@{
         TotalChecked = 0
         DriftCount = 0
@@ -329,6 +331,12 @@ function Merge-TierModelAuditResult {
         }
         if ($null -eq $compliant) { $compliant = [Math]::Max(0, $checked - $entityIssues) }
         $summary.CompliantCount += $compliant
+
+        # Per-area counts (several entity types can share one area, e.g. WinLaps ACL + Decryptor)
+        if (-not $areas.Contains($area)) { $areas[$area] = [ordered]@{ Checked = 0; Compliant = 0; Findings = 0 } }
+        $areas[$area].Checked += $checked
+        $areas[$area].Compliant += $compliant
+        $areas[$area].Findings += $entityIssues
     }
 
     $summary.DriftCount = $summary.MissingCount + $summary.UnexpectedCount + $summary.MismatchCount +
@@ -340,5 +348,6 @@ function Merge-TierModelAuditResult {
     return [PSCustomObject]@{
         Summary  = $summaryTable
         Findings = $findings.ToArray()
+        Areas    = $areas
     }
 }

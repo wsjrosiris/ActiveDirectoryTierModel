@@ -246,6 +246,9 @@ $auditSummary = @{
     ErrorCount = 0
 }
 $driftFindings = @()
+# Per-area counts (Checked/Compliant/Findings) from Merge-TierModelAuditResult, used by the HTML and
+# NUnit XML reports; stays $null when no audit result was produced
+$auditAreas = $null
 $selectedScope = if ($OuOnly) { 'OuOnly' } elseif ($GroupOnly) { 'GroupOnly' } elseif ($UserOnly) { 'UserOnly' } elseif ($GposOnly) { 'GposOnly' } elseif ($OuAclsOnly) { 'OuAclsOnly' } elseif ($AdmxOnly) { 'AdmxOnly' } elseif ($AuthSilosOnly) { 'AuthSilosOnly' } else { 'FullDeployment' }
 
 # Load configuration
@@ -1037,6 +1040,7 @@ if ($FullDeployment) {
     $mergedAudit = Merge-TierModelAuditResult -AuditResults $auditResults -Config $config
     $auditSummary = $mergedAudit.Summary
     $driftFindings = @($mergedAudit.Findings)
+    $auditAreas = $mergedAudit.Areas
 }
 else {
     # Single-entity operations show immediate reports
@@ -1052,9 +1056,13 @@ else {
                 $auditSummary.MissingCount = $ouResult.Summary.MissingCount
                 $auditSummary.MismatchCount = $ouResult.Summary.MismatchCount
             }
-            if ($ouResult -and $ouResult.DriftFindings) {
-                # Same findings as before, tagged with Area/Severity
-                $driftFindings = @((Merge-TierModelAuditResult -AuditResults @($ouResult) -Config $config).Findings)
+            if ($ouResult) {
+                $ouResultMerged = Merge-TierModelAuditResult -AuditResults @($ouResult) -Config $config
+                $auditAreas = $ouResultMerged.Areas
+                if ($ouResult.DriftFindings) {
+                    # Same findings as before, tagged with Area/Severity
+                    $driftFindings = @($ouResultMerged.Findings)
+                }
             }
         } catch {
             Write-Host "Error during OU audit: $($_.Exception.Message)" -ForegroundColor Red
@@ -1072,9 +1080,13 @@ else {
             $auditSummary.MissingCount = $groupResult.Summary.MissingCount
             $auditSummary.MismatchCount = $groupResult.Summary.MismatchCount
         }
-        if ($groupResult -and $groupResult.DriftFindings) {
-            # Same findings as before, tagged with Area/Severity
-            $driftFindings = @((Merge-TierModelAuditResult -AuditResults @($groupResult) -Config $config).Findings)
+        if ($groupResult) {
+            $groupResultMerged = Merge-TierModelAuditResult -AuditResults @($groupResult) -Config $config
+            $auditAreas = $groupResultMerged.Areas
+            if ($groupResult.DriftFindings) {
+                # Same findings as before, tagged with Area/Severity
+                $driftFindings = @($groupResultMerged.Findings)
+            }
         }
     }
     if ($UserOnly) { 
@@ -1088,9 +1100,13 @@ else {
             $auditSummary.MissingCount = $userResult.Summary.MissingCount
             $auditSummary.MismatchCount = $userResult.Summary.MismatchCount
         }
-        if ($userResult -and $userResult.DriftFindings) {
-            # Same findings as before, tagged with Area/Severity
-            $driftFindings = @((Merge-TierModelAuditResult -AuditResults @($userResult) -Config $config).Findings)
+        if ($userResult) {
+            $userResultMerged = Merge-TierModelAuditResult -AuditResults @($userResult) -Config $config
+            $auditAreas = $userResultMerged.Areas
+            if ($userResult.DriftFindings) {
+                # Same findings as before, tagged with Area/Severity
+                $driftFindings = @($userResultMerged.Findings)
+            }
         }
     }
     if ($OuAclsOnly) { 
@@ -1104,10 +1120,14 @@ else {
             $auditSummary.ErrorCount = $ouAclResult.Summary.Errors
             $auditSummary.CompliantCount = $ouAclResult.Summary.Compliant
         }
-        if ($ouAclResult -and $ouAclResult.Findings) {
-            # Convert OU ACL findings to the drift findings format (Type Missing/Mismatch/Error,
-            # ResourceType, Identifier, Details) and tag them with Area/Severity
-            $driftFindings = @((Merge-TierModelAuditResult -AuditResults @($ouAclResult) -Config $config).Findings)
+        if ($ouAclResult) {
+            $ouAclResultMerged = Merge-TierModelAuditResult -AuditResults @($ouAclResult) -Config $config
+            $auditAreas = $ouAclResultMerged.Areas
+            if ($ouAclResult.Findings) {
+                # Convert OU ACL findings to the drift findings format (Type Missing/Mismatch/Error,
+                # ResourceType, Identifier, Details) and tag them with Area/Severity
+                $driftFindings = @($ouAclResultMerged.Findings)
+            }
         }
     }
     if ($GposOnly) { 
@@ -1121,10 +1141,14 @@ else {
             $auditSummary.ErrorCount = $gpoResult.Summary.Errors
             $auditSummary.CompliantCount = $gpoResult.Summary.Compliant
         }
-        if ($gpoResult -and $gpoResult.Findings) {
-            # Convert GPO findings to the drift findings format (Type, Identifier, Details) and tag
-            # them with Area/Severity
-            $driftFindings = @((Merge-TierModelAuditResult -AuditResults @($gpoResult) -Config $config).Findings)
+        if ($gpoResult) {
+            $gpoResultMerged = Merge-TierModelAuditResult -AuditResults @($gpoResult) -Config $config
+            $auditAreas = $gpoResultMerged.Areas
+            if ($gpoResult.Findings) {
+                # Convert GPO findings to the drift findings format (Type, Identifier, Details) and tag
+                # them with Area/Severity
+                $driftFindings = @($gpoResultMerged.Findings)
+            }
         }
     }
     if ($AdmxOnly) {
@@ -1139,6 +1163,7 @@ else {
         $admxMerged = Merge-TierModelAuditResult -AuditResults @($admxAudit) -Config $config
         $auditSummary = $admxMerged.Summary
         $driftFindings = @($admxMerged.Findings)
+        $auditAreas = $admxMerged.Areas
         
         Write-Host "" # Blank line for spacing
         # Display audit summary with consistent format
@@ -1184,6 +1209,7 @@ else {
             $authSiloMerged = Merge-TierModelAuditResult -AuditResults @(ConvertTo-AuthSiloAuditEntity -Audit $authSiloAudit) -Config $config
             $auditSummary = $authSiloMerged.Summary
             $driftFindings = @($authSiloMerged.Findings)
+            $auditAreas = $authSiloMerged.Areas
 
             $authSiloCompliance = if ($authSiloAudit.TotalChecked -gt 0) {
                 [math]::Round((($authSiloAudit.TotalChecked - $authSiloAudit.Drift) / $authSiloAudit.TotalChecked) * 100, 2)
@@ -1334,6 +1360,7 @@ if ($activeScopeCount -eq 0 -and $activeIncludeCount -gt 0) {
     $standaloneMerged = Merge-TierModelAuditResult -AuditResults $standaloneAuditResults -Config $config
     $auditSummary = $standaloneMerged.Summary
     $driftFindings = @($standaloneMerged.Findings)
+    $auditAreas = $standaloneMerged.Areas
     
     Write-Host "`n=== $standaloneLabelStr Audit Results ===" -ForegroundColor Magenta
     Write-Host "Overall Status: $(if ($standaloneTotalDrift -eq 0) { '✅ COMPLIANT' } else { "❌ $standaloneTotalDrift DRIFT ITEMS" })" -ForegroundColor $(if ($standaloneTotalDrift -eq 0) { 'Green' } else { 'Red' })
@@ -1368,6 +1395,15 @@ if ($OutputFormat -and $OutputFileBase) {
     
     Write-Host "Generating audit report: $outputPath" -ForegroundColor Cyan
     
+    # Report metadata shared by the JSON, HTML and NUnit XML reports
+    $reportMetadata = @{
+        scope = $selectedScope
+        preferredDc = $PreferredDc
+        timestamp = Get-Date
+        version = 'v0.2'
+        configHash = if ($config) { $config.ConfigHash } else { 'N/A' }
+    }
+
     $reportContent = switch ($OutputFormat) {
         'Text' {
             @"
@@ -1393,20 +1429,14 @@ $(if ($driftFindings.Count -eq 0) { "No drift detected - configuration matches A
             @{
                 auditSummary = $auditSummary
                 driftFindings = $driftFindings
-                metadata = @{
-                    scope = $selectedScope
-                    preferredDc = $PreferredDc
-                    timestamp = Get-Date
-                    version = 'v0.2'
-                    configHash = if ($config) { $config.ConfigHash } else { 'N/A' }
-                }
+                metadata = $reportMetadata
             } | ConvertTo-Json -Depth 10
         }
         'Html' {
-            "<html><body><h1>TierModel Audit Report (v0.2)</h1><p>Scope: $selectedScope</p><p>Findings: $($driftFindings.Count)</p><p>Generated: $(Get-Date)</p></body></html>"
+            ConvertTo-TierModelAuditHtml -AuditSummary $auditSummary -Findings $driftFindings -Metadata $reportMetadata -AreaSummary $auditAreas
         }
         'NUnitXml' {
-            "<?xml version=`"1.0`"?><test-results name=`"TierModelAudit`" total=`"$($auditSummary.TotalChecked)`" failures=`"$($auditSummary.DriftCount)`"></test-results>"
+            ConvertTo-TierModelAuditNUnitXml -AuditSummary $auditSummary -Findings $driftFindings -Metadata $reportMetadata -AreaSummary $auditAreas
         }
     }
     

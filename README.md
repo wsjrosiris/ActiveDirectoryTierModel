@@ -125,8 +125,8 @@ Das Original von Microsoft verlangt eine englische Umgebung. In diesem Fork gilt
   funktionieren. Die erkannte Sprache der Domäne (`AdLanguage`, `AdGroupNames`) wird nur zur Information im
   Ergebnis der Voraussetzungsprüfung festgehalten.
 
-Die Pester-Tests der Sprachprüfung (`tests/Unit.Prerequisites.Tests.ps1`) beschreiben noch das frühere
-Englisch-Verhalten und müssen angepasst werden.
+Die Pester-Tests der Sprachprüfung (`tests/Unit.Prerequisites.Tests.ps1`) beschreiben das aktuelle Verhalten;
+Tests, die eine Windows-Identität brauchen, sind mit `WindowsOnly` markiert.
 
 ## 📁 Projektstruktur
 

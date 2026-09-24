@@ -1,14 +1,32 @@
 #Requires -Modules Pester
-# Helper usage: . "$PSScriptRoot\Helpers\PrereqTestHelpers.ps1" for structure assertions.
+# Helper usage: . (Join-Path $PSScriptRoot 'helpers' 'PrereqTestHelpers.ps1') for structure assertions.
+#
+# Platform note: Test-TierModelPrerequisites reads the current Windows identity
+# ([Security.Principal.WindowsIdentity]::GetCurrent()) for the elevation and Domain Admins checks.
+# That API throws PlatformNotSupportedException on Linux/macOS, and a static .NET call cannot be
+# mocked, so every test that needs the function to get past the elevation check is tagged
+# 'WindowsOnly' and skipped on non-Windows hosts (only those that need a real WindowsIdentity) (-Skip:$script:SkipWindowsOnly). The helper
+# Test-TierModelDomainAdminMembership and the dependency-file checks run on every platform.
+
+BeforeDiscovery {
+    $script:SkipWindowsOnly = -not $IsWindows
+}
 
 Describe "TierModel Prerequisites Tests" -Tag 'Unit','Prereq' {
     BeforeAll {
+        # AD / GPO / LAPS cmdlet stubs so Pester can mock them where RSAT is not installed
+        . (Join-Path $PSScriptRoot 'helpers' 'ADStubs.ps1')
+        # Test-NetConnection only exists on Windows; provide a mockable stub elsewhere
+        if (-not (Get-Command Test-NetConnection -ErrorAction SilentlyContinue)) {
+            function global:Test-NetConnection { param($ComputerName, $Port, $InformationLevel, $WarningAction) }
+        }
+
         # Import the TierModel module
         $ModulePath = Join-Path $PSScriptRoot '..' 'modules' 'TierModel' 'TierModel.psd1'
         Import-Module $ModulePath -Force
         
         # Import test helpers
-        . "$PSScriptRoot\Helpers\PrereqTestHelpers.ps1"
+        . (Join-Path $PSScriptRoot 'helpers' 'PrereqTestHelpers.ps1')
         
         # Mock external dependencies
         Mock Test-NetConnection { return $true } -ParameterFilter { $ComputerName -eq 'MockDC.test.local' } -ModuleName TierModel
@@ -65,7 +83,7 @@ Describe "TierModel Prerequisites Tests" -Tag 'Unit','Prereq' {
         }
     }
     
-    Context "Elevation Checks" -Tag 'Elevation','Prereq' {
+    Context "Elevation Checks" -Tag 'Elevation','Prereq', 'WindowsOnly' -Skip:$script:SkipWindowsOnly {
     It "Should check if running as Administrator" -Tag 'Elevation','Positive' {
             $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $validDepsFile
             
@@ -225,81 +243,301 @@ Describe "TierModel Prerequisites Tests" -Tag 'Unit','Prereq' {
         }
     }
 
-    Context "Domain Admin Membership" -Tag 'DomainAdmin','Prereq' {
+    Context "Domain Admin Membership (Test-TierModelDomainAdminMembership, SID/RID 512)" -Tag 'DomainAdmin','Prereq' {
+        # Runs on every platform: the helper receives the user SID as a parameter and only talks
+        # to (mocked) AD cmdlets. Domain Admins is located as <domain SID>-512, never by name.
+        BeforeAll {
+            $script:DaDomainSid = 'S-1-5-21-1111111111-2222222222-3333333333'
+            $script:DaUserSid   = "$script:DaDomainSid-1105"
+        }
+
         BeforeEach {
-            # Mock all prerequisite checks to simulate ideal environment with module scope
+            InModuleScope TierModel { Clear-TierModelWellKnownPrincipalCache -Confirm:$false }
+            Mock Get-ADDomain -ModuleName TierModel {
+                [PSCustomObject]@{
+                    DNSRoot = 'test.local'; NetBIOSName = 'TEST'
+                    DomainSID = [PSCustomObject]@{ Value = 'S-1-5-21-1111111111-2222222222-3333333333' }
+                }
+            }
+            Mock Get-ADForest -ModuleName TierModel { [PSCustomObject]@{ RootDomain = 'test.local' } }
+            # Localized (German) Domain Admins group, reachable only by its SID
+            Mock Get-ADGroup -ModuleName TierModel {
+                param($Identity, $Filter)
+                if ("$Identity" -eq 'S-1-5-21-1111111111-2222222222-3333333333-512') {
+                    return [PSCustomObject]@{ Name = 'Domänen-Admins'; SID = "$Identity"; DistinguishedName = 'CN=Domänen-Admins,CN=Users,DC=test,DC=local' }
+                }
+                throw [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException]::new("Cannot find an object with identity: '$Identity$Filter'")
+            }
+            Mock Get-ADGroupMember -ModuleName TierModel { @() }
+        }
+
+        It "resolves Domain Admins via the domain SID plus RID 512 and finds a localized group name" -Tag 'Positive','DomainAdmin','Language' {
+            $check = InModuleScope TierModel -Parameters @{ UserSid = $script:DaUserSid } {
+                param($UserSid)
+                Test-TierModelDomainAdminMembership -DomainController 'MockDC.test.local' -UserSid $UserSid
+            }
+
+            $check.GroupFound | Should -Be $true
+            $check.GroupSid   | Should -Be "$script:DaDomainSid-512"
+            $check.GroupName  | Should -Be 'Domänen-Admins'
+            Should -Invoke Get-ADGroup -ModuleName TierModel -Times 1 -Exactly -ParameterFilter { "$Identity" -eq 'S-1-5-21-1111111111-2222222222-3333333333-512' }
+            # Never looked up by the English name (would fail on localized domains)
+            Should -Invoke Get-ADGroup -ModuleName TierModel -Times 0 -Exactly -ParameterFilter { "$Identity" -eq 'Domain Admins' -or "$Filter" -match 'Domain Admins' }
+        }
+
+        It "reports IsMember when the user SID is a (recursive) member" -Tag 'Positive','DomainAdmin' {
+            Mock Get-ADGroupMember -ModuleName TierModel {
+                @(
+                    [PSCustomObject]@{ Name = 'other'; SID = [PSCustomObject]@{ Value = 'S-1-5-21-1111111111-2222222222-3333333333-1200' } }
+                    [PSCustomObject]@{ Name = 'admin'; SID = [PSCustomObject]@{ Value = 'S-1-5-21-1111111111-2222222222-3333333333-1105' } }
+                )
+            }
+
+            $check = InModuleScope TierModel -Parameters @{ UserSid = $script:DaUserSid } {
+                param($UserSid)
+                Test-TierModelDomainAdminMembership -DomainController 'MockDC.test.local' -UserSid $UserSid
+            }
+
+            $check.IsMember | Should -Be $true
+            Should -Invoke Get-ADGroupMember -ModuleName TierModel -Times 1 -Exactly -ParameterFilter { $Recursive -and $Server -eq 'MockDC.test.local' }
+        }
+
+        It "matches member SIDs given as plain strings" -Tag 'Positive','DomainAdmin' {
+            Mock Get-ADGroupMember -ModuleName TierModel {
+                @([PSCustomObject]@{ Name = 'admin'; SID = 'S-1-5-21-1111111111-2222222222-3333333333-1105' })
+            }
+
+            $check = InModuleScope TierModel -Parameters @{ UserSid = $script:DaUserSid } {
+                param($UserSid)
+                Test-TierModelDomainAdminMembership -DomainController 'MockDC.test.local' -UserSid $UserSid
+            }
+
+            $check.IsMember | Should -Be $true
+        }
+
+        It "reports GroupFound but not IsMember when the user is not a member" -Tag 'Negative','DomainAdmin' {
+            Mock Get-ADGroupMember -ModuleName TierModel {
+                @([PSCustomObject]@{ Name = 'other'; SID = [PSCustomObject]@{ Value = 'S-1-5-21-1111111111-2222222222-3333333333-1200' } })
+            }
+
+            $check = InModuleScope TierModel -Parameters @{ UserSid = $script:DaUserSid } {
+                param($UserSid)
+                Test-TierModelDomainAdminMembership -DomainController 'MockDC.test.local' -UserSid $UserSid
+            }
+
+            $check.GroupFound | Should -Be $true
+            $check.IsMember   | Should -Be $false
+        }
+
+        It "does not match a user of another domain that has the same RID" -Tag 'Negative','DomainAdmin' {
+            Mock Get-ADGroupMember -ModuleName TierModel {
+                @([PSCustomObject]@{ Name = 'foreign'; SID = [PSCustomObject]@{ Value = 'S-1-5-21-9999999999-8888888888-7777777777-1105' } })
+            }
+
+            $check = InModuleScope TierModel -Parameters @{ UserSid = $script:DaUserSid } {
+                param($UserSid)
+                Test-TierModelDomainAdminMembership -DomainController 'MockDC.test.local' -UserSid $UserSid
+            }
+
+            $check.IsMember | Should -Be $false
+        }
+
+        It "reports GroupFound=false (and still returns the expected SID) when the -512 group cannot be read" -Tag 'Negative','DomainAdmin' {
+            Mock Get-ADGroup -ModuleName TierModel { throw 'Cannot find an object with identity' }
+
+            $check = InModuleScope TierModel -Parameters @{ UserSid = $script:DaUserSid } {
+                param($UserSid)
+                Test-TierModelDomainAdminMembership -DomainController 'MockDC.test.local' -UserSid $UserSid
+            }
+
+            $check.GroupFound | Should -Be $false
+            $check.IsMember   | Should -Be $false
+            $check.GroupSid   | Should -Be "$script:DaDomainSid-512"
+            $check.GroupName  | Should -BeNullOrEmpty
+            Should -Invoke Get-ADGroupMember -ModuleName TierModel -Times 0 -Exactly
+        }
+
+        It "does not enumerate members for an empty user SID" -Tag 'Negative','DomainAdmin' {
+            $check = InModuleScope TierModel {
+                Test-TierModelDomainAdminMembership -DomainController 'MockDC.test.local' -UserSid ''
+            }
+
+            $check.GroupFound | Should -Be $true
+            $check.IsMember   | Should -Be $false
+            Should -Invoke Get-ADGroupMember -ModuleName TierModel -Times 0 -Exactly
+        }
+
+        It "throws when the domain SID cannot be determined (caller turns this into a prerequisite error)" -Tag 'Negative','DomainAdmin' {
+            Mock Get-ADDomain -ModuleName TierModel { [PSCustomObject]@{ DNSRoot = 'test.local'; DomainSID = $null } }
+
+            { InModuleScope TierModel { Test-TierModelDomainAdminMembership -DomainController 'MockDC.test.local' -UserSid 'S-1-5-21-1-2-3-1105' } } |
+                Should -Throw '*domain SID*'
+        }
+    }
+
+    Context "Domain Admin Membership (Test-TierModelPrerequisites)" -Tag 'DomainAdmin','Prereq','WindowsOnly' -Skip:$script:SkipWindowsOnly {
+        BeforeEach {
+            InModuleScope TierModel { Clear-TierModelWellKnownPrincipalCache -Confirm:$false }
             Mock Import-Module { } -ModuleName TierModel -ParameterFilter { $Name -eq 'ActiveDirectory' }
-            Mock Get-Module { return @{ Name = 'ActiveDirectory'; Version = '1.0.1.0' } } -ModuleName TierModel -ParameterFilter { $args[0] -eq 'ActiveDirectory' }
-            Mock Get-Module { return @{ Name = 'GroupPolicy'; Version = '1.0' } } -ModuleName TierModel -ParameterFilter { $Name -eq 'GroupPolicy' }  
-            Mock Get-Module { return @{ Name = 'Pester'; Version = '5.7.1' } } -ModuleName TierModel -ParameterFilter { $Name -eq 'Pester' }
-            Mock Get-ADDomain { return @{ DNSRoot = 'test.contoso.com'; NetBIOSName = 'TEST' } } -ModuleName TierModel
-            # Mock AD cmdlets to prevent actual server connections
+            Mock Get-Module { return [PSCustomObject]@{ Name = 'ActiveDirectory'; Version = [version]'1.0.1.0' } } -ModuleName TierModel -ParameterFilter { $Name -eq 'ActiveDirectory' }
+            Mock Get-ADDomain { return [PSCustomObject]@{ DNSRoot = 'test.contoso.com'; NetBIOSName = 'TEST' } } -ModuleName TierModel
+            Mock Get-ADForest { return [PSCustomObject]@{ RootDomain = 'test.contoso.com' } } -ModuleName TierModel
             Mock Get-ADGroup { return $null } -ModuleName TierModel
             Mock Get-ADGroupMember { return @() } -ModuleName TierModel
         }
-        
-    It "Should detect current user as Domain Admin when member" -Tag 'Positive','DomainAdmin' {
-            # Test verifies domain admin check runs but returns false in test environment
-            # since we can't mock [System.Security.Principal.WindowsIdentity]::GetCurrent()
-            $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $validDepsFile
-            
-            # In test environment without actual domain context, expects false
-            $result.EnvironmentSnapshot.IsDomainAdmin | Should -Be $false
-            # Function should still complete successfully
-            $result | Should -Not -BeNullOrEmpty
+
+        It "delegates the check to Test-TierModelDomainAdminMembership with the current user's SID" -Tag 'Positive','DomainAdmin' {
+            Mock Test-TierModelDomainAdminMembership -ModuleName TierModel {
+                [PSCustomObject]@{ GroupFound = $true; IsMember = $true; GroupSid = 'S-1-5-21-1-2-3-512'; GroupName = 'Domänen-Admins' }
+            }
+            $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+
+            $null = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
+
+            Should -Invoke Test-TierModelDomainAdminMembership -ModuleName TierModel -Times 1 -Exactly -ParameterFilter {
+                $DomainController -eq 'MockDC.test.local' -and $UserSid -eq $currentSid
+            }
         }
-        
-    It "Should fail when current user not Domain Admin" -Tag 'Negative','DomainAdmin' {
-            # Call the function to get result - with default mocks, Get-ADGroup returns null
-            $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $validDepsFile
-            
+
+        It "sets IsDomainAdmin and adds no Domain Admin error when the user is a member (localized group name)" -Tag 'Positive','DomainAdmin' {
+            Mock Test-TierModelDomainAdminMembership -ModuleName TierModel {
+                [PSCustomObject]@{ GroupFound = $true; IsMember = $true; GroupSid = 'S-1-5-21-1-2-3-512'; GroupName = 'Domänen-Admins' }
+            }
+
+            $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
+
+            $result.EnvironmentSnapshot.IsDomainAdmin | Should -Be $true
+            $result.Errors | Should -Not -Contain "Domain Admin membership required for deployment operations"
+        }
+
+        It "fails with the add-to-Domain-Admins remediation when the user is not a member" -Tag 'Negative','DomainAdmin' {
+            Mock Test-TierModelDomainAdminMembership -ModuleName TierModel {
+                [PSCustomObject]@{ GroupFound = $true; IsMember = $false; GroupSid = 'S-1-5-21-1-2-3-512'; GroupName = 'Domain Admins' }
+            }
+
+            $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
+
             $result.EnvironmentSnapshot.IsDomainAdmin | Should -Be $false
             $result.Valid | Should -Be $false
             $result.Errors | Should -Contain "Domain Admin membership required for deployment operations"
-            # With Get-ADGroup returning null from BeforeEach, expect this remediation message
+            $result.Remediation | Should -Contain "Add current user to Domain Admins group or run as a domain administrator"
+        }
+
+        It "fails with the group-exists remediation when the -512 group is not found" -Tag 'Negative','DomainAdmin' {
+            Mock Test-TierModelDomainAdminMembership -ModuleName TierModel {
+                [PSCustomObject]@{ GroupFound = $false; IsMember = $false; GroupSid = 'S-1-5-21-1-2-3-512'; GroupName = $null }
+            }
+
+            $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
+
+            $result.EnvironmentSnapshot.IsDomainAdmin | Should -Be $false
+            $result.Valid | Should -Be $false
+            $result.Errors | Should -Contain "Domain Admin membership required for deployment operations"
             $result.Remediation | Should -Contain "Ensure Domain Admins group exists and user is member of Domain Admins group"
         }
+
+        It "records DomainAdminCheckError and fails when the membership check throws" -Tag 'Negative','DomainAdmin' {
+            Mock Test-TierModelDomainAdminMembership -ModuleName TierModel { throw 'Could not determine the domain SID' }
+
+            $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
+
+            $result.EnvironmentSnapshot.IsDomainAdmin | Should -Be $false
+            $result.EnvironmentSnapshot.DomainAdminCheckError | Should -Match 'domain SID'
+            $result.Valid | Should -Be $false
+            $result.Errors | Should -Contain "Domain Admin membership required for deployment operations"
+        }
+
+        It "fails with the install-AD remediation when the ActiveDirectory module is unavailable" -Tag 'Negative','DomainAdmin' {
+            Mock Get-Module { return $null } -ModuleName TierModel -ParameterFilter { $Name -eq 'ActiveDirectory' }
+            Mock Test-TierModelDomainAdminMembership -ModuleName TierModel { throw 'must not be called' }
+
+            $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
+
+            $result.EnvironmentSnapshot.IsDomainAdmin | Should -Be $false
+            $result.Remediation | Should -Contain "Install ActiveDirectory module and ensure user is member of Domain Admins group"
+            Should -Invoke Test-TierModelDomainAdminMembership -ModuleName TierModel -Times 0 -Exactly
+        }
     }
-    
-    Context "Host OS Language Enforcement" -Tag 'Language','Prereq' {
-        It "fails fast with a friendly error when the host OS install language is non-English (German)" -Tag 'Negative','Language' {
-            Mock Get-ItemPropertyValue -ModuleName TierModel -ParameterFilter { $Name -eq 'InstallLanguage' } { return '0407' }
+
+    Context "Host OS Language Allow-List" -Tag 'Language','Prereq' {
+        # InstallLanguage (HKLM\SYSTEM\CurrentControlSet\Control\Nls\Language) is a hex LCID; only
+        # the primary language ID (LCID -band 0x3FF) is checked against the 19 supported languages.
+        It "accepts <Language> (InstallLanguage <Lcid>)" -Tag 'Positive','Language' -ForEach @(
+            @{ Language = 'English (en-US)';     Lcid = '0409' }
+            @{ Language = 'English (en-GB)';     Lcid = '0809' }
+            @{ Language = 'German (de-DE)';      Lcid = '0407' }
+            @{ Language = 'German (de-AT)';      Lcid = '0C07' }
+            @{ Language = 'French (fr-FR)';      Lcid = '040C' }
+            @{ Language = 'Spanish (es-ES)';     Lcid = '0C0A' }
+            @{ Language = 'Italian (it-IT)';     Lcid = '0410' }
+            @{ Language = 'Dutch (nl-NL)';       Lcid = '0413' }
+            @{ Language = 'Portuguese (pt-BR)';  Lcid = '0416' }
+            @{ Language = 'Turkish (tr-TR)';     Lcid = '041F' }
+            @{ Language = 'Japanese (ja-JP)';    Lcid = '0411' }
+            @{ Language = 'Korean (ko-KR)';      Lcid = '0412' }
+            @{ Language = 'Chinese (zh-CN)';     Lcid = '0804' }
+            @{ Language = 'Polish (pl-PL)';      Lcid = '0415' }
+            @{ Language = 'Russian (ru-RU)';     Lcid = '0419' }
+            @{ Language = 'Swedish (sv-SE)';     Lcid = '041D' }
+            @{ Language = 'Danish (da-DK)';      Lcid = '0406' }
+            @{ Language = 'Finnish (fi-FI)';     Lcid = '040B' }
+            @{ Language = 'Greek (el-GR)';       Lcid = '0408' }
+            @{ Language = 'Czech (cs-CZ)';       Lcid = '0405' }
+            @{ Language = 'Hungarian (hu-HU)';   Lcid = '040E' }
+        ) {
+            Mock Get-ItemPropertyValue -ModuleName TierModel -ParameterFilter { $Name -eq 'InstallLanguage' } -MockWith ([scriptblock]::Create("return '$Lcid'"))
+
+            $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
+
+            $result.EnvironmentSnapshot.HostInstallLanguage | Should -Be $Lcid
+            $result.EnvironmentSnapshot.HostOsSupported | Should -Be $true
+            ($result.Errors -join ' ') | Should -Not -Match 'Unsupported host operating system language'
+            # The check does not return early: the later checks ran
+            $result.EnvironmentSnapshot.ContainsKey('PesterVersion') | Should -Be $true
+        }
+
+        It "rejects <Language> (InstallLanguage <Lcid>) with a friendly error" -Tag 'Negative','Language' -ForEach @(
+            @{ Language = 'Arabic (ar-SA)';     Lcid = '0401' }
+            @{ Language = 'Hebrew (he-IL)';     Lcid = '040D' }
+            @{ Language = 'Thai (th-TH)';       Lcid = '041E' }
+            @{ Language = 'Ukrainian (uk-UA)';  Lcid = '0422' }
+            @{ Language = 'Norwegian (nb-NO)';  Lcid = '0414' }
+        ) {
+            Mock Get-ItemPropertyValue -ModuleName TierModel -ParameterFilter { $Name -eq 'InstallLanguage' } -MockWith ([scriptblock]::Create("return '$Lcid'"))
 
             $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
 
             $result.Valid | Should -Be $false
-            $result.EnvironmentSnapshot.HostOsEnglish | Should -Be $false
-            ($result.Errors -join ' ') | Should -Match 'Non-English host operating system'
-            ($result.Remediation -join ' ') | Should -Match 'language-support'
+            $result.EnvironmentSnapshot.HostOsSupported | Should -Be $false
+            ($result.Errors -join ' ') | Should -Match "Unsupported host operating system language detected \(LCID: $Lcid\)"
+            ($result.Remediation -join ' ') | Should -Match 'supported Windows host language'
         }
 
-        It "stops before the Pester/module checks on a non-English host OS (early return)" -Tag 'Negative','Language' {
-            Mock Get-ItemPropertyValue -ModuleName TierModel -ParameterFilter { $Name -eq 'InstallLanguage' } { return '0407' }
+        It "lists all 19 supported languages in the error message" -Tag 'Negative','Language' {
+            Mock Get-ItemPropertyValue -ModuleName TierModel -ParameterFilter { $Name -eq 'InstallLanguage' } { return '0401' }
+
+            $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
+            $message = ($result.Errors -join ' ')
+
+            foreach ($lang in @('English', 'German', 'French', 'Spanish', 'Italian', 'Dutch', 'Portuguese', 'Turkish',
+                                'Japanese', 'Korean', 'Chinese', 'Polish', 'Russian', 'Swedish', 'Danish', 'Finnish',
+                                'Greek', 'Czech', 'Hungarian')) {
+                $message | Should -Match $lang
+            }
+        }
+
+        It "stops before the Pester/module/AD checks on an unsupported host OS (early return)" -Tag 'Negative','Language' {
+            Mock Get-ItemPropertyValue -ModuleName TierModel -ParameterFilter { $Name -eq 'InstallLanguage' } { return '0401' }
+            Mock Test-TierModelDomainAdminMembership -ModuleName TierModel { throw 'must not be called' }
 
             $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
 
             # Early return means later checks never ran: their snapshot keys are absent
-            # and no Pester/module remediation is surfaced on an unsupported OS.
             $result.EnvironmentSnapshot.ContainsKey('PesterVersion') | Should -Be $false
+            $result.EnvironmentSnapshot.ContainsKey('IsDomainAdmin') | Should -Be $false
+            $result.EnvironmentSnapshot.ContainsKey('PreferredDcReachable') | Should -Be $false
             ($result.Errors -join ' ') | Should -Not -Match 'Pester'
-        }
-
-        It "passes the host OS check when the install language is English (en-US, 0409)" -Tag 'Positive','Language' {
-            Mock Get-ItemPropertyValue -ModuleName TierModel -ParameterFilter { $Name -eq 'InstallLanguage' } { return '0409' }
-
-            $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
-
-            $result.EnvironmentSnapshot.HostOsEnglish | Should -Be $true
-            ($result.Errors -join ' ') | Should -Not -Match 'Non-English host operating system'
-        }
-
-        It "accepts other English variants such as en-GB (0809)" -Tag 'Positive','Language' {
-            Mock Get-ItemPropertyValue -ModuleName TierModel -ParameterFilter { $Name -eq 'InstallLanguage' } { return '0809' }
-
-            $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
-
-            $result.EnvironmentSnapshot.HostOsEnglish | Should -Be $true
-            ($result.Errors -join ' ') | Should -Not -Match 'Non-English host operating system'
+            Should -Invoke Test-TierModelDomainAdminMembership -ModuleName TierModel -Times 0 -Exactly
         }
 
         It "does not hard-fail on the OS check when the install language cannot be read" -Tag 'Language' {
@@ -307,13 +545,49 @@ Describe "TierModel Prerequisites Tests" -Tag 'Unit','Prereq' {
 
             $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
 
-            ($result.Errors -join ' ') | Should -Not -Match 'Non-English host operating system'
+            ($result.Errors -join ' ') | Should -Not -Match 'Unsupported host operating system language'
+            $result.EnvironmentSnapshot.HostOsLanguageCheckError | Should -Match 'registry value not found'
+            $result.EnvironmentSnapshot.ContainsKey('HostOsSupported') | Should -Be $false
+            $result.EnvironmentSnapshot.ContainsKey('PesterVersion') | Should -Be $true
+        }
+
+        It "does not hard-fail when InstallLanguage is not a hex LCID" -Tag 'Language' {
+            Mock Get-ItemPropertyValue -ModuleName TierModel -ParameterFilter { $Name -eq 'InstallLanguage' } { return 'not-a-lcid' }
+
+            $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
+
+            ($result.Errors -join ' ') | Should -Not -Match 'Unsupported host operating system language'
             $result.EnvironmentSnapshot.HostOsLanguageCheckError | Should -Not -BeNullOrEmpty
         }
     }
 
-    Context "AD Language Enforcement" -Tag 'Language','Prereq' {
+    Context "AD Language Detection (informational only)" -Tag 'Language','Prereq' {
         BeforeAll {
+            # Builds a Get-ADGroup mock body that answers the three well-known SIDs with the given names;
+            # a $null name makes that lookup throw (transient AD failure). The names are embedded in
+            # the generated script block so the mock does not depend on closure scoping.
+            function New-WellKnownGroupMock {
+                param([AllowNull()][string]$DomainAdmins, [AllowNull()][string]$ServerOperators, [AllowNull()][string]$AccountOperators)
+                $answer = {
+                    param($rid, $name)
+                    if ([string]::IsNullOrEmpty($name)) { return "    '$rid' { throw 'transient AD failure' }" }
+                    return "    '$rid' { return [PSCustomObject]@{ Name = '$($name -replace "'", "''")'; SID = `"`$Identity`" } }"
+                }
+                $body = @(
+                    'param($Identity)'
+                    'switch (("$Identity" -split ''-'')[-1]) {'
+                    (& $answer '512' $DomainAdmins)
+                    (& $answer '549' $ServerOperators)
+                    (& $answer '548' $AccountOperators)
+                    '    default { return [PSCustomObject]@{ Name = "$Identity"; SID = "$Identity" } }'
+                    '}'
+                ) -join "`n"
+                return [scriptblock]::Create($body)
+            }
+        }
+
+        BeforeEach {
+            InModuleScope TierModel { Clear-TierModelWellKnownPrincipalCache -Confirm:$false }
             Mock Import-Module -ModuleName TierModel { }
             Mock Get-Module -ModuleName TierModel {
                 param($Name)
@@ -333,76 +607,70 @@ Describe "TierModel Prerequisites Tests" -Tag 'Unit','Prereq' {
                     DomainSID   = [PSCustomObject]@{ Value = 'S-1-5-21-1111111111-2222222222-3333333333' }
                 }
             }
+            # Domain Admins membership is not the subject here - make the user a member
+            Mock Test-TierModelDomainAdminMembership -ModuleName TierModel {
+                [PSCustomObject]@{ GroupFound = $true; IsMember = $true; GroupSid = 'S-1-5-21-1111111111-2222222222-3333333333-512'; GroupName = 'x' }
+            }
         }
 
-        It "fails fast with a friendly error when well-known group names are non-English (German)" -Tag 'Negative','Language' {
-            Mock Get-ADGroup -ModuleName TierModel {
-                param($Identity)
-                switch -Wildcard ("$Identity") {
-                    '*-512'        { return [PSCustomObject]@{ Name = 'Domänen-Admins';    SID = $Identity } }
-                    'S-1-5-32-549' { return [PSCustomObject]@{ Name = 'Server-Operatoren'; SID = $Identity } }
-                    'S-1-5-32-548' { return [PSCustomObject]@{ Name = 'Konten-Operatoren'; SID = $Identity } }
-                    default        { return [PSCustomObject]@{ Name = "$Identity";         SID = $Identity } }
-                }
-            }
+        It "detects <Expected> from the well-known group names" -Tag 'Positive','Language' -ForEach @(
+            @{ Expected = 'en-US'; Da = 'Domain Admins';         So = 'Server Operators';         Ao = 'Account Operators' }
+            @{ Expected = 'de-DE'; Da = 'Domänen-Admins';        So = 'Server-Operatoren';        Ao = 'Konten-Operatoren' }
+            @{ Expected = 'fr-FR'; Da = 'Admins du domaine';     So = 'Opérateurs de serveur';    Ao = 'Opérateurs de comptes' }
+            @{ Expected = 'ru-RU'; Da = 'Администраторы домена'; So = 'Операторы сервера';        Ao = 'Операторы счетов' }
+        ) {
+            Mock Get-ADGroup -ModuleName TierModel -MockWith (New-WellKnownGroupMock -DomainAdmins $Da -ServerOperators $So -AccountOperators $Ao)
 
             $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
 
-            $result.Valid | Should -Be $false
-            $result.EnvironmentSnapshot.AdLanguageEnglish | Should -Be $false
-            ($result.Errors -join ' ') | Should -Match 'Non-English Active Directory'
-            ($result.Remediation -join ' ') | Should -Match 'language-support'
-            ($result.EnvironmentSnapshot.AdLanguageMismatches -join ' ') | Should -Match 'Server-Operatoren'
+            $result.EnvironmentSnapshot.AdLanguageDetected | Should -Be $true
+            $result.EnvironmentSnapshot.AdLanguage | Should -Be $Expected
+            $result.EnvironmentSnapshot.AdGroupNames['Domain Admins']     | Should -Be $Da
+            $result.EnvironmentSnapshot.AdGroupNames['Server Operators']  | Should -Be $So
+            $result.EnvironmentSnapshot.AdGroupNames['Account Operators'] | Should -Be $Ao
+            Should -Invoke Get-ADGroup -ModuleName TierModel -ParameterFilter { "$Identity" -eq 'S-1-5-21-1111111111-2222222222-3333333333-512' }
+            Should -Invoke Get-ADGroup -ModuleName TierModel -ParameterFilter { "$Identity" -eq 'S-1-5-32-549' }
+            Should -Invoke Get-ADGroup -ModuleName TierModel -ParameterFilter { "$Identity" -eq 'S-1-5-32-548' }
         }
 
-        It "passes the AD language check when all three well-known group names are English" -Tag 'Positive','Language' {
-            Mock Get-ADGroup -ModuleName TierModel {
-                param($Identity)
-                switch -Wildcard ("$Identity") {
-                    '*-512'        { return [PSCustomObject]@{ Name = 'Domain Admins';     SID = $Identity } }
-                    'S-1-5-32-549' { return [PSCustomObject]@{ Name = 'Server Operators';  SID = $Identity } }
-                    'S-1-5-32-548' { return [PSCustomObject]@{ Name = 'Account Operators'; SID = $Identity } }
-                    default        { return [PSCustomObject]@{ Name = "$Identity";         SID = $Identity } }
-                }
-            }
+        It "does not affect Valid, Errors or Remediation for a localized (German) domain" -Tag 'Positive','Language' {
+            Mock Get-ADGroup -ModuleName TierModel -MockWith (New-WellKnownGroupMock -DomainAdmins 'Domain Admins' -ServerOperators 'Server Operators' -AccountOperators 'Account Operators')
+            $english = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
+
+            InModuleScope TierModel { Clear-TierModelWellKnownPrincipalCache -Confirm:$false }
+            Mock Get-ADGroup -ModuleName TierModel -MockWith (New-WellKnownGroupMock -DomainAdmins 'Domänen-Admins' -ServerOperators 'Server-Operatoren' -AccountOperators 'Konten-Operatoren')
+            $german = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
+
+            $german.EnvironmentSnapshot.AdLanguage | Should -Be 'de-DE'
+            $german.Valid | Should -Be $english.Valid
+            @($german.Errors) | Should -Be @($english.Errors)
+            @($german.Remediation) | Should -Be @($english.Remediation)
+            ($german.Errors -join ' ') | Should -Not -Match 'Non-English|language'
+        }
+
+        It "still records the resolvable names when one well-known group lookup fails" -Tag 'Language' {
+            Mock Get-ADGroup -ModuleName TierModel -MockWith (New-WellKnownGroupMock -DomainAdmins 'Domänen-Admins' -ServerOperators $null -AccountOperators 'Konten-Operatoren')
 
             $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
 
-            $result.EnvironmentSnapshot.AdLanguageEnglish | Should -Be $true
-            ($result.Errors -join ' ') | Should -Not -Match 'Non-English Active Directory'
+            $result.EnvironmentSnapshot.AdGroupNames.ContainsKey('Server Operators') | Should -Be $false
+            $result.EnvironmentSnapshot.AdGroupNames['Domain Admins'] | Should -Be 'Domänen-Admins'
+            $result.EnvironmentSnapshot.AdLanguage | Should -Be 'de-DE'
+            ($result.Errors -join ' ') | Should -Not -Match 'Non-English|language'
         }
 
-        It "still flags non-English when a later well-known group cannot be resolved" -Tag 'Negative','Language' {
-            # Domain Admins (localized) resolves first, Server Operators then throws, and
-            # Account Operators (localized) resolves last. The confirmed mismatches must not
-            # be discarded by the mid-loop failure — the gate must still fail closed.
-            Mock Get-ADGroup -ModuleName TierModel {
-                param($Identity)
-                switch -Wildcard ("$Identity") {
-                    '*-512'        { return [PSCustomObject]@{ Name = 'Domänen-Admins';    SID = $Identity } }
-                    'S-1-5-32-549' { throw 'transient AD failure' }
-                    'S-1-5-32-548' { return [PSCustomObject]@{ Name = 'Konten-Operatoren'; SID = $Identity } }
-                    default        { return [PSCustomObject]@{ Name = "$Identity";         SID = $Identity } }
-                }
-            }
-
-            $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
-
-            $result.Valid | Should -Be $false
-            ($result.Errors -join ' ') | Should -Match 'Non-English Active Directory'
-            ($result.EnvironmentSnapshot.AdLanguageMismatches -join ' ') | Should -Match 'Domänen-Admins'
-        }
-
-        It "does not fail the language check when Active Directory cannot be evaluated" -Tag 'Language' {
+        It "records AdLanguageCheckError but adds no error when Active Directory cannot be evaluated" -Tag 'Language' {
             Mock Get-ADDomain -ModuleName TierModel { throw 'Domain unreachable' }
             Mock Get-ADGroup  -ModuleName TierModel { return $null }
 
             $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
 
-            ($result.Errors -join ' ') | Should -Not -Match 'Non-English Active Directory'
+            $result.EnvironmentSnapshot.AdLanguageCheckError | Should -Match 'Domain unreachable'
+            $result.EnvironmentSnapshot.ContainsKey('AdLanguage') | Should -Be $false
+            ($result.Errors -join ' ') | Should -Not -Match 'Non-English|language'
         }
 
-        It "skips the language check when the domain SID cannot be determined" -Tag 'Language' {
+        It "skips the detection when the domain SID cannot be determined" -Tag 'Language' {
             Mock Get-ADDomain -ModuleName TierModel {
                 return [PSCustomObject]@{ DNSRoot = 'test.local'; NetBIOSName = 'TEST'; DomainSID = $null }
             }
@@ -410,8 +678,19 @@ Describe "TierModel Prerequisites Tests" -Tag 'Unit','Prereq' {
 
             $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
 
-            ($result.Errors -join ' ') | Should -Not -Match 'Non-English Active Directory'
-            $result.EnvironmentSnapshot.ContainsKey('AdLanguageEnglish') | Should -Be $false
+            $result.EnvironmentSnapshot.ContainsKey('AdLanguageDetected') | Should -Be $false
+            $result.EnvironmentSnapshot.ContainsKey('AdLanguage') | Should -Be $false
+            ($result.Errors -join ' ') | Should -Not -Match 'Non-English|language'
+        }
+
+        It "sets AdLanguageDetected but no AdLanguage when none of the groups resolves" -Tag 'Language' {
+            Mock Get-ADGroup -ModuleName TierModel { throw 'not found' }
+
+            $result = Test-TierModelPrerequisites -PreferredDc 'MockDC.test.local' -DependenciesPath $script:validDepsFile
+
+            $result.EnvironmentSnapshot.AdLanguageDetected | Should -Be $true
+            $result.EnvironmentSnapshot.AdGroupNames.Count | Should -Be 0
+            $result.EnvironmentSnapshot.ContainsKey('AdLanguage') | Should -Be $false
         }
     }
 
@@ -890,7 +1169,7 @@ Describe "Get-TierModelConfig - Configuration Loading" -Tag "Unit", "Config" {
         }
 
         It "Should throw listing missing files when required files are absent" {
-            $missingDir = "C:\EmptyTierModelConfig"
+            $missingDir = Join-Path $TestDrive 'EmptyTierModelConfig'
             Mock Test-Path -ModuleName TierModel {
                 param($Path)
                 return ($Path -eq $missingDir)   # dir exists; no files exist
@@ -906,7 +1185,7 @@ Describe "Get-TierModelConfig - Configuration Loading" -Tag "Unit", "Config" {
             Mock Test-Path   -ModuleName TierModel { return $true }
             Mock Get-Content -ModuleName TierModel { return 'not valid json {{{{' }
 
-            { Get-TierModelConfig -ConfigPath "C:\FakeCfgDir" } | Should -Throw "*Failed to parse*"
+            { Get-TierModelConfig -ConfigPath (Join-Path $TestDrive 'FakeCfgDir') } | Should -Throw "*Failed to parse*"
         }
     }
 
@@ -1022,13 +1301,17 @@ Describe "Get-TierModelConfig - Configuration Loading" -Tag "Unit", "Config" {
                 throw "Simulated I/O error on hash read"
             }
 
-            { Get-TierModelConfig -ConfigPath "C:\FakeCfgDir" } | Should -Throw "*Failed to merge configuration segments*"
+            { Get-TierModelConfig -ConfigPath (Join-Path $TestDrive 'FakeCfgDir') } | Should -Throw "*Failed to merge configuration segments*"
         }
     }
 }
 
 Describe "Test-TierModelPrerequisites – Extended Coverage" -Tag "Unit", "Prereq" {
     BeforeAll {
+        . (Join-Path $PSScriptRoot 'helpers' 'ADStubs.ps1')
+        if (-not (Get-Command Test-NetConnection -ErrorAction SilentlyContinue)) {
+            function global:Test-NetConnection { param($ComputerName, $Port, $InformationLevel, $WarningAction) }
+        }
         $script:ExtDC = "DC01.test.local"
 
         # Valid deps file: Pester + ActiveDirectory + GroupPolicy
@@ -1214,22 +1497,24 @@ Describe "Test-TierModelPrerequisites – Extended Coverage" -Tag "Unit", "Prere
         } finally { Remove-Item $adFile -ErrorAction SilentlyContinue }
     }
 
-    It "Should run Get-ADGroupMember when Domain Admins group exists and report not-admin (lines 253-261)" {
-        # Needs InModuleScope to properly override Get-Module AND Get-ADGroupMember
+    It "Should run Get-ADGroupMember on the Domain Admins group (domain SID + RID 512) and report not-admin" -Tag 'WindowsOnly' -Skip:$script:SkipWindowsOnly {
         InModuleScope TierModel {
-            # Get-Module ActiveDirectory (no -ListAvailable at line 248) → must return a module object
+            Clear-TierModelWellKnownPrincipalCache -Confirm:$false
+            # Get-Module ActiveDirectory must return a module object
             Mock Get-Module { return [PSCustomObject]@{ Name = 'ActiveDirectory'; Version = [version]'1.0.1.0' } }
+            Mock Get-ADDomain {
+                [PSCustomObject]@{ DNSRoot = 'test.local'; NetBIOSName = 'TEST'; DomainSID = [PSCustomObject]@{ Value = 'S-1-5-21-10-20-30' } }
+            }
 
-            # Domain Admins group found → $domainAdmins truthy → enters the if block at line 252
+            # Domain Admins is looked up by SID (RID 512) - here with a localized name
             Mock Get-ADGroup {
                 param($Identity, $Server, $ErrorAction)
-                if ($Identity.ToString() -eq 'Domain Admins') {
-                    return [PSCustomObject]@{ Name = 'Domain Admins'; DistinguishedName = 'CN=Domain Admins,CN=Users,DC=test,DC=local' }
+                if ("$Identity" -eq 'S-1-5-21-10-20-30-512') {
+                    return [PSCustomObject]@{ Name = 'Domänen-Admins'; DistinguishedName = 'CN=Domänen-Admins,CN=Users,DC=test,DC=local' }
                 }
                 return $null
             }
-            # Return one member with a non-matching SID so Where-Object scriptblock body (line 254) executes
-            # but the filter yields nothing → $isDomainAdmin is $null → lines 256-261 cover
+            # One member with a non-matching SID -> the current user is not a member
             Mock Get-ADGroupMember {
                 return @([PSCustomObject]@{ SID = 'S-1-5-21-0000000-0000-0000-0000'; Name = 'SomeDomainUser' })
             }
@@ -1238,6 +1523,8 @@ Describe "Test-TierModelPrerequisites – Extended Coverage" -Tag "Unit", "Prere
         $result.EnvironmentSnapshot.IsDomainAdmin | Should -Be $false
         $result.Errors | Should -Contain "Domain Admin membership required for deployment operations"
         ($result.Remediation -join ' ') | Should -Match "Add current user to Domain Admins"
+        Should -Invoke Get-ADGroupMember -ModuleName TierModel -Times 1 -Exactly -ParameterFilter { $Recursive }
+        Should -Invoke Get-ADGroup -ModuleName TierModel -ParameterFilter { "$Identity" -eq 'S-1-5-21-10-20-30-512' }
     }
 
     It "Should set IsDomainAdmin false and add install-AD error when AD module unavailable after import (lines 273-276)" {
@@ -1253,15 +1540,19 @@ Describe "Test-TierModelPrerequisites – Extended Coverage" -Tag "Unit", "Prere
         ($result.Remediation -join ' ') | Should -Match "Install ActiveDirectory module"
     }
 
-    It "Should set HasEnterpriseAdmins true when Enterprise Admins group is found (line 327)" {
+    It "Should set HasEnterpriseAdmins true when Enterprise Admins (forest root SID + RID 519) is found" {
         InModuleScope TierModel {
+            Clear-TierModelWellKnownPrincipalCache -Confirm:$false
             Mock Get-Module { return [PSCustomObject]@{ Name = 'ActiveDirectory'; Version = [version]'1.0.1.0' } } `
                 -ParameterFilter { $Name -eq 'ActiveDirectory' -and $ListAvailable -ne $true }
-            # Broad mock with identity dispatch to avoid ParameterFilter matching issues
+            Mock Get-ADDomain {
+                [PSCustomObject]@{ DNSRoot = 'test.local'; NetBIOSName = 'TEST'; DomainSID = [PSCustomObject]@{ Value = 'S-1-5-21-10-20-30' } }
+            }
+            # Enterprise Admins is resolved by SID on the forest root domain (here: the current domain)
             Mock Get-ADGroup {
                 param($Identity, $Server, $ErrorAction)
-                if ($Identity.ToString() -eq 'Enterprise Admins') {
-                    return [PSCustomObject]@{ Name = 'Enterprise Admins' }
+                if ("$Identity" -eq 'S-1-5-21-10-20-30-519') {
+                    return [PSCustomObject]@{ Name = 'Organisations-Admins' }
                 }
                 return $null
             }
