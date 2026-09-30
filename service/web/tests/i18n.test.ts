@@ -1,5 +1,5 @@
 // Roadmap 25: completeness of the German/English texts and locale-aware formatting. Run: npm test.
-import { test } from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { de } from '../src/i18n/de.ts'
 import { en } from '../src/i18n/en.ts'

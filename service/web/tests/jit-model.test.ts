@@ -1,5 +1,5 @@
 // Unit tests for the Just-in-Time page helpers. Run: npm test (node --test, type stripping).
-import { test } from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { accountProblem, defaultDuration, durationsFor, formatCountdown, formatMinutes, remainingShare, splitRequests } from '../src/features/jit/jit-model.ts'
 import type { JitRequest } from '../src/api/jit.ts'
