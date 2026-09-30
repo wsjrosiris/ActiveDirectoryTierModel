@@ -1,5 +1,5 @@
 // Unit tests for the configuration assistants' pure helpers. Run: npm test (node --test, type stripping).
-import { test } from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import * as m from '../src/features/config/wizards/wizard-model.ts'

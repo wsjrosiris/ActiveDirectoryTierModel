@@ -1,5 +1,5 @@
 // Unit tests for the maintenance-window texts. Run: npm test (node --test, type stripping).
-import { test } from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { describeDays, describeTimes, sameDays } from '../src/features/admin/maintenance-model.ts'
 

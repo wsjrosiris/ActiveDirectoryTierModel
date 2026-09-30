@@ -1,5 +1,5 @@
 // Unit tests for the domain selection (roadmap 17): query hashes, download URLs and per-domain drafts. Run: npm test.
-import { test } from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { domainQueryKeyHash, getDomainKey, setDomainKey, withDomain } from '../src/lib/domain.ts'
 import { draftStore } from '../src/features/config/draft-store.ts'
